@@ -1,0 +1,199 @@
+ import { Link } from 'react-router-dom';
+ import { Trash2, Minus, Plus, ShoppingBag, ArrowLeft, Truck } from 'lucide-react';
+ import { StoreLayout } from '@/components/store/StoreLayout';
+ import { Button } from '@/components/ui/button';
+ import { Input } from '@/components/ui/input';
+ import { useCart } from '@/contexts/CartContext';
+ import { useState } from 'react';
+ 
+ export default function Cart() {
+   const { items, subtotal, removeItem, updateQuantity, clearCart } = useCart();
+   const [couponCode, setCouponCode] = useState('');
+ 
+   const formatPrice = (price: number) => {
+     return new Intl.NumberFormat('pt-BR', {
+       style: 'currency',
+       currency: 'BRL',
+     }).format(price);
+   };
+ 
+   const freeShippingThreshold = 399;
+   const remainingForFreeShipping = freeShippingThreshold - subtotal;
+   const hasFreeShipping = subtotal >= freeShippingThreshold;
+ 
+   if (items.length === 0) {
+     return (
+       <StoreLayout>
+         <div className="container-custom py-16 text-center">
+           <ShoppingBag className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+           <h1 className="text-2xl font-bold mb-2">Seu carrinho está vazio</h1>
+           <p className="text-muted-foreground mb-6">Adicione produtos ao carrinho para continuar</p>
+           <Button asChild>
+             <Link to="/">Continuar Comprando</Link>
+           </Button>
+         </div>
+       </StoreLayout>
+     );
+   }
+ 
+   return (
+     <StoreLayout>
+       <div className="container-custom py-8">
+         <div className="flex items-center gap-4 mb-8">
+           <Button variant="ghost" size="icon" asChild>
+             <Link to="/">
+               <ArrowLeft className="h-5 w-5" />
+             </Link>
+           </Button>
+           <h1 className="text-2xl font-bold">Carrinho de Compras</h1>
+           <span className="text-muted-foreground">({items.length} {items.length === 1 ? 'item' : 'itens'})</span>
+         </div>
+ 
+         {/* Free shipping progress */}
+         <div className="bg-muted/50 rounded-lg p-4 mb-8">
+           <div className="flex items-center gap-2 mb-2">
+             <Truck className="h-5 w-5 text-primary" />
+             {hasFreeShipping ? (
+               <span className="text-primary font-medium">Parabéns! Você ganhou frete grátis!</span>
+             ) : (
+               <span className="text-muted-foreground">
+                 Faltam <span className="font-bold text-foreground">{formatPrice(remainingForFreeShipping)}</span> para frete grátis
+               </span>
+             )}
+           </div>
+           <div className="w-full bg-muted rounded-full h-2">
+             <div
+               className="bg-primary h-2 rounded-full transition-all"
+               style={{ width: `${Math.min((subtotal / freeShippingThreshold) * 100, 100)}%` }}
+             />
+           </div>
+         </div>
+ 
+         <div className="grid lg:grid-cols-3 gap-8">
+           {/* Cart items */}
+           <div className="lg:col-span-2 space-y-4">
+             {items.map((item) => (
+               <div key={item.variant.id} className="flex gap-4 p-4 border rounded-lg">
+                 <Link to={`/produto/${item.product.slug}`}>
+                   <img
+                     src={item.product.images?.[0]?.url || '/placeholder.svg'}
+                     alt={item.product.name}
+                     className="w-24 h-24 md:w-32 md:h-32 object-cover rounded-lg"
+                   />
+                 </Link>
+                 <div className="flex-1">
+                   <div className="flex justify-between">
+                     <div>
+                       <Link to={`/produto/${item.product.slug}`} className="font-medium hover:text-primary transition-colors">
+                         {item.product.name}
+                       </Link>
+                       <p className="text-sm text-muted-foreground">Tamanho: {item.variant.size}</p>
+                       {item.variant.color && (
+                         <p className="text-sm text-muted-foreground">Cor: {item.variant.color}</p>
+                       )}
+                     </div>
+                     <Button
+                       variant="ghost"
+                       size="icon"
+                       className="text-muted-foreground hover:text-destructive"
+                       onClick={() => removeItem(item.variant.id)}
+                     >
+                       <Trash2 className="h-4 w-4" />
+                     </Button>
+                   </div>
+ 
+                   <div className="flex items-center justify-between mt-4">
+                     <div className="flex items-center border rounded-lg">
+                       <Button
+                         variant="ghost"
+                         size="icon"
+                         className="h-8 w-8"
+                         onClick={() => updateQuantity(item.variant.id, item.quantity - 1)}
+                       >
+                         <Minus className="h-3 w-3" />
+                       </Button>
+                       <span className="w-10 text-center">{item.quantity}</span>
+                       <Button
+                         variant="ghost"
+                         size="icon"
+                         className="h-8 w-8"
+                         onClick={() => updateQuantity(item.variant.id, item.quantity + 1)}
+                       >
+                         <Plus className="h-3 w-3" />
+                       </Button>
+                     </div>
+                     <div className="text-right">
+                       {item.product.sale_price && (
+                         <p className="text-sm text-muted-foreground line-through">
+                           {formatPrice(Number(item.product.base_price) * item.quantity)}
+                         </p>
+                       )}
+                       <p className="font-bold text-lg">
+                         {formatPrice(Number(item.product.sale_price || item.product.base_price) * item.quantity)}
+                       </p>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             ))}
+ 
+             <Button variant="ghost" className="text-destructive" onClick={clearCart}>
+               Limpar carrinho
+             </Button>
+           </div>
+ 
+           {/* Order summary */}
+           <div className="lg:col-span-1">
+             <div className="border rounded-lg p-6 sticky top-32">
+               <h2 className="font-bold text-lg mb-4">Resumo do Pedido</h2>
+ 
+               <div className="space-y-3 mb-6">
+                 <div className="flex justify-between text-muted-foreground">
+                   <span>Subtotal</span>
+                   <span>{formatPrice(subtotal)}</span>
+                 </div>
+                 <div className="flex justify-between text-muted-foreground">
+                   <span>Frete</span>
+                   <span className={hasFreeShipping ? 'text-primary' : ''}>
+                     {hasFreeShipping ? 'Grátis' : 'Calcular no checkout'}
+                   </span>
+                 </div>
+               </div>
+ 
+               {/* Coupon */}
+               <div className="mb-6">
+                 <label className="text-sm font-medium mb-2 block">Cupom de desconto</label>
+                 <div className="flex gap-2">
+                   <Input
+                     placeholder="Digite o cupom"
+                     value={couponCode}
+                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                   />
+                   <Button variant="outline">Aplicar</Button>
+                 </div>
+               </div>
+ 
+               <div className="border-t pt-4 mb-6">
+                 <div className="flex justify-between text-lg font-bold">
+                   <span>Total</span>
+                   <span>{formatPrice(subtotal)}</span>
+                 </div>
+                 <p className="text-sm text-muted-foreground mt-1">
+                   ou 6x de {formatPrice(subtotal / 6)} sem juros
+                 </p>
+               </div>
+ 
+               <Button asChild className="w-full" size="lg">
+                 <Link to="/checkout">Finalizar Compra</Link>
+               </Button>
+ 
+               <Button asChild variant="outline" className="w-full mt-3">
+                 <Link to="/">Continuar Comprando</Link>
+               </Button>
+             </div>
+           </div>
+         </div>
+       </div>
+     </StoreLayout>
+   );
+ }
