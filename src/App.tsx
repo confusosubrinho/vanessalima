@@ -9,6 +9,16 @@ import NotFound from "./pages/NotFound";
  import ProductDetail from "./pages/ProductDetail";
  import CategoryPage from "./pages/CategoryPage";
  import Auth from "./pages/Auth";
+import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
+import AdminLayout from "./pages/admin/AdminLayout";
+import AdminLogin from "./pages/admin/AdminLogin";
+import Dashboard from "./pages/admin/Dashboard";
+import Products from "./pages/admin/Products";
+import Orders from "./pages/admin/Orders";
+import Customers from "./pages/admin/Customers";
+import Coupons from "./pages/admin/Coupons";
+import Banners from "./pages/admin/Banners";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +35,20 @@ const App = () => (
             <Route path="/categoria/:slug" element={<CategoryPage />} />
             <Route path="/conta" element={<Auth />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/carrinho" element={<Cart />} />
+            <Route path="/checkout" element={<Checkout />} />
+            
+            {/* Admin routes */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="produtos" element={<Products />} />
+              <Route path="pedidos" element={<Orders />} />
+              <Route path="clientes" element={<Customers />} />
+              <Route path="cupons" element={<Coupons />} />
+              <Route path="banners" element={<Banners />} />
+            </Route>
+            
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

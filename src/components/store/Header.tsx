@@ -1,6 +1,6 @@
- import { useState } from 'react';
- import { Link, useNavigate } from 'react-router-dom';
- import { Search, User, ShoppingBag, Menu, X, Phone, MessageCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search, User, ShoppingBag, Menu, X, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus } from 'lucide-react';
  import { Button } from '@/components/ui/button';
  import { Input } from '@/components/ui/input';
  import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -10,10 +10,12 @@
  
  export function Header() {
    const navigate = useNavigate();
-   const { itemCount, items, subtotal } = useCart();
+  const { itemCount, items, subtotal, removeItem, updateQuantity } = useCart();
    const { data: categories } = useCategories();
    const [searchQuery, setSearchQuery] = useState('');
    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeMegaMenu, setActiveMegaMenu] = useState<string | null>(null);
+  const megaMenuRef = useRef<HTMLDivElement>(null);
  
    const handleSearch = (e: React.FormEvent) => {
      e.preventDefault();
@@ -29,6 +31,19 @@
      }).format(price);
    };
  
+  // Close mega menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (megaMenuRef.current && !megaMenuRef.current.contains(event.target as Node)) {
+        setActiveMegaMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const mainCategories = categories?.slice(0, 7) || [];
+
    return (
      <header className="sticky top-0 z-50 bg-background shadow-sm">
        {/* Top bar */}
@@ -93,12 +108,15 @@
            </form>
  
            {/* Actions */}
-           <div className="flex items-center gap-2">
-             <Link to="/conta">
-               <Button variant="ghost" size="icon" className="hidden md:flex">
-                 <User className="h-5 w-5" />
-               </Button>
-             </Link>
+          <div className="flex items-center gap-1">
+            <div className="hidden md:flex items-center gap-1 text-sm mr-2">
+              <MessageCircle className="h-4 w-4" />
+              <span className="text-muted-foreground">Atendimento</span>
+            </div>
+            <Link to="/conta" className="hidden md:flex items-center gap-1 text-sm mr-2 hover:text-primary transition-colors">
+              <User className="h-4 w-4" />
+              <span>Minha Conta</span>
+            </Link>
  
              <Sheet>
                <SheetTrigger asChild>
@@ -111,11 +129,11 @@
                    )}
                  </Button>
                </SheetTrigger>
-               <SheetContent>
+              <SheetContent className="w-full sm:max-w-lg">
                  <SheetHeader>
                    <SheetTitle>Carrinho de Compras</SheetTitle>
                  </SheetHeader>
-                 <div className="mt-4">
+                <div className="mt-4 flex flex-col h-[calc(100vh-8rem)]">
                    {items.length === 0 ? (
                      <div className="text-center py-8">
                        <ShoppingBag className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -125,35 +143,73 @@
                        </Button>
                      </div>
                    ) : (
-                     <div className="space-y-4">
-                       {items.map((item) => (
-                         <div key={item.variant.id} className="flex gap-3 border-b pb-3">
-                           <img
-                             src={item.product.images?.[0]?.url || '/placeholder.svg'}
-                             alt={item.product.name}
-                             className="w-16 h-16 object-cover rounded"
-                           />
-                           <div className="flex-1">
-                             <p className="font-medium text-sm">{item.product.name}</p>
-                             <p className="text-xs text-muted-foreground">
-                               Tam: {item.variant.size} | Qtd: {item.quantity}
-                             </p>
-                             <p className="text-sm font-bold mt-1">
-                               {formatPrice((item.product.sale_price || item.product.base_price) * item.quantity)}
-                             </p>
-                           </div>
-                         </div>
-                       ))}
-                       <div className="border-t pt-4">
-                         <div className="flex justify-between font-bold text-lg">
-                           <span>Subtotal:</span>
-                           <span>{formatPrice(subtotal)}</span>
+                    <>
+                      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                        {items.map((item) => (
+                          <div key={item.variant.id} className="flex gap-3 border-b pb-4">
+                            <img
+                              src={item.product.images?.[0]?.url || '/placeholder.svg'}
+                              alt={item.product.name}
+                              className="w-20 h-20 object-cover rounded-lg"
+                            />
+                            <div className="flex-1">
+                              <div className="flex justify-between">
+                                <div>
+                                  <p className="font-medium">{item.product.name}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Tamanho: {item.variant.size}
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  onClick={() => removeItem(item.variant.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <div className="flex items-center justify-between mt-2">
+                                <div className="flex items-center border rounded-lg">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => updateQuantity(item.variant.id, item.quantity - 1)}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="w-8 text-center text-sm">{item.quantity}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => updateQuantity(item.variant.id, item.quantity + 1)}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                                <p className="font-bold">
+                                  {formatPrice(Number(item.product.sale_price || item.product.base_price) * item.quantity)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="border-t pt-4 space-y-4 mt-auto">
+                        <div className="flex justify-between text-lg">
+                          <span className="text-muted-foreground">Subtotal:</span>
+                          <span className="font-bold">{formatPrice(subtotal)}</span>
                          </div>
                          <Button asChild className="w-full mt-4">
                            <Link to="/checkout">Finalizar Compra</Link>
                          </Button>
+                        <Button asChild variant="outline" className="w-full">
+                          <Link to="/carrinho">Ver Carrinho Completo</Link>
+                        </Button>
                        </div>
-                     </div>
+                    </>
                    )}
                  </div>
                </SheetContent>
@@ -178,26 +234,88 @@
          </form>
        </div>
  
-       {/* Navigation */}
-       <nav className="border-t bg-background">
-         <div className="container-custom">
-           <div className="hidden md:flex items-center justify-between py-3">
-             <div className="flex items-center gap-6">
-               <Link to="/categorias" className="nav-link flex items-center gap-2">
+      {/* Navigation with Mega Menu */}
+      <nav className="border-t bg-background relative" ref={megaMenuRef}>
+        <div className="container-custom">
+          <div className="hidden md:flex items-center justify-between">
+            <div className="flex items-center">
+              {/* All Categories */}
+              <div
+                className="relative"
+                onMouseEnter={() => setActiveMegaMenu('all')}
+                onMouseLeave={() => setActiveMegaMenu(null)}
+              >
+                <button className="nav-link flex items-center gap-2 py-4 px-4 hover:bg-muted transition-colors">
                  <Menu className="h-4 w-4" />
                  Todas Categorias
-               </Link>
-               {categories?.slice(0, 7).map((category) => (
-                 <Link
-                   key={category.id}
-                   to={`/categoria/${category.slug}`}
-                   className="nav-link"
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+                
+                {activeMegaMenu === 'all' && (
+                  <div className="absolute top-full left-0 w-[600px] bg-background border rounded-lg shadow-xl z-50 p-6 grid grid-cols-3 gap-6 animate-fade-in">
+                    {categories?.map((category) => (
+                      <Link
+                        key={category.id}
+                        to={`/categoria/${category.slug}`}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
+                        onClick={() => setActiveMegaMenu(null)}
+                      >
+                        <img
+                          src={category.image_url || '/placeholder.svg'}
+                          alt={category.name}
+                          className="w-12 h-12 rounded-full object-cover"
+                        />
+                        <span className="font-medium group-hover:text-primary transition-colors">{category.name}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Individual category links with mega menu */}
+              {mainCategories.map((category) => (
+                <div
+                  key={category.id}
+                  className="relative"
+                  onMouseEnter={() => setActiveMegaMenu(category.slug)}
+                  onMouseLeave={() => setActiveMegaMenu(null)}
                  >
-                   {category.name}
-                 </Link>
+                  <Link
+                    to={`/categoria/${category.slug}`}
+                    className="nav-link flex items-center gap-1 py-4 px-3 hover:bg-muted transition-colors"
+                  >
+                    {category.name}
+                  </Link>
+                  
+                  {activeMegaMenu === category.slug && (
+                    <div className="absolute top-full left-0 w-[400px] bg-background border rounded-lg shadow-xl z-50 p-6 animate-fade-in">
+                      <div className="flex gap-6">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg mb-3">{category.name}</h3>
+                          <p className="text-sm text-muted-foreground mb-4">{category.description}</p>
+                          <Link
+                            to={`/categoria/${category.slug}`}
+                            className="inline-flex items-center text-primary font-medium hover:underline"
+                            onClick={() => setActiveMegaMenu(null)}
+                          >
+                            Ver todos os produtos →
+                          </Link>
+                        </div>
+                        <div className="w-32 h-32 rounded-lg overflow-hidden">
+                          <img
+                            src={category.image_url || '/placeholder.svg'}
+                            alt={category.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                ))}
              </div>
-             <Link to="/outlet" className="bg-secondary text-secondary-foreground px-4 py-2 rounded-full text-sm font-medium hover:bg-secondary/90 transition-colors">
+            <Link to="/outlet" className="bg-secondary text-secondary-foreground px-4 py-2 my-2 rounded-full text-sm font-medium hover:bg-secondary/90 transition-colors flex items-center gap-1">
+              <span className="text-lg">✨</span>
                ✨ Outlet
              </Link>
            </div>
