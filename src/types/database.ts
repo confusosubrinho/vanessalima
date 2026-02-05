@@ -151,3 +151,24 @@
    variant: ProductVariant;
    quantity: number;
  }
+ 
+ export interface ProductReview {
+   id: string;
+   product_id: string;
+   user_id: string | null;
+   customer_name: string;
+   rating: number;
+   title: string | null;
+   comment: string | null;
+   is_verified_purchase: boolean;
+   is_approved: boolean;
+   created_at: string;
+   updated_at: string;
+ }
+ 
+ export interface ShippingOption {
+   name: string;
+   price: number;
+   deadline: string;
+   company: string;
+ }

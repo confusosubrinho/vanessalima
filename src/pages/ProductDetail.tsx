@@ -1,12 +1,16 @@
  import { useState } from 'react';
  import { useParams, Link } from 'react-router-dom';
- import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle } from 'lucide-react';
+ import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck } from 'lucide-react';
  import { StoreLayout } from '@/components/store/StoreLayout';
  import { Button } from '@/components/ui/button';
  import { Badge } from '@/components/ui/badge';
  import { useProduct } from '@/hooks/useProducts';
  import { useCart } from '@/contexts/CartContext';
  import { useToast } from '@/hooks/use-toast';
+ import { ShippingCalculator } from '@/components/store/ShippingCalculator';
+ import { ProductCarousel } from '@/components/store/ProductCarousel';
+ import { ProductReviews } from '@/components/store/ProductReviews';
+ import { useRecentProducts, useRelatedProducts } from '@/hooks/useRecentProducts';
  
  export default function ProductDetail() {
    const { slug } = useParams<{ slug: string }>();
@@ -16,6 +20,9 @@
    const [selectedImage, setSelectedImage] = useState(0);
    const [selectedSize, setSelectedSize] = useState<string | null>(null);
    const [quantity, setQuantity] = useState(1);
+ 
+   const { data: recentProducts } = useRecentProducts(product?.id);
+   const { data: relatedProducts } = useRelatedProducts(product?.category_id, product?.id);
  
    if (isLoading) {
      return (
@@ -253,9 +260,37 @@
                  <p className="text-muted-foreground">{product.description}</p>
                </div>
              )}
+             
+             {/* Shipping Calculator */}
+             <div className="border-t pt-6">
+               <div className="flex items-center gap-2 mb-4">
+                 <Truck className="h-5 w-5 text-primary" />
+                 <h2 className="font-bold text-lg">Calcular Frete e Prazo</h2>
+               </div>
+               <ShippingCalculator />
+             </div>
            </div>
          </div>
        </div>
+ 
+       {/* Reviews Section */}
+       <ProductReviews productId={product.id} productName={product.name} />
+ 
+       {/* Related Products */}
+       {relatedProducts && relatedProducts.length > 0 && (
+         <ProductCarousel 
+           title="Produtos Relacionados" 
+           products={relatedProducts} 
+         />
+       )}
+ 
+       {/* Recent Products */}
+       {recentProducts && recentProducts.length > 0 && (
+         <ProductCarousel 
+           title="Lançamentos" 
+           products={recentProducts} 
+         />
+       )}
      </StoreLayout>
    );
  }

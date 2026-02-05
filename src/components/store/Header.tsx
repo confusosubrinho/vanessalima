@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Search, User, ShoppingBag, Menu, X, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus } from 'lucide-react';
+ import { useState, useEffect, useRef } from 'react';
+ import { Link, useNavigate } from 'react-router-dom';
+ import { Search, User, ShoppingBag, Menu, X, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, Tag } from 'lucide-react';
  import { Button } from '@/components/ui/button';
  import { Input } from '@/components/ui/input';
  import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
  import { useCart } from '@/contexts/CartContext';
  import { useCategories } from '@/hooks/useProducts';
  import logo from '@/assets/logo.png';
+ import { ShippingCalculator } from './ShippingCalculator';
+ import { CouponInput } from './CouponInput';
  
  export function Header() {
    const navigate = useNavigate();
-  const { itemCount, items, subtotal, removeItem, updateQuantity } = useCart();
+   const { itemCount, items, subtotal, removeItem, updateQuantity, isCartOpen, setIsCartOpen, discount, selectedShipping, total } = useCart();
    const { data: categories } = useCategories();
    const [searchQuery, setSearchQuery] = useState('');
    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -118,7 +120,7 @@ import { Search, User, ShoppingBag, Menu, X, Phone, MessageCircle, ChevronDown, 
               <span>Minha Conta</span>
             </Link>
  
-             <Sheet>
+             <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
                <SheetTrigger asChild>
                  <Button variant="ghost" size="icon" className="relative">
                    <ShoppingBag className="h-5 w-5" />
@@ -197,16 +199,48 @@ import { Search, User, ShoppingBag, Menu, X, Phone, MessageCircle, ChevronDown, 
                           </div>
                         ))}
                       </div>
-                      <div className="border-t pt-4 space-y-4 mt-auto">
-                        <div className="flex justify-between text-lg">
-                          <span className="text-muted-foreground">Subtotal:</span>
-                          <span className="font-bold">{formatPrice(subtotal)}</span>
-                         </div>
-                         <Button asChild className="w-full mt-4">
-                           <Link to="/checkout">Finalizar Compra</Link>
+                      <div className="border-t pt-4 space-y-3 mt-auto">
+                        {/* Coupon Input */}
+                        <CouponInput compact />
+                        
+                        {/* Shipping Calculator */}
+                        <div className="pt-2 border-t">
+                          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                            <Tag className="h-4 w-4 text-primary" />
+                            <span>Calcular Frete</span>
+                          </div>
+                          <ShippingCalculator compact />
+                        </div>
+                        
+                        {/* Totals */}
+                        <div className="pt-3 border-t space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Subtotal:</span>
+                            <span>{formatPrice(subtotal)}</span>
+                          </div>
+                          {discount > 0 && (
+                            <div className="flex justify-between text-sm text-primary">
+                              <span>Desconto:</span>
+                              <span>-{formatPrice(discount)}</span>
+                            </div>
+                          )}
+                          {selectedShipping && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Frete ({selectedShipping.name}):</span>
+                              <span>{selectedShipping.price === 0 ? 'Grátis' : formatPrice(selectedShipping.price)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-lg font-bold pt-2 border-t">
+                            <span>Total:</span>
+                            <span>{formatPrice(total)}</span>
+                          </div>
+                        </div>
+                        
+                         <Button asChild className="w-full">
+                          <Link to="/checkout" onClick={() => setIsCartOpen(false)}>Finalizar Compra</Link>
                          </Button>
                         <Button asChild variant="outline" className="w-full">
-                          <Link to="/carrinho">Ver Carrinho Completo</Link>
+                          <Link to="/carrinho" onClick={() => setIsCartOpen(false)}>Ver Carrinho Completo</Link>
                         </Button>
                        </div>
                     </>
