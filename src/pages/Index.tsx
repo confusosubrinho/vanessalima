@@ -1,14 +1,56 @@
-// Update this page (the content is just a fallback if you fail to update the page)
-
-const Index = () => {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
-  );
-};
-
-export default Index;
+ import { StoreLayout } from '@/components/store/StoreLayout';
+ import { BannerCarousel } from '@/components/store/BannerCarousel';
+ import { FeaturesBar } from '@/components/store/FeaturesBar';
+ import { CategoryGrid } from '@/components/store/CategoryGrid';
+ import { ProductGrid } from '@/components/store/ProductGrid';
+ import { useFeaturedProducts, useProducts } from '@/hooks/useProducts';
+ 
+ const Index = () => {
+   const { data: featuredProducts, isLoading: featuredLoading } = useFeaturedProducts();
+   const { data: allProducts, isLoading: productsLoading } = useProducts();
+ 
+   // Filter products on sale
+   const saleProducts = allProducts?.filter(p => p.sale_price && p.sale_price < p.base_price) || [];
+ 
+   return (
+     <StoreLayout>
+       <BannerCarousel />
+       <FeaturesBar />
+       <CategoryGrid />
+       
+       {/* Sale section */}
+       {saleProducts.length > 0 && (
+         <div className="bg-muted/30">
+           <ProductGrid
+             products={saleProducts}
+             title="50% Off Em Modelos Selecionados"
+             subtitle="Promoção por tempo limitado, aproveite!"
+             showViewAll
+             viewAllLink="/outlet"
+             isLoading={productsLoading}
+           />
+         </div>
+       )}
+ 
+       {/* Featured products */}
+       <ProductGrid
+         products={featuredProducts || []}
+         title="Destaques"
+         subtitle="Os modelos mais amados pelas nossas clientes"
+         isLoading={featuredLoading}
+       />
+ 
+       {/* New arrivals */}
+       <div className="bg-muted/30">
+         <ProductGrid
+           products={allProducts?.filter(p => p.is_new) || []}
+           title="Novidades"
+           subtitle="Acabou de chegar na loja"
+           isLoading={productsLoading}
+         />
+       </div>
+     </StoreLayout>
+   );
+ };
+ 
+ export default Index;
