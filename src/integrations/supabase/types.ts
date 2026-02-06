@@ -23,6 +23,7 @@ export type Database = {
           id: string
           image_url: string
           is_active: boolean | null
+          mobile_image_url: string | null
           subtitle: string | null
           title: string | null
           updated_at: string
@@ -35,6 +36,7 @@ export type Database = {
           id?: string
           image_url: string
           is_active?: boolean | null
+          mobile_image_url?: string | null
           subtitle?: string | null
           title?: string | null
           updated_at?: string
@@ -47,6 +49,7 @@ export type Database = {
           id?: string
           image_url?: string
           is_active?: boolean | null
+          mobile_image_url?: string | null
           subtitle?: string | null
           title?: string | null
           updated_at?: string
@@ -589,47 +592,62 @@ export type Database = {
       store_settings: {
         Row: {
           address: string | null
+          body_code: string | null
           contact_email: string | null
           contact_phone: string | null
           contact_whatsapp: string | null
           created_at: string
+          facebook_pixel_id: string | null
           facebook_url: string | null
           free_shipping_threshold: number | null
+          google_analytics_id: string | null
+          head_code: string | null
           id: string
           instagram_url: string | null
           logo_url: string | null
           max_installments: number | null
           store_name: string | null
+          tiktok_pixel_id: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          body_code?: string | null
           contact_email?: string | null
           contact_phone?: string | null
           contact_whatsapp?: string | null
           created_at?: string
+          facebook_pixel_id?: string | null
           facebook_url?: string | null
           free_shipping_threshold?: number | null
+          google_analytics_id?: string | null
+          head_code?: string | null
           id?: string
           instagram_url?: string | null
           logo_url?: string | null
           max_installments?: number | null
           store_name?: string | null
+          tiktok_pixel_id?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
+          body_code?: string | null
           contact_email?: string | null
           contact_phone?: string | null
           contact_whatsapp?: string | null
           created_at?: string
+          facebook_pixel_id?: string | null
           facebook_url?: string | null
           free_shipping_threshold?: number | null
+          google_analytics_id?: string | null
+          head_code?: string | null
           id?: string
           instagram_url?: string | null
           logo_url?: string | null
           max_installments?: number | null
           store_name?: string | null
+          tiktok_pixel_id?: string | null
           updated_at?: string
         }
         Relationships: []
