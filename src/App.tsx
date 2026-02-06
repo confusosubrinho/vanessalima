@@ -3,12 +3,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
- import { CartProvider } from "@/contexts/CartContext";
+import { CartProvider } from "@/contexts/CartContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
- import ProductDetail from "./pages/ProductDetail";
- import CategoryPage from "./pages/CategoryPage";
- import Auth from "./pages/Auth";
+import ProductDetail from "./pages/ProductDetail";
+import CategoryPage from "./pages/CategoryPage";
+import Auth from "./pages/Auth";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -19,6 +19,8 @@ import Orders from "./pages/admin/Orders";
 import Customers from "./pages/admin/Customers";
 import Coupons from "./pages/admin/Coupons";
 import Banners from "./pages/admin/Banners";
+import Settings from "./pages/admin/Settings";
+import CodeSettings from "./pages/admin/CodeSettings";
 
 const queryClient = new QueryClient();
 
@@ -43,10 +45,13 @@ const App = () => (
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="produtos" element={<Products />} />
+              <Route path="categorias" element={<Products />} />
               <Route path="pedidos" element={<Orders />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="cupons" element={<Coupons />} />
               <Route path="banners" element={<Banners />} />
+              <Route path="configuracoes" element={<Settings />} />
+              <Route path="configuracoes/codigo" element={<CodeSettings />} />
             </Route>
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
