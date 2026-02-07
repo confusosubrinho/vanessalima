@@ -15,10 +15,12 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import AdminLogin from "./pages/admin/AdminLogin";
 import Dashboard from "./pages/admin/Dashboard";
 import Products from "./pages/admin/Products";
+import Categories from "./pages/admin/Categories";
 import Orders from "./pages/admin/Orders";
 import Customers from "./pages/admin/Customers";
 import Coupons from "./pages/admin/Coupons";
 import Banners from "./pages/admin/Banners";
+import HighlightBanners from "./pages/admin/HighlightBanners";
 import Settings from "./pages/admin/Settings";
 import CodeSettings from "./pages/admin/CodeSettings";
 
@@ -45,11 +47,12 @@ const App = () => (
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="produtos" element={<Products />} />
-              <Route path="categorias" element={<Products />} />
+              <Route path="categorias" element={<Categories />} />
               <Route path="pedidos" element={<Orders />} />
               <Route path="clientes" element={<Customers />} />
               <Route path="cupons" element={<Coupons />} />
               <Route path="banners" element={<Banners />} />
+              <Route path="banners-destaque" element={<HighlightBanners />} />
               <Route path="configuracoes" element={<Settings />} />
               <Route path="configuracoes/codigo" element={<CodeSettings />} />
             </Route>

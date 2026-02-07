@@ -64,7 +64,8 @@ const menuItems: MenuItem[] = [
     icon: Tags,
     children: [
       { title: 'Cupons', url: '/admin/cupons' },
-      { title: 'Banners', url: '/admin/banners' },
+      { title: 'Banners Principais', url: '/admin/banners' },
+      { title: 'Banners Destaque', url: '/admin/banners-destaque' },
     ]
   },
   { 

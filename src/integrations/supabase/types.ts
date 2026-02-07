@@ -170,6 +170,39 @@ export type Database = {
         }
         Relationships: []
       }
+      highlight_banners: {
+        Row: {
+          created_at: string
+          display_order: number | null
+          id: string
+          image_url: string
+          is_active: boolean | null
+          link_url: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          image_url: string
+          is_active?: boolean | null
+          link_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          image_url?: string
+          is_active?: boolean | null
+          link_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           created_at: string
@@ -606,6 +639,8 @@ export type Database = {
           instagram_url: string | null
           logo_url: string | null
           max_installments: number | null
+          melhor_envio_sandbox: boolean | null
+          melhor_envio_token: string | null
           store_name: string | null
           tiktok_pixel_id: string | null
           updated_at: string
@@ -626,6 +661,8 @@ export type Database = {
           instagram_url?: string | null
           logo_url?: string | null
           max_installments?: number | null
+          melhor_envio_sandbox?: boolean | null
+          melhor_envio_token?: string | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string
@@ -646,6 +683,8 @@ export type Database = {
           instagram_url?: string | null
           logo_url?: string | null
           max_installments?: number | null
+          melhor_envio_sandbox?: boolean | null
+          melhor_envio_token?: string | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string
