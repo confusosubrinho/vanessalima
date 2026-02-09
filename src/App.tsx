@@ -46,6 +46,7 @@ import ConversionManual from "./pages/admin/ConversionManual";
 import AbandonedCarts from "./pages/admin/AbandonedCarts";
 import EmailAutomations from "./pages/admin/EmailAutomations";
 import TrafficDashboard from "./pages/admin/TrafficDashboard";
+import MediaGallery from "./pages/admin/MediaGallery";
 import { WhatsAppFloat } from "./components/store/WhatsAppFloat";
 
 const queryClient = new QueryClient({
@@ -114,6 +115,7 @@ const App = () => (
               <Route path="carrinhos-abandonados" element={<AbandonedCarts />} />
               <Route path="email-automations" element={<EmailAutomations />} />
               <Route path="trafego" element={<TrafficDashboard />} />
+              <Route path="galeria" element={<MediaGallery />} />
             </Route>
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

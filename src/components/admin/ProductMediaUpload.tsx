@@ -9,6 +9,7 @@ import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { Upload, X, Image as ImageIcon, Video, Check, GripVertical, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { compressImageToWebP } from '@/lib/imageCompressor';
 
 interface MediaItem {
   id: string;
@@ -59,13 +60,12 @@ export function ProductMediaUpload({ productId, media, onChange }: ProductMediaU
     
     try {
       for (const file of Array.from(files)) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
         const isVideo = file.type.startsWith('video/');
+        const { file: processedFile, fileName } = await compressImageToWebP(file);
         
         const { error: uploadError } = await supabase.storage
           .from('product-media')
-          .upload(fileName, file);
+          .upload(fileName, processedFile);
         
         if (uploadError) throw uploadError;
         

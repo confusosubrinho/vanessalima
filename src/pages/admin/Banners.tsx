@@ -17,6 +17,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { useToast } from '@/hooks/use-toast';
+import { compressImageToWebP } from '@/lib/imageCompressor';
 
 interface Banner {
   id: string;
@@ -64,12 +65,11 @@ export default function Banners() {
   const handleFileUpload = useCallback(async (file: File, type: 'desktop' | 'mobile') => {
     setUploading(type);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `banner-${Date.now()}-${type}.${fileExt}`;
+      const { file: compressedFile, fileName } = await compressImageToWebP(file);
       
       const { error: uploadError } = await supabase.storage
         .from('product-media')
-        .upload(fileName, file);
+        .upload(fileName, compressedFile);
       
       if (uploadError) throw uploadError;
       

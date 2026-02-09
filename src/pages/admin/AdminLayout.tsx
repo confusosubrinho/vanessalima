@@ -15,7 +15,8 @@ import {
   PenSquare,
   Globe,
   Mail,
-  ShoppingBag
+  ShoppingBag,
+  ImageIcon
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -84,6 +85,7 @@ const menuItems: MenuItem[] = [
       { title: 'Tráfego & UTM', url: '/admin/trafego' },
     ]
   },
+  { title: 'Galeria de Mídia', url: '/admin/galeria', icon: ImageIcon },
   { title: 'Integrações', url: '/admin/integracoes', icon: Plug },
   { 
     title: 'Configurações', 

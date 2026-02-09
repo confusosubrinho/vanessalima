@@ -21,6 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { compressImageToWebP } from '@/lib/imageCompressor';
 
 interface HighlightBanner {
   id: string;
@@ -64,12 +65,11 @@ export default function HighlightBannersAdmin() {
 
       if (imageFile) {
         setIsUploading(true);
-        const fileExt = imageFile.name.split('.').pop();
-        const fileName = `highlight-${Date.now()}.${fileExt}`;
+        const { file: compressedFile, fileName } = await compressImageToWebP(imageFile);
         
         const { error: uploadError } = await supabase.storage
           .from('product-media')
-          .upload(fileName, imageFile);
+          .upload(fileName, compressedFile);
         
         if (uploadError) throw uploadError;
         
