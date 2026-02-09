@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle, Store } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
@@ -237,6 +237,8 @@ export default function Products() {
 
   const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all' || activeTab !== 'active-stock';
   const importRef = useRef<HTMLInputElement>(null);
+  const trayImportRef = useRef<HTMLInputElement>(null);
+  const [trayImporting, setTrayImporting] = useState(false);
 
   const handleExport = () => {
     if (!products) return;
@@ -270,6 +272,42 @@ export default function Products() {
     if (importRef.current) importRef.current.value = '';
   };
 
+  const handleTrayImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setTrayImporting(true);
+    try {
+      const text = await readFileAsText(file);
+      toast({ title: 'Importação Tray iniciada...', description: 'Isso pode levar alguns minutos. Não feche a página.' });
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await supabase.functions.invoke('tray-import', {
+        body: { csvData: text },
+      });
+
+      if (response.error) throw new Error(response.error.message || 'Erro na importação');
+
+      const result = response.data;
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      toast({
+        title: `Importação Tray concluída!`,
+        description: `${result.matched} encontrados, ${result.updated} atualizados, ${result.imagesUploaded} imagens enviadas. ${result.notFound?.length || 0} não encontrados.`,
+      });
+
+      if (result.notFound?.length > 0) {
+        console.log('Produtos não encontrados:', result.notFound);
+      }
+      if (result.errors?.length > 0) {
+        console.log('Erros:', result.errors);
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro na importação Tray', description: err.message, variant: 'destructive' });
+    } finally {
+      setTrayImporting(false);
+      if (trayImportRef.current) trayImportRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -278,6 +316,15 @@ export default function Products() {
           <p className="text-muted-foreground">Gerencie os produtos da sua loja</p>
         </div>
         <div className="flex items-center gap-2">
+          <label>
+            <input ref={trayImportRef} type="file" accept=".csv" className="hidden" onChange={handleTrayImport} />
+            <Button variant="outline" size="sm" asChild disabled={trayImporting}>
+              <span>
+                <Store className="h-4 w-4 mr-2" />
+                {trayImporting ? 'Importando...' : 'Importar Tray'}
+              </span>
+            </Button>
+          </label>
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
             Exportar
