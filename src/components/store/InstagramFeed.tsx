@@ -122,8 +122,8 @@ export function InstagramFeed() {
         {/* Carousel */}
         <div
           ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scrollbar-hide px-8 snap-x snap-mandatory"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          className="flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory justify-center"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', paddingLeft: 'max(2rem, calc(50% - 600px))', paddingRight: 'max(2rem, calc(50% - 600px))' }}
         >
           {videos.map((video, index) => {
             const isActive = index === activeIndex;
@@ -141,14 +141,22 @@ export function InstagramFeed() {
                 <div className={`relative rounded-2xl overflow-hidden bg-black ${
                   isActive ? 'aspect-[9/16] shadow-2xl' : 'aspect-[9/16]'
                 }`}>
+                  {/* Thumbnail always visible underneath */}
+                  {video.thumbnail_url && (
+                    <img
+                      src={video.thumbnail_url}
+                      alt={video.username ? `@${video.username}` : 'Video'}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  )}
                   <video
                     ref={(el) => {
                       if (el) videoRefs.current.set(video.id, el);
                     }}
                     src={isActive ? video.video_url : undefined}
                     data-src={video.video_url}
-                    poster={video.thumbnail_url || undefined}
-                    className="w-full h-full object-cover"
+                    className={`absolute inset-0 w-full h-full object-cover ${isActive ? 'opacity-100' : 'opacity-0'}`}
                     loop
                     muted
                     playsInline
