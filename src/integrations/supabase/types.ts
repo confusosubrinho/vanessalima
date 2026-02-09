@@ -1001,6 +1001,11 @@ export type Database = {
       store_settings: {
         Row: {
           address: string | null
+          bling_access_token: string | null
+          bling_client_id: string | null
+          bling_client_secret: string | null
+          bling_refresh_token: string | null
+          bling_token_expires_at: string | null
           body_code: string | null
           cash_discount: number | null
           cnpj: string | null
@@ -1040,6 +1045,11 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          bling_access_token?: string | null
+          bling_client_id?: string | null
+          bling_client_secret?: string | null
+          bling_refresh_token?: string | null
+          bling_token_expires_at?: string | null
           body_code?: string | null
           cash_discount?: number | null
           cnpj?: string | null
@@ -1079,6 +1089,11 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          bling_access_token?: string | null
+          bling_client_id?: string | null
+          bling_client_secret?: string | null
+          bling_refresh_token?: string | null
+          bling_token_expires_at?: string | null
           body_code?: string | null
           cash_discount?: number | null
           cnpj?: string | null

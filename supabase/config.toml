@@ -1,1 +1,13 @@
 project_id = "sojrvsbqkrbxoymlwtii"
+
+[functions.bling-oauth]
+verify_jwt = false
+
+[functions.calculate-shipping]
+verify_jwt = false
+
+[functions.process-payment]
+verify_jwt = false
+
+[functions.bling-sync]
+verify_jwt = false

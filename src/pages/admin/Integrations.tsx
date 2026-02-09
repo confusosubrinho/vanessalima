@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store } from 'lucide-react';
+import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -395,6 +395,189 @@ function MelhorEnvioPanel() {
   );
 }
 
+// ─── Bling ERP Panel (OAuth2) ───
+
+function BlingPanel() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  const { data: settings } = useQuery({
+    queryKey: ['store-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('store_settings').select('*').limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const [form, setForm] = useState({ bling_client_id: '', bling_client_secret: '' });
+
+  useEffect(() => {
+    if (settings) {
+      const s = settings as any;
+      setForm({
+        bling_client_id: s.bling_client_id || '',
+        bling_client_secret: s.bling_client_secret || '',
+      });
+    }
+  }, [settings]);
+
+  // Listen for OAuth callback message
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data === 'bling_connected') {
+        queryClient.invalidateQueries({ queryKey: ['store-settings'] });
+        toast({ title: 'Bling conectado com sucesso!' });
+        setIsConnecting(false);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [queryClient, toast]);
+
+  const saveCredentials = useMutation({
+    mutationFn: async () => {
+      if (settings?.id) {
+        const { error } = await supabase.from('store_settings').update(form as any).eq('id', settings.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('store_settings').insert(form as any);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['store-settings'] });
+      toast({ title: 'Credenciais salvas!' });
+    },
+    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+  });
+
+  const handleConnect = async () => {
+    if (!form.bling_client_id || !form.bling_client_secret) {
+      toast({ title: 'Preencha Client ID e Client Secret primeiro', variant: 'destructive' });
+      return;
+    }
+
+    // Save credentials first
+    await saveCredentials.mutateAsync();
+
+    setIsConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('bling-oauth', {
+        body: { action: 'get_auth_url' },
+      });
+
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message);
+      }
+
+      // Open authorization popup
+      window.open(data.auth_url, 'bling_auth', 'width=600,height=700,scrollbars=yes');
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+      setIsConnecting(false);
+    }
+  };
+
+  const isConnected = !!(settings as any)?.bling_access_token;
+  const callbackUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bling-oauth`;
+
+  return (
+    <div className="space-y-6">
+      {/* Connection Status */}
+      {isConnected ? (
+        <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+          <Check className="h-5 w-5 text-green-600" />
+          <span className="text-sm font-medium text-green-700 dark:text-green-400">Bling conectado e funcionando</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+          <AlertCircle className="h-5 w-5 text-amber-600" />
+          <span className="text-sm text-amber-700 dark:text-amber-400">Bling não conectado. Siga os passos abaixo.</span>
+        </div>
+      )}
+
+      {/* Step 1: Create App */}
+      <div className="space-y-3">
+        <h4 className="font-medium text-sm flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">1</span>
+          Criar Aplicativo no Bling
+        </h4>
+        <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-2">
+          <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+            <li>Acesse <a href="https://developer.bling.com.br/aplicativos" target="_blank" rel="noopener noreferrer" className="text-primary underline">developer.bling.com.br/aplicativos</a></li>
+            <li>Clique em <strong>"Cadastrar um novo aplicativo"</strong></li>
+            <li>Preencha: Nome, Descrição (ex: "Integração Loja Online")</li>
+            <li>Em <strong>"URL de redirecionamento"</strong>, cole:</li>
+          </ol>
+          <div className="flex items-center gap-2 mt-2">
+            <code className="bg-background border rounded px-2 py-1 text-xs flex-1 break-all">{callbackUrl}</code>
+            <Button size="sm" variant="outline" className="shrink-0" onClick={() => { navigator.clipboard.writeText(callbackUrl); toast({ title: 'URL copiada!' }); }}>
+              Copiar
+            </Button>
+          </div>
+          <p className="text-muted-foreground mt-1">5. Salve e copie o <strong>Client ID</strong> e <strong>Client Secret</strong></p>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Step 2: Credentials */}
+      <div className="space-y-3">
+        <h4 className="font-medium text-sm flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">2</span>
+          Configurar Credenciais
+        </h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Client ID</Label>
+            <Input value={form.bling_client_id} onChange={(e) => setForm({ ...form, bling_client_id: e.target.value })} placeholder="Cole o Client ID" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Client Secret</Label>
+            <Input type="password" value={form.bling_client_secret} onChange={(e) => setForm({ ...form, bling_client_secret: e.target.value })} placeholder="Cole o Client Secret" />
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Step 3: Authorize */}
+      <div className="space-y-3">
+        <h4 className="font-medium text-sm flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">3</span>
+          Autorizar Conexão
+        </h4>
+        <Button onClick={handleConnect} disabled={isConnecting || !form.bling_client_id || !form.bling_client_secret} className="w-full">
+          {isConnecting ? (
+            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Aguardando autorização...</>
+          ) : isConnected ? (
+            <><Link2 className="h-4 w-4 mr-2" />Reconectar Bling</>
+          ) : (
+            <><Link2 className="h-4 w-4 mr-2" />Conectar ao Bling</>
+          )}
+        </Button>
+        <p className="text-xs text-muted-foreground">Uma janela abrirá para você autorizar o acesso da loja ao Bling.</p>
+      </div>
+
+      {isConnected && (
+        <>
+          <Separator />
+          <div className="space-y-2">
+            <h4 className="font-medium text-sm">✅ Funcionalidades ativas</h4>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li>• Pedidos da loja serão enviados automaticamente ao Bling</li>
+              <li>• NF-e será gerada e transmitida à SEFAZ automaticamente</li>
+              <li>• O token é renovado automaticamente a cada 6 horas</li>
+            </ul>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ───
 
 interface SimpleIntegration {
@@ -408,11 +591,6 @@ interface SimpleIntegration {
 }
 
 const simpleIntegrations: SimpleIntegration[] = [
-  {
-    id: 'bling', name: 'Bling ERP', description: 'Gestão completa de estoque, pedidos, notas fiscais e financeiro.',
-    icon: <Package className="h-6 w-6" />, status: 'available', category: 'erp',
-    configFields: [{ key: 'api_key', label: 'API Key', placeholder: 'Cole sua API Key do Bling' }],
-  },
   {
     id: 'tiny', name: 'Tiny ERP', description: 'Sistema de gestão empresarial com emissão de NF-e.',
     icon: <Package className="h-6 w-6" />, status: 'coming_soon', category: 'erp',
@@ -484,6 +662,29 @@ export default function Integrations() {
           </div>
           
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Bling ERP (special expanded card) */}
+            {category.id === 'erp' && (
+              <Card className="md:col-span-2 lg:col-span-3">
+                <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedPanel(expandedPanel === 'bling' ? null : 'bling')}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg text-primary"><Package className="h-6 w-6" /></div>
+                      <div>
+                        <CardTitle className="text-base">Bling ERP</CardTitle>
+                        <CardDescription className="text-xs">Gestão de pedidos, notas fiscais automáticas e controle de estoque</CardDescription>
+                      </div>
+                    </div>
+                    {expandedPanel === 'bling' ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                  </div>
+                </CardHeader>
+                {expandedPanel === 'bling' && (
+                  <CardContent>
+                    <BlingPanel />
+                  </CardContent>
+                )}
+              </Card>
+            )}
+
             {/* Rede Gateway (special expanded card) */}
             {category.id === 'payment' && (
               <Card className="md:col-span-2 lg:col-span-3">

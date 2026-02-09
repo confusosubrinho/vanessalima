@@ -6,8 +6,62 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Bling API v3 base URL
-const BLING_API_URL = "https://www.bling.com.br/Api/v3";
+const BLING_API_URL = "https://bling.com.br/Api/v3";
+const BLING_TOKEN_URL = "https://bling.com.br/Api/v3/oauth/token";
+
+async function getValidToken(supabase: any): Promise<{ token: string; settingsId: string }> {
+  const { data: settings, error } = await supabase
+    .from("store_settings")
+    .select("id, bling_client_id, bling_client_secret, bling_access_token, bling_refresh_token, bling_token_expires_at")
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !settings) throw new Error("Configurações não encontradas");
+  if (!settings.bling_access_token) throw new Error("Bling não conectado. Autorize o aplicativo primeiro nas Integrações.");
+
+  // Check if token is expired or about to expire (5 min buffer)
+  const expiresAt = settings.bling_token_expires_at ? new Date(settings.bling_token_expires_at) : new Date(0);
+  const isExpired = expiresAt.getTime() - 300000 < Date.now();
+
+  if (isExpired && settings.bling_refresh_token) {
+    console.log("Bling token expired, refreshing...");
+    const basicAuth = btoa(`${settings.bling_client_id}:${settings.bling_client_secret}`);
+
+    const tokenResponse = await fetch(BLING_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${basicAuth}`,
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: settings.bling_refresh_token,
+      }),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      throw new Error("Falha ao renovar token do Bling. Reconecte nas Integrações.");
+    }
+
+    const newExpiresAt = new Date(Date.now() + (tokenData.expires_in || 21600) * 1000).toISOString();
+
+    await supabase
+      .from("store_settings")
+      .update({
+        bling_access_token: tokenData.access_token,
+        bling_refresh_token: tokenData.refresh_token,
+        bling_token_expires_at: newExpiresAt,
+      } as any)
+      .eq("id", settings.id);
+
+    return { token: tokenData.access_token, settingsId: settings.id };
+  }
+
+  return { token: settings.bling_access_token, settingsId: settings.id };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -20,28 +74,11 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { action, ...payload } = await req.json();
-
-    // Get Bling API key from store_settings
-    // For now we store it in a custom field; in future could be a secret
-    const { data: settings } = await supabase
-      .from("store_settings")
-      .select("*")
-      .limit(1)
-      .maybeSingle();
-
-    // Try to get API key from secrets first, then from integration config
-    const blingApiKey = Deno.env.get("BLING_API_KEY");
-
-    if (!blingApiKey) {
-      return new Response(JSON.stringify({ error: "API Key do Bling não configurada. Adicione a chave nas integrações." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const { token } = await getValidToken(supabase);
 
     const blingHeaders = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${blingApiKey}`,
+      Authorization: `Bearer ${token}`,
       Accept: "application/json",
     };
 
@@ -49,7 +86,6 @@ serve(async (req) => {
     if (action === "create_order") {
       const { order_id } = payload;
 
-      // Fetch order with items
       const { data: order, error: orderError } = await supabase
         .from("orders")
         .select("*, order_items(*)")
@@ -60,18 +96,19 @@ serve(async (req) => {
         throw new Error(`Pedido não encontrado: ${orderError?.message || order_id}`);
       }
 
-      // Build Bling order payload (API v3 format)
+      // Extract CPF from notes if available
+      const cpfMatch = order.notes?.match(/CPF:\s*([\d.\-]+)/);
+      const cpf = cpfMatch ? cpfMatch[1].replace(/\D/g, "") : "";
+
       const blingOrder = {
-        numero: order.order_number,
+        numero: 0, // Bling auto-generates
         data: new Date(order.created_at).toISOString().split("T")[0],
         dataSaida: new Date().toISOString().split("T")[0],
-        loja: 0,
-        numeroPedidoCompra: order.order_number,
-        observacoes: order.notes || "",
         contato: {
           nome: order.shipping_name,
           tipoPessoa: "F",
-          contribuinte: 1,
+          numeroDocumento: cpf,
+          contribuinte: 9, // Non-contributor
         },
         itens: (order as any).order_items?.map((item: any) => ({
           descricao: item.product_name,
@@ -80,21 +117,30 @@ serve(async (req) => {
           codigo: item.product_id?.substring(0, 8) || "PROD",
         })) || [],
         transporte: {
-          fretePorConta: 0, // 0 = remetente
+          fretePorConta: 0,
           frete: order.shipping_cost || 0,
-          volumes: [
-            {
-              servico: "SEDEX",
-            },
-          ],
-        },
-        parcelas: [
-          {
-            valor: order.total_amount,
-            dataVencimento: new Date().toISOString().split("T")[0],
-            observacao: "Pagamento online",
+          volumes: [{
+            servico: "Transportadora",
+          }],
+          contato: {
+            nome: order.shipping_name,
           },
-        ],
+          etiqueta: {
+            nome: order.shipping_name,
+            endereco: order.shipping_address,
+            municipio: order.shipping_city,
+            uf: order.shipping_state,
+            cep: order.shipping_zip?.replace(/\D/g, ""),
+          },
+        },
+        parcelas: [{
+          valor: order.total_amount,
+          dataVencimento: new Date().toISOString().split("T")[0],
+          observacao: "Pagamento online",
+        }],
+        observacoes: `Pedido ${order.order_number} - Loja Online`,
+        observacoesInternas: order.notes || "",
+        numeroPedidoCompra: order.order_number,
       };
 
       console.log("Creating Bling order:", JSON.stringify(blingOrder));
@@ -112,38 +158,33 @@ serve(async (req) => {
         throw new Error(`Bling API error [${response.status}]: ${JSON.stringify(data)}`);
       }
 
-      const blingOrderId = data?.data?.id;
-
       return new Response(
         JSON.stringify({
           success: true,
-          bling_order_id: blingOrderId,
-          message: "Pedido criado no Bling com sucesso",
+          bling_order_id: data?.data?.id,
+          message: "Pedido criado no Bling",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ─── Generate NF-e from Bling Order ───
+    // ─── Generate NF-e from Order ───
     if (action === "generate_nfe") {
       const { bling_order_id } = payload;
 
-      if (!bling_order_id) {
-        throw new Error("ID do pedido no Bling é obrigatório");
-      }
+      if (!bling_order_id) throw new Error("ID do pedido no Bling é obrigatório");
 
-      // First, generate the NF-e from the order
       const response = await fetch(`${BLING_API_URL}/nfe`, {
         method: "POST",
         headers: blingHeaders,
         body: JSON.stringify({
-          tipo: 1, // 1 = Saída (venda)
-          idPedidoVenda: bling_order_id,
+          tipo: 1, // Saída
+          idPedidoVenda: parseInt(bling_order_id),
         }),
       });
 
       const data = await response.json();
-      console.log("Bling generate NF-e response:", JSON.stringify(data));
+      console.log("Bling NF-e response:", JSON.stringify(data));
 
       if (!response.ok) {
         throw new Error(`Bling NF-e error [${response.status}]: ${JSON.stringify(data)}`);
@@ -151,86 +192,65 @@ serve(async (req) => {
 
       const nfeId = data?.data?.id;
 
-      // Now emit/authorize the NF-e at SEFAZ
+      // Emit NF-e at SEFAZ
       if (nfeId) {
         const emitResponse = await fetch(`${BLING_API_URL}/nfe/${nfeId}/enviar`, {
           method: "POST",
           headers: blingHeaders,
         });
-
         const emitData = await emitResponse.json();
-        console.log("Bling emit NF-e response:", JSON.stringify(emitData));
+        console.log("Bling emit NF-e:", JSON.stringify(emitData));
 
         return new Response(
-          JSON.stringify({
-            success: true,
-            nfe_id: nfeId,
-            message: "NF-e gerada e enviada à SEFAZ",
-            emit_response: emitData,
-          }),
+          JSON.stringify({ success: true, nfe_id: nfeId, message: "NF-e gerada e enviada à SEFAZ" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       return new Response(
-        JSON.stringify({ success: true, nfe_id: nfeId, message: "NF-e criada no Bling" }),
+        JSON.stringify({ success: true, nfe_id: nfeId }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ─── Full flow: Create Order + Generate NF-e ───
+    // ─── Full flow ───
     if (action === "order_to_nfe") {
       const { order_id } = payload;
 
-      // Step 1: Create order in Bling
-      const orderReq = await fetch(req.url, {
+      // Create order
+      const createBody = JSON.stringify({ action: "create_order", order_id });
+      const orderRes = await fetch(req.url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create_order", order_id }),
+        headers: { "Content-Type": "application/json", Authorization: req.headers.get("Authorization") || "" },
+        body: createBody,
       });
-      const orderResult = await orderReq.json();
-
+      const orderResult = await orderRes.json();
       if (!orderResult.success) {
         return new Response(JSON.stringify(orderResult), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Step 2: Generate NF-e
-      const nfeReq = await fetch(req.url, {
+      // Generate NF-e
+      const nfeRes = await fetch(req.url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: req.headers.get("Authorization") || "" },
         body: JSON.stringify({ action: "generate_nfe", bling_order_id: orderResult.bling_order_id }),
       });
-      const nfeResult = await nfeReq.json();
+      const nfeResult = await nfeRes.json();
 
       return new Response(
         JSON.stringify({
           success: true,
           bling_order_id: orderResult.bling_order_id,
           nfe: nfeResult,
-          message: "Pedido criado e NF-e gerada no Bling",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ─── Query order status ───
-    if (action === "get_order") {
-      const { bling_order_id } = payload;
-      const response = await fetch(`${BLING_API_URL}/pedidos/vendas/${bling_order_id}`, {
-        headers: blingHeaders,
-      });
-      const data = await response.json();
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ error: "Ação inválida. Use: create_order, generate_nfe, order_to_nfe, get_order" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: "Ação inválida" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
     console.error("Bling sync error:", error);
