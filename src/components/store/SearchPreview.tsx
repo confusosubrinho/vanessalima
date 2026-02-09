@@ -38,6 +38,8 @@ export function SearchPreview({ onSearch, className }: SearchPreviewProps) {
 
       setIsLoading(true);
       try {
+        // Escape special SQL LIKE characters to prevent query errors
+        const sanitized = query.replace(/[%_\\]/g, '\\$&');
         const { data, error } = await supabase
           .from('products')
           .select(`
@@ -45,14 +47,15 @@ export function SearchPreview({ onSearch, className }: SearchPreviewProps) {
             images:product_images(*)
           `)
           .eq('is_active', true)
-          .ilike('name', `%${query}%`)
+          .ilike('name', `%${sanitized}%`)
           .limit(6);
 
         if (error) throw error;
-        setResults(data as Product[]);
+        setResults((data || []) as Product[]);
         setIsOpen(true);
       } catch (error) {
         console.error('Search error:', error);
+        setResults([]);
       } finally {
         setIsLoading(false);
       }

@@ -307,17 +307,33 @@ function extractAttributesFromBlingVariation(
 }
 
 // Extract parent Bling ID and variation attributes from a product name
-// Format: "Product Name (PARENT_ID) Cor:X;Tamanho:Y"
-function extractParentInfoFromName(name: string): { parentBlingId: number | null; baseName: string; attributes: string } {
+// Pattern 1: "Product Name (PARENT_ID) Cor:X;Tamanho:Y"
+// Pattern 2: "Product Name Cor:X;Tamanho:Y" (no parent ID, common in Bling V3)
+function extractParentInfoFromName(name: string): { parentBlingId: number | null; baseName: string; attributes: string; hasAttributes: boolean } {
+  // Pattern 1: Has explicit parent ID in parentheses
   const match = name.match(/^(.+?)\s*\((\d+)\)\s*(.*)$/);
   if (match) {
     return {
       baseName: match[1].trim(),
       parentBlingId: parseInt(match[2], 10),
       attributes: match[3].trim(),
+      hasAttributes: !!match[3].trim(),
     };
   }
-  return { parentBlingId: null, baseName: name, attributes: "" };
+  
+  // Pattern 2: Detect "Cor:X;Tamanho:Y" or "Cor:X" or "Tamanho:Y" suffix
+  // This is the standard Bling V3 variation naming format
+  const attrMatch = name.match(/^(.+?)\s+((?:Cor|Tamanho|cor|tamanho)\s*:.+)$/i);
+  if (attrMatch) {
+    return {
+      baseName: attrMatch[1].trim(),
+      parentBlingId: null,
+      attributes: attrMatch[2].trim(),
+      hasAttributes: true,
+    };
+  }
+  
+  return { parentBlingId: null, baseName: name, attributes: "", hasAttributes: false };
 }
 
 // ─── Smart Category Assignment with fuzzy matching ───
@@ -548,80 +564,59 @@ async function upsertParentWithVariants(
     }
   }
 
-  // Source 2: Variation items discovered from the listing (matched by parent ID in name)
-  // These are items with names like "Product (PARENT_ID) Cor:X;Tamanho:Y"
-  // Only process if not already handled by variacoes array above
-  for (const vi of variationItems) {
-    const { data: alreadySynced } = await supabase
-      .from("product_variants")
-      .select("id")
-      .eq("bling_variant_id", vi.blingId)
-      .maybeSingle();
-
-    if (alreadySynced && syncedVariantIds.has(alreadySynced.id)) continue;
-
-    let varStock = 0;
-    let varPrice = basePrice;
-    let varActive = true;
-    let varDetailObj: any = null;
-
-    try {
-      await sleep(BLING_RATE_LIMIT_MS);
-      const varDetailRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${vi.blingId}`, { headers });
-      const varDetailJson = await varDetailRes.json();
-      varDetailObj = varDetailJson?.data;
-      if (varDetailObj) {
-        varStock = varDetailObj.estoque?.saldoVirtualTotal ?? 0;
-        if (varDetailObj.preco && varDetailObj.preco > 0) varPrice = varDetailObj.preco;
-        varActive = varDetailObj.situacao === "A";
-
-        if (varDetailObj.midia?.imagens?.internas?.length) {
-          const existingImages = await supabase.from("product_images").select("url").eq("product_id", productId);
-          const existingUrls = new Set((existingImages.data || []).map((i: any) => i.url));
-          const extracted = extractAttributesFromBlingVariation(varDetailObj, vi.name, vi.attributes);
-          const newImages = varDetailObj.midia.imagens.internas
-            .filter((img: any) => !existingUrls.has(img.link))
-            .map((img: any, idx: number) => ({
-              product_id: productId,
-              url: img.link,
-              is_primary: false,
-              display_order: 200 + idx,
-              alt_text: `${parentDetail.nome} - ${extracted.size}${extracted.color ? ` ${extracted.color}` : ""}`,
-            }));
-          if (newImages.length) await supabase.from("product_images").insert(newImages);
-        }
-      }
-    } catch (e) {
-      console.error(`Error fetching listed variation ${vi.blingId}:`, e);
+  // Source 2: Variation items discovered from the listing (matched by name pattern)
+  // OPTIMIZED: Don't make individual API calls - extract attributes from listing name
+  // Stock will be batch-updated later via sync_stock
+  if (variationItems.length > 0) {
+    // Batch fetch stock for all variation items at once (max 50 per request)
+    const varStockMap = new Map<number, number>();
+    for (let i = 0; i < variationItems.length; i += 50) {
+      const batch = variationItems.slice(i, i + 50);
+      const idsParam = batch.map(v => `idsProdutos[]=${v.blingId}`).join("&");
       try {
-        const stockRes = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${vi.blingId}`, { headers });
+        await sleep(BLING_RATE_LIMIT_MS);
+        const stockRes = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
         const stockJson = await stockRes.json();
-        varStock = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
-      } catch (_) { /* ignore */ }
+        for (const s of (stockJson?.data || [])) {
+          varStockMap.set(s.produto?.id, s.saldoVirtualTotal ?? 0);
+        }
+      } catch (_) { /* ignore stock errors */ }
     }
 
-    const extracted = extractAttributesFromBlingVariation(varDetailObj, vi.name, vi.attributes);
-    const priceModifier = varPrice - basePrice;
-    const varData: any = {
-      product_id: productId,
-      size: extracted.size,
-      color: extracted.color,
-      color_hex: extracted.colorHex,
-      stock_quantity: varStock,
-      sku: extracted.sku || null,
-      is_active: varActive,
-      bling_variant_id: vi.blingId,
-      price_modifier: priceModifier !== 0 ? priceModifier : 0,
-    };
+    for (const vi of variationItems) {
+      const { data: alreadySynced } = await supabase
+        .from("product_variants")
+        .select("id")
+        .eq("bling_variant_id", vi.blingId)
+        .maybeSingle();
 
-    if (alreadySynced) {
-      await supabase.from("product_variants").update(varData).eq("id", alreadySynced.id);
-      syncedVariantIds.add(alreadySynced.id);
-    } else {
-      const { data: newVar } = await supabase.from("product_variants").insert(varData).select("id").single();
-      if (newVar) syncedVariantIds.add(newVar.id);
+      if (alreadySynced && syncedVariantIds.has(alreadySynced.id)) continue;
+
+      // Extract attributes directly from the listing name - NO individual API call needed
+      const extracted = parseVariationAttributes(vi.attributes || vi.name);
+      const varStock = varStockMap.get(vi.blingId) ?? 0;
+      
+      const varData: any = {
+        product_id: productId,
+        size: extracted.size,
+        color: extracted.color,
+        color_hex: extracted.colorHex,
+        stock_quantity: varStock,
+        sku: null, // SKU will come from Bling detail if needed later
+        is_active: true,
+        bling_variant_id: vi.blingId,
+        price_modifier: 0,
+      };
+
+      if (alreadySynced) {
+        await supabase.from("product_variants").update(varData).eq("id", alreadySynced.id);
+        syncedVariantIds.add(alreadySynced.id);
+      } else {
+        const { data: newVar } = await supabase.from("product_variants").insert(varData).select("id").single();
+        if (newVar) syncedVariantIds.add(newVar.id);
+      }
+      variantCount++;
     }
-    variantCount++;
   }
 
   // If no variants at all, create a default "Único"
@@ -750,14 +745,19 @@ async function syncProducts(supabase: any, token: string) {
   const groups = new Map<number, ProductGroup>();
   const standaloneItems: ListingItem[] = []; // items that are truly standalone (simple products)
   const variationBlingIds = new Set<number>(); // Track all variation Bling IDs for cleanup
-  let skippedFormatoV = 0;
+  
+  // NEW: Group variations by base name when they don't have (PARENT_ID) pattern
+  const baseNameGroups = new Map<string, ListingItem[]>();
+  let patternOneCount = 0;
+  let patternTwoCount = 0;
 
   for (const item of allListingItems) {
-    const { parentBlingId, baseName, attributes } = extractParentInfoFromName(item.nome);
+    const { parentBlingId, baseName, attributes, hasAttributes } = extractParentInfoFromName(item.nome);
 
     if (parentBlingId) {
-      // This item is a variation - it has "(PARENT_ID)" in its name
+      // Pattern 1: Has explicit parent ID "(PARENT_ID)" in name
       variationBlingIds.add(item.id);
+      patternOneCount++;
       if (!groups.has(parentBlingId)) {
         groups.set(parentBlingId, {
           parentBlingId,
@@ -771,22 +771,45 @@ async function syncProducts(supabase: any, token: string) {
         name: baseName,
         attributes,
       });
-    } else if (item.formato === "V") {
-      // Bling says this is a variation but name doesn't have parent ID
-      // Just skip it - don't create as standalone product, don't make slow API calls
+    } else if (hasAttributes) {
+      // Pattern 2: Has "Cor:X;Tamanho:Y" suffix but no parent ID
+      // This is a variation in Bling V3 format - group by base name
+      const key = baseName.toLowerCase().trim();
+      if (!baseNameGroups.has(key)) {
+        baseNameGroups.set(key, []);
+      }
+      baseNameGroups.get(key)!.push(item);
       variationBlingIds.add(item.id);
-      skippedFormatoV++;
-      totalSkipped++;
+      patternTwoCount++;
     } else {
-      // No parent ID in name AND not formato=V → could be parent (E) or simple (S)
+      // No attributes, no parent ID → could be parent or simple product
       standaloneItems.push(item);
     }
   }
 
-  // Check standalone items: if other items reference them as parent, add them to groups
+  // Match standalone items to their role: parent of a group, or truly simple
   for (const item of standaloneItems) {
-    if (groups.has(item.id)) {
-      // This standalone item IS a parent - other variations reference it
+    const key = item.nome.toLowerCase().trim();
+    
+    // Check if this standalone item is the parent for a baseName group (Pattern 2)
+    if (baseNameGroups.has(key)) {
+      const childItems = baseNameGroups.get(key)!;
+      groups.set(item.id, {
+        parentBlingId: item.id,
+        parentListItem: item,
+        variationItems: childItems.map(child => {
+          const parsed = extractParentInfoFromName(child.nome);
+          return {
+            blingId: child.id,
+            name: parsed.baseName,
+            attributes: parsed.attributes,
+          };
+        }),
+        isSimple: false,
+      });
+      baseNameGroups.delete(key); // matched!
+    } else if (groups.has(item.id)) {
+      // Referenced as parent by Pattern 1 items
       groups.get(item.id)!.parentListItem = item;
     } else {
       // Truly standalone simple product
@@ -799,15 +822,62 @@ async function syncProducts(supabase: any, token: string) {
     }
   }
 
-  const variationCount = allListingItems.length - standaloneItems.length;
-  console.log(`Classified into ${groups.size} product groups (${standaloneItems.length} standalone, ${variationCount} variations, ${skippedFormatoV} skipped formato=V)`);
+  // Handle remaining baseNameGroups that had no matching parent in the listing
+  // These are variations whose parent might be inactive or not in the listing
+  // Use the first child to fetch detail and find the actual parent via produtoPai
+  for (const [key, childItems] of baseNameGroups) {
+    if (childItems.length > 0) {
+      const firstChild = childItems[0];
+      const parsed = extractParentInfoFromName(firstChild.nome);
+      groups.set(firstChild.id, {
+        parentBlingId: firstChild.id,
+        parentListItem: null,
+        variationItems: childItems.map(child => {
+          const p = extractParentInfoFromName(child.nome);
+          return {
+            blingId: child.id,
+            name: p.baseName,
+            attributes: p.attributes,
+          };
+        }),
+        isSimple: false,
+      });
+    }
+  }
+
+  console.log(`Classified into ${groups.size} product groups (${standaloneItems.length} standalone, ${patternOneCount} pattern1-variations, ${patternTwoCount} pattern2-variations)`);
 
   // ─── PHASE 3: Process each group ───
+  // OPTIMIZATION: Process groups with variations FIRST, then simple products
+  // Skip simple products that already exist in DB to avoid API timeout
   const processedParentIds = new Set<number>();
+  
+  // Collect all existing products by bling_product_id for quick lookup
+  const { data: existingProducts } = await supabase
+    .from("products")
+    .select("id, bling_product_id")
+    .not("bling_product_id", "is", null);
+  const existingBlingIds = new Set((existingProducts || []).map((p: any) => p.bling_product_id));
 
-  for (const [parentBlingId, group] of groups) {
+  // Sort: process groups WITH variations first, then simple products
+  const sortedGroups = [...groups.entries()].sort((a, b) => {
+    const aHasVars = !a[1].isSimple && a[1].variationItems.length > 0;
+    const bHasVars = !b[1].isSimple && b[1].variationItems.length > 0;
+    if (aHasVars && !bHasVars) return -1;
+    if (!aHasVars && bHasVars) return 1;
+    return 0;
+  });
+
+  for (const [parentBlingId, group] of sortedGroups) {
     if (processedParentIds.has(parentBlingId)) continue;
     processedParentIds.add(parentBlingId);
+
+    // OPTIMIZATION: Skip simple products that already exist in our DB
+    // They will get stock updates via the separate stock sync
+    if (group.isSimple && existingBlingIds.has(parentBlingId)) {
+      totalSkipped++;
+      continue;
+    }
 
     try {
       await sleep(BLING_RATE_LIMIT_MS);
@@ -844,20 +914,29 @@ async function syncProducts(supabase: any, token: string) {
         }
       }
 
-      // If the parent detail itself is a variation (formato=V), find its actual parent
+      // If the fetched detail itself is a child variation, find its actual parent
+      // In Bling V3: formato "V" means "com variações" - used for BOTH parents and children
+      // Parents have variacoes[] array, children have produtoPai field
       if (parentDetail.formato === "V") {
         const actualParentId = parentDetail.produtoPai?.id || parentDetail.idProdutoPai;
-        if (actualParentId && !processedParentIds.has(actualParentId)) {
+        
+        if (actualParentId) {
+          // This IS a child variation pointing to an actual parent
+          if (processedParentIds.has(actualParentId)) {
+            syncLog.push({ bling_id: parentBlingId, name: parentDetail.nome, status: 'skipped', message: 'Variação já processada pelo pai', variants: 0 });
+            totalSkipped++;
+            continue;
+          }
           // Redirect: fetch actual parent and process it instead
           await sleep(BLING_RATE_LIMIT_MS);
           const actualRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${actualParentId}`, { headers });
           const actualJson = await actualRes.json();
-          if (actualJson?.data && actualJson.data.formato !== "V") {
+          if (actualJson?.data) {
             parentDetail = actualJson.data;
             processedParentIds.add(actualParentId);
-            // Add current item as variation
+            // Add current item as variation if it has attributes
             const parsed = extractParentInfoFromName(group.parentListItem?.nome || "");
-            if (parsed.attributes) {
+            if (parsed.hasAttributes) {
               group.variationItems.push({
                 blingId: parentBlingId,
                 name: parsed.baseName,
@@ -865,15 +944,13 @@ async function syncProducts(supabase: any, token: string) {
               });
             }
           } else {
-            syncLog.push({ bling_id: parentBlingId, name: parentDetail.nome, status: 'skipped', message: 'Variação sem pai válido', variants: 0 });
+            syncLog.push({ bling_id: parentBlingId, name: parentDetail.nome, status: 'skipped', message: 'Pai real não encontrado na API', variants: 0 });
             totalSkipped++;
             continue;
           }
-        } else {
-          syncLog.push({ bling_id: parentBlingId, name: parentDetail.nome, status: 'skipped', message: 'Variação já processada pelo pai', variants: 0 });
-          totalSkipped++;
-          continue;
         }
+        // If no actualParentId → this IS the parent (has variacoes[] or our variationItems)
+        // Continue processing normally below
       }
 
       // Log grouped variations
