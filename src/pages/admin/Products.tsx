@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
@@ -79,7 +79,7 @@ export default function Products() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<string>('active-stock');
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['admin-products'],
@@ -139,11 +139,18 @@ export default function Products() {
     return p.variants.every(v => v.stock_quantity <= 0);
   };
 
+  // Helper: check if product has stock
+  const hasStock = (p: Product) => {
+    if (!p.variants || p.variants.length === 0) return false;
+    return p.variants.some(v => v.stock_quantity > 0);
+  };
+
   // Tab counts
   const tabCounts = useMemo(() => {
     const all = products || [];
     return {
       all: all.length,
+      activeStock: all.filter(p => p.is_active && hasStock(p)).length,
       outOfStock: all.filter(isOutOfStock).length,
       inactive: all.filter(p => !p.is_active).length,
     };
@@ -156,7 +163,9 @@ export default function Products() {
   ) || [];
 
   // Tab filter
-  if (activeTab === 'out-of-stock') {
+  if (activeTab === 'active-stock') {
+    filteredProducts = filteredProducts.filter(p => p.is_active && hasStock(p));
+  } else if (activeTab === 'out-of-stock') {
     filteredProducts = filteredProducts.filter(isOutOfStock);
   } else if (activeTab === 'inactive') {
     filteredProducts = filteredProducts.filter(p => !p.is_active);
@@ -215,11 +224,11 @@ export default function Products() {
     setCategoryFilter('all');
     setStatusFilter('all');
     setSourceFilter('all');
-    setActiveTab('all');
+    setActiveTab('active-stock');
     setSearchQuery('');
   };
 
-  const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all' || activeTab !== 'all';
+  const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all' || activeTab !== 'active-stock';
   const importRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -285,6 +294,10 @@ export default function Products() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
+          <TabsTrigger value="active-stock" className="gap-1.5">
+            <CheckCircle className="h-3.5 w-3.5" />
+            Ativos com Estoque ({tabCounts.activeStock})
+          </TabsTrigger>
           <TabsTrigger value="all">
             Todos ({tabCounts.all})
           </TabsTrigger>
