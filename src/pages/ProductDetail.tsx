@@ -198,11 +198,15 @@ export default function ProductDetail() {
         className="min-h-[120px]"
       >
         <TabsContent value="description" className="mt-4">
-          <div className="prose prose-sm max-w-none">
+          <div className="prose prose-sm max-w-none text-muted-foreground">
             {product.description ? (
-              <p className="text-muted-foreground whitespace-pre-line">{product.description}</p>
+              /<[a-z][\s\S]*>/i.test(product.description) ? (
+                <div dangerouslySetInnerHTML={{ __html: product.description }} />
+              ) : (
+                <p className="whitespace-pre-line">{product.description}</p>
+              )
             ) : (
-              <p className="text-muted-foreground">Nenhuma descrição disponível.</p>
+              <p>Nenhuma descrição disponível.</p>
             )}
           </div>
         </TabsContent>
