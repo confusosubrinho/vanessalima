@@ -22,7 +22,7 @@ export function ContactForm() {
   };
 
   return (
-    <section id="atendimento" className="py-16 bg-muted/30">
+    <section className="py-16 bg-muted/30">
       <div className="container-custom">
         <div className="text-center mb-10">
           <h2 className="text-2xl md:text-3xl font-bold">Fale Conosco</h2>

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Instagram, Facebook, Phone, Mail, MapPin, Shield, CheckCircle } from 'lucide-react';
+import { Instagram, Facebook, Phone, Mail, MapPin } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
 export function Footer() {
@@ -52,6 +52,8 @@ export function Footer() {
               <li><Link to="/como-comprar" className="hover:text-primary transition-colors">Como Comprar</Link></li>
               <li><Link to="/conta" className="hover:text-primary transition-colors">Minha Conta</Link></li>
               <li><Link to="/formas-pagamento" className="hover:text-primary transition-colors">Formas de Pagamento</Link></li>
+              <li><Link to="/rastreio" className="hover:text-primary transition-colors">Rastrear Pedido</Link></li>
+              <li><Link to="/mais-vendidos" className="hover:text-primary transition-colors">Mais Vendidos</Link></li>
             </ul>
           </div>
 
@@ -62,7 +64,7 @@ export function Footer() {
               <li className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-primary" />
                 <a href="tel:42991120205" className="hover:text-primary transition-colors">
-                  (42) 99112-0205
+                  42 99112-0205
                 </a>
               </li>
               <li className="flex items-center gap-2">
@@ -73,7 +75,7 @@ export function Footer() {
               </li>
               <li className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 text-primary mt-0.5" />
-                <span>Guarapuava - PR</span>
+                <span>Rua Professor Cleto - até 669/670<br/>União da Vitória - PR, CEP: 84600140</span>
               </li>
             </ul>
           </div>
@@ -82,13 +84,13 @@ export function Footer() {
 
       {/* Payment methods & security seals */}
       <div className="border-t border-secondary-foreground/10">
-        <div className="container-custom py-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="container-custom py-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Payment methods */}
             <div className="text-center md:text-left">
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider">Formas de Pagamento</h4>
-              <div className="flex flex-wrap gap-3 justify-center md:justify-start">
-                {['Visa', 'Mastercard', 'Elo', 'Hipercard', 'Amex', 'PIX'].map((brand) => (
+              <h4 className="font-semibold mb-3 text-xs uppercase tracking-wider">Formas de Pagamento</h4>
+              <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+                {['Visa', 'Mastercard', 'Elo', 'Hipercard', 'Amex', 'PIX', 'Boleto'].map((brand) => (
                   <span key={brand} className="bg-secondary-foreground/10 text-secondary-foreground/80 px-3 py-1.5 rounded text-xs font-medium">
                     {brand}
                   </span>
@@ -98,21 +100,16 @@ export function Footer() {
 
             {/* Security seals */}
             <div className="text-center md:text-right">
-              <h4 className="font-semibold mb-4 text-sm uppercase tracking-wider">Selos de Segurança</h4>
-              <div className="flex gap-4 justify-center md:justify-end">
-                <div className="flex items-center gap-2 bg-secondary-foreground/10 px-4 py-2 rounded-lg">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  <div className="text-left">
-                    <p className="text-xs font-bold">Google</p>
-                    <p className="text-[10px] text-secondary-foreground/60">Site Seguro</p>
-                  </div>
+              <h4 className="font-semibold mb-3 text-xs uppercase tracking-wider">Segurança</h4>
+              <div className="flex gap-3 justify-center md:justify-end">
+                <div className="flex items-center gap-2 bg-secondary-foreground/10 px-3 py-2 rounded-lg">
+                  <span className="text-xs font-bold">🔒 SSL</span>
                 </div>
-                <div className="flex items-center gap-2 bg-secondary-foreground/10 px-4 py-2 rounded-lg">
-                  <Shield className="h-5 w-5 text-primary" />
-                  <div className="text-left">
-                    <p className="text-xs font-bold">Loja Protegida</p>
-                    <p className="text-[10px] text-secondary-foreground/60">Compra Segura</p>
-                  </div>
+                <div className="flex items-center gap-2 bg-secondary-foreground/10 px-3 py-2 rounded-lg">
+                  <span className="text-xs font-bold">✅ Google Safe</span>
+                </div>
+                <div className="flex items-center gap-2 bg-secondary-foreground/10 px-3 py-2 rounded-lg">
+                  <span className="text-xs font-bold">🛡️ Compra Segura</span>
                 </div>
               </div>
             </div>
@@ -120,15 +117,21 @@ export function Footer() {
         </div>
       </div>
 
-      {/* Bottom bar */}
+      {/* Company info - single line */}
       <div className="border-t border-secondary-foreground/10">
-        <div className="container-custom py-4">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-secondary-foreground/60 text-center">
-            <div>
-              <p>© 2025 Vanessa Lima Shoes. Todos os direitos reservados.</p>
-              <p className="text-xs mt-1">CNPJ: 00.000.000/0001-00 | Guarapuava - PR</p>
-            </div>
-          </div>
+        <div className="container-custom py-3">
+          <p className="text-xs text-secondary-foreground/50 text-center">
+            Vanessa S. de Lima Store · CNPJ: 19.947.968/0001-58 · Rua Professor Cleto - até 669/670, União da Vitória - PR, CEP: 84600140 · contato@vanessalimashoes.com.br · 42 99112-0205
+          </p>
+        </div>
+      </div>
+
+      {/* Credits */}
+      <div className="border-t border-secondary-foreground/10">
+        <div className="container-custom py-3">
+          <p className="text-xs text-secondary-foreground/40 text-center">
+            © 2025 Vanessa Lima Shoes. Todos os direitos reservados. · Criado com ❤️ por <a href="https://studioninja.com.br" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors font-medium">Studio Ninja</a>
+          </p>
         </div>
       </div>
     </footer>
