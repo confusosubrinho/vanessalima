@@ -391,6 +391,14 @@ async function syncProducts(supabase: any, token: string) {
   let totalVariants = 0;
   let hasMore = true;
 
+  // Get store ID filter from settings
+  const { data: storeSettings } = await supabase
+    .from("store_settings")
+    .select("bling_store_id")
+    .limit(1)
+    .maybeSingle();
+  const blingStoreId = (storeSettings as any)?.bling_store_id || null;
+
   // Cache categories
   const categoryCache = new Map<string, string | null>();
   async function getCategoryId(name: string): Promise<string | null> {
@@ -407,7 +415,12 @@ async function syncProducts(supabase: any, token: string) {
 
   // Phase 1: Fetch all products from Bling listing
   while (hasMore) {
-    const url = `${BLING_API_URL}/produtos?pagina=${page}&limite=100&tipo=P`;
+    let url = `${BLING_API_URL}/produtos?pagina=${page}&limite=100&tipo=P`;
+    // Filter by store if configured
+    if (blingStoreId) {
+      url += `&idLoja=${blingStoreId}`;
+      if (page === 1) console.log(`Filtering by Bling store ID: ${blingStoreId}`);
+    }
     console.log(`Fetching Bling products page ${page}...`);
     const res = await fetch(url, { headers });
     const json = await res.json();
