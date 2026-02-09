@@ -33,8 +33,8 @@ function RedeGatewayPanel() {
   const { data: settings } = useQuery({
     queryKey: ['store-settings'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('store_settings').select('*').limit(1).single();
-      if (error && error.code !== 'PGRST116') throw error;
+      const { data, error } = await supabase.from('store_settings').select('*').limit(1).maybeSingle();
+      if (error) throw error;
       return data;
     },
   });
@@ -72,13 +72,16 @@ function RedeGatewayPanel() {
       if (settings?.id) {
         const { error } = await supabase.from('store_settings').update(form as any).eq('id', settings.id);
         if (error) throw error;
+      } else {
+        const { error } = await supabase.from('store_settings').insert(form as any);
+        if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['store-settings'] });
       toast({ title: 'Configurações da Rede salvas!' });
     },
-    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+    onError: (e: any) => toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' }),
   });
 
   return (
@@ -168,8 +171,8 @@ function MelhorEnvioPanel() {
   const { data: settings } = useQuery({
     queryKey: ['store-settings'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('store_settings').select('*').limit(1).single();
-      if (error && error.code !== 'PGRST116') throw error;
+      const { data, error } = await supabase.from('store_settings').select('*').limit(1).maybeSingle();
+      if (error) throw error;
       return data;
     },
   });
@@ -210,13 +213,16 @@ function MelhorEnvioPanel() {
       if (settings?.id) {
         const { error } = await supabase.from('store_settings').update(form as any).eq('id', settings.id);
         if (error) throw error;
+      } else {
+        const { error } = await supabase.from('store_settings').insert(form as any);
+        if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['store-settings'] });
       toast({ title: 'Configurações de frete salvas!' });
     },
-    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+    onError: (e: any) => toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' }),
   });
 
   const addRegion = () => {
