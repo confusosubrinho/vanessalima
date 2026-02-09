@@ -411,7 +411,7 @@ function BlingPanel() {
     },
   });
 
-  const [form, setForm] = useState({ bling_client_id: '', bling_client_secret: '' });
+  const [form, setForm] = useState({ bling_client_id: '', bling_client_secret: '', bling_store_id: '' });
 
   useEffect(() => {
     if (settings) {
@@ -419,6 +419,7 @@ function BlingPanel() {
       setForm({
         bling_client_id: s.bling_client_id || '',
         bling_client_secret: s.bling_client_secret || '',
+        bling_store_id: s.bling_store_id || '',
       });
     }
   }, [settings]);
@@ -562,6 +563,11 @@ function BlingPanel() {
             <Input type="password" value={form.bling_client_secret} onChange={(e) => setForm({ ...form, bling_client_secret: e.target.value })} placeholder="Cole o Client Secret" />
           </div>
         </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">ID da Loja Virtual (opcional)</Label>
+          <Input value={form.bling_store_id} onChange={(e) => setForm({ ...form, bling_store_id: e.target.value })} placeholder="ID numérico da loja no Bling" />
+          <p className="text-xs text-muted-foreground">Se preenchido, sincroniza apenas os produtos vinculados a essa loja. Deixe vazio para importar todos.</p>
+        </div>
       </div>
 
       <Separator />
@@ -631,13 +637,43 @@ function BlingPanel() {
 
           <Separator />
 
+          {/* Webhook URL */}
+          <div className="space-y-3">
+            <h4 className="font-medium text-sm">🔗 Webhook (Atualização automática)</h4>
+            <p className="text-xs text-muted-foreground">Configure este URL como callback no Bling para receber atualizações de estoque em tempo real.</p>
+            <div className="space-y-2">
+              <div>
+                <Label className="text-xs">URL do Webhook</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <code className="bg-background border rounded px-2 py-1 text-xs flex-1 break-all">{`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bling-webhook`}</code>
+                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => { navigator.clipboard.writeText(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bling-webhook`); toast({ title: 'URL copiada!' }); }}>
+                    Copiar
+                  </Button>
+                </div>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
+                <p className="font-medium">Como configurar no Bling:</p>
+                <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
+                  <li>Acesse <strong>Meu Negócio → Preferências → Callbacks</strong> no Bling</li>
+                  <li>Ou acesse <a href="https://developer.bling.com.br/aplicativos" target="_blank" rel="noopener noreferrer" className="text-primary underline">developer.bling.com.br/aplicativos</a></li>
+                  <li>No seu aplicativo, vá na aba <strong>"Callbacks"</strong></li>
+                  <li>Adicione a URL acima como callback para os eventos: <strong>estoque</strong></li>
+                  <li>Método: <strong>POST</strong></li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
           <div className="space-y-2">
             <h4 className="font-medium text-sm">✅ Funcionalidades ativas</h4>
             <ul className="text-xs text-muted-foreground space-y-1">
-              <li>• Importar todos os produtos do Bling com fotos, variantes e estoque</li>
+              <li>• Importar produtos do Bling com fotos, variantes e estoque</li>
+              <li>• Filtro por loja virtual (sincroniza apenas produtos vinculados)</li>
+              <li>• Webhook para atualização de estoque em tempo real</li>
               <li>• Pedidos da loja são enviados automaticamente ao Bling</li>
               <li>• NF-e é gerada e transmitida à SEFAZ automaticamente</li>
-              <li>• Estoque sincronizado: venda aqui baixa no Bling e vice-versa</li>
               <li>• O token é renovado automaticamente a cada 6 horas</li>
             </ul>
           </div>
