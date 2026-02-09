@@ -537,51 +537,30 @@ async function upsertParentWithVariants(
 
   // Source 1: Variations from the parent detail's `variacoes` array
   if (parentDetail.variacoes?.length) {
-    for (const v of parentDetail.variacoes) {
-      let varStock = 0;
-      let varPrice = basePrice;
-      let varActive = true;
-      let varDetailObj: any = null;
-
+    // Batch fetch stock for ALL variations at once (instead of individual API calls)
+    const varIds = parentDetail.variacoes.map((v: any) => v.id);
+    const varStockMap = new Map<number, number>();
+    for (let i = 0; i < varIds.length; i += 50) {
+      const batch = varIds.slice(i, i + 50);
+      const idsParam = batch.map((id: number) => `idsProdutos[]=${id}`).join("&");
       try {
         await sleep(BLING_RATE_LIMIT_MS);
-        const varDetailRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${v.id}`, { headers });
-        const varDetailJson = await varDetailRes.json();
-        varDetailObj = varDetailJson?.data;
-        if (varDetailObj) {
-          varStock = varDetailObj.estoque?.saldoVirtualTotal ?? 0;
-          if (varDetailObj.preco && varDetailObj.preco > 0) varPrice = varDetailObj.preco;
-          varActive = varDetailObj.situacao === "A";
-
-          if (varDetailObj.midia?.imagens?.internas?.length) {
-            const existingImages = await supabase
-              .from("product_images")
-              .select("url")
-              .eq("product_id", productId);
-            const existingUrls = new Set((existingImages.data || []).map((i: any) => i.url));
-            const extracted = extractAttributesFromBlingVariation(varDetailObj, v.nome || "", "");
-            const newImages = varDetailObj.midia.imagens.internas
-              .filter((img: any) => !existingUrls.has(img.link))
-              .map((img: any, idx: number) => ({
-                product_id: productId,
-                url: img.link,
-                is_primary: false,
-                display_order: 100 + idx,
-                alt_text: `${parentDetail.nome} - ${extracted.size}${extracted.color ? ` ${extracted.color}` : ""}`,
-              }));
-            if (newImages.length) await supabase.from("product_images").insert(newImages);
-          }
+        const stockRes = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
+        const stockJson = await stockRes.json();
+        for (const s of (stockJson?.data || [])) {
+          varStockMap.set(s.produto?.id, s.saldoVirtualTotal ?? 0);
         }
-      } catch (e) {
-        console.error(`Error fetching variation detail ${v.id}:`, e);
-        try {
-          const stockRes = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${v.id}`, { headers });
-          const stockJson = await stockRes.json();
-          varStock = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
-        } catch (_) { /* ignore */ }
-      }
+      } catch (_) { /* ignore stock errors */ }
+    }
 
-      const extracted = extractAttributesFromBlingVariation(varDetailObj, v.nome || "", "");
+    for (const v of parentDetail.variacoes) {
+      const varStock = varStockMap.get(v.id) ?? 0;
+      const varPrice = (v.preco && v.preco > 0) ? v.preco : basePrice;
+      const varActive = v.situacao !== "I"; // default active unless explicitly inactive
+
+      // Extract attributes directly from the variacoes array data (no extra API call needed)
+      // The variacoes array already contains nome, codigo, atributos
+      const extracted = extractAttributesFromBlingVariation(v, v.nome || "", "");
       const priceModifier = varPrice - basePrice;
       const varData: any = {
         product_id: productId,

@@ -516,13 +516,62 @@ function BlingPanel() {
     setSyncing(action);
     setSyncResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('bling-sync', {
-        body: { action },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      setSyncResult(data);
-      toast({ title: `${label} concluída!`, description: JSON.stringify(data) });
+      if (action === 'sync_products') {
+        // Batch sync: process in chunks of 15 to avoid edge function timeout
+        const BATCH_SIZE = 15;
+        let offset = 0;
+        let hasMore = true;
+        let totalImported = 0;
+        let totalUpdated = 0;
+        let totalVariants = 0;
+        let totalErrors = 0;
+        let totalSkipped = 0;
+        let totalCleaned = 0;
+        let totalGroups = 0;
+        const allLogs: any[] = [];
+
+        while (hasMore) {
+          toast({ title: `Sincronizando...`, description: `Processando lote a partir do item ${offset}...` });
+          const { data, error } = await supabase.functions.invoke('bling-sync', {
+            body: { action: 'sync_products', limit: BATCH_SIZE, offset },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+
+          totalImported += data.imported || 0;
+          totalUpdated += data.updated || 0;
+          totalVariants += data.variants || 0;
+          totalErrors += data.errors || 0;
+          totalSkipped += data.skipped || 0;
+          totalCleaned += data.cleaned || 0;
+          totalGroups = data.totalGroups || totalGroups;
+          if (data.log) allLogs.push(...data.log);
+
+          hasMore = data.hasMore === true;
+          offset = data.nextOffset || (offset + BATCH_SIZE);
+        }
+
+        const finalResult = {
+          imported: totalImported,
+          updated: totalUpdated,
+          variants: totalVariants,
+          skipped: totalSkipped,
+          errors: totalErrors,
+          cleaned: totalCleaned,
+          totalGroups,
+          log: allLogs,
+        };
+        setSyncResult(finalResult);
+        toast({ title: `${label} concluída!`, description: `${totalImported} importados, ${totalUpdated} atualizados, ${totalVariants} variantes, ${totalErrors} erros` });
+      } else {
+        const { data, error } = await supabase.functions.invoke('bling-sync', {
+          body: { action },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        setSyncResult(data);
+        toast({ title: `${label} concluída!`, description: JSON.stringify(data) });
+      }
       queryClient.invalidateQueries({ queryKey: ['admin-products'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
     } catch (err: any) {
