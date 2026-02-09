@@ -30,6 +30,7 @@ const BestSellersPage = lazy(() => import("./pages/BestSellersPage"));
 const RastreioPage = lazy(() => import("./pages/RastreioPage"));
 const OrderConfirmation = lazy(() => import("./pages/OrderConfirmation"));
 const FavoritesPage = lazy(() => import("./pages/FavoritesPage"));
+const SearchPage = lazy(() => import("./pages/SearchPage"));
 
 // Lazy load admin routes (heavy)
 const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
@@ -120,6 +121,7 @@ const App = () => (
               <Route path="/rastreio" element={<RastreioPage />} />
               <Route path="/pedido-confirmado" element={<OrderConfirmation />} />
               <Route path="/favoritos" element={<FavoritesPage />} />
+              <Route path="/busca" element={<SearchPage />} />
               
               {/* Admin routes */}
               <Route path="/admin/login" element={<AdminLogin />} />
