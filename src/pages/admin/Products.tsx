@@ -61,6 +61,7 @@ interface Product {
   seo_keywords: string | null;
   created_at: string;
   updated_at: string;
+  bling_product_id: number | null;
   category?: { id: string; name: string } | null;
   images?: { id: string; url: string; alt_text: string | null; display_order: number; is_primary: boolean; media_type: string }[];
 }
@@ -75,6 +76,7 @@ export default function Products() {
   const [sortBy, setSortBy] = useState<string>('newest');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['admin-products'],
@@ -151,6 +153,13 @@ export default function Products() {
     filteredProducts = filteredProducts.filter(p => p.sale_price && p.sale_price < p.base_price);
   }
 
+  // Source filter (Bling vs Manual)
+  if (sourceFilter === 'bling') {
+    filteredProducts = filteredProducts.filter(p => p.bling_product_id != null);
+  } else if (sourceFilter === 'manual') {
+    filteredProducts = filteredProducts.filter(p => p.bling_product_id == null);
+  }
+
   // Sort products
   switch (sortBy) {
     case 'oldest':
@@ -178,10 +187,11 @@ export default function Products() {
     setSortBy('newest');
     setCategoryFilter('all');
     setStatusFilter('all');
+    setSourceFilter('all');
     setSearchQuery('');
   };
 
-  const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all';
+  const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all';
   const importRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -297,6 +307,17 @@ export default function Products() {
           </SelectContent>
         </Select>
 
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Origem" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas origens</SelectItem>
+            <SelectItem value="bling">Bling</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
+          </SelectContent>
+        </Select>
+
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
             Limpar filtros
@@ -365,6 +386,11 @@ export default function Products() {
                       <Badge variant={product.is_active ? 'default' : 'secondary'}>
                         {product.is_active ? 'Ativo' : 'Inativo'}
                       </Badge>
+                      {product.bling_product_id ? (
+                        <Badge variant="outline" className="border-blue-500 text-blue-600 dark:text-blue-400">Bling</Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-muted-foreground text-muted-foreground">Manual</Badge>
+                      )}
                       {product.is_featured && <Badge variant="outline">Destaque</Badge>}
                       {product.is_new && <Badge className="bg-primary">Novo</Badge>}
                       {product.sale_price && product.sale_price < product.base_price && (
