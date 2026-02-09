@@ -749,12 +749,15 @@ async function syncProducts(supabase: any, token: string) {
 
   const groups = new Map<number, ProductGroup>();
   const standaloneItems: ListingItem[] = []; // items that are truly standalone (simple products)
+  const variationBlingIds = new Set<number>(); // Track all variation Bling IDs for cleanup
+  let skippedFormatoV = 0;
 
   for (const item of allListingItems) {
     const { parentBlingId, baseName, attributes } = extractParentInfoFromName(item.nome);
 
     if (parentBlingId) {
       // This item is a variation - it has "(PARENT_ID)" in its name
+      variationBlingIds.add(item.id);
       if (!groups.has(parentBlingId)) {
         groups.set(parentBlingId, {
           parentBlingId,
@@ -768,9 +771,14 @@ async function syncProducts(supabase: any, token: string) {
         name: baseName,
         attributes,
       });
+    } else if (item.formato === "V") {
+      // Bling says this is a variation but name doesn't have parent ID
+      // Just skip it - don't create as standalone product, don't make slow API calls
+      variationBlingIds.add(item.id);
+      skippedFormatoV++;
+      totalSkipped++;
     } else {
-      // No parent ID in name - could be a parent product or a simple product
-      // Check if any other items reference this item's ID as parent
+      // No parent ID in name AND not formato=V → could be parent (E) or simple (S)
       standaloneItems.push(item);
     }
   }
@@ -791,7 +799,8 @@ async function syncProducts(supabase: any, token: string) {
     }
   }
 
-  console.log(`Classified into ${groups.size} product groups (${standaloneItems.length} standalone, ${allListingItems.length - standaloneItems.length} variations)`);
+  const variationCount = allListingItems.length - standaloneItems.length;
+  console.log(`Classified into ${groups.size} product groups (${standaloneItems.length} standalone, ${variationCount} variations, ${skippedFormatoV} skipped formato=V)`);
 
   // ─── PHASE 3: Process each group ───
   const processedParentIds = new Set<number>();
@@ -898,6 +907,7 @@ async function syncProducts(supabase: any, token: string) {
   }
 
   // ─── PHASE 4: Clean up products that are variations imported as standalone ───
+  // Use the variationBlingIds set (collected from listing) - NO extra API calls needed
   const { data: blingProducts } = await supabase
     .from("products")
     .select("id, bling_product_id, name")
@@ -906,21 +916,16 @@ async function syncProducts(supabase: any, token: string) {
   let cleaned = 0;
   if (blingProducts?.length) {
     for (const prod of blingProducts) {
-      if (processedParentIds.has(prod.bling_product_id)) continue;
-      try {
-        await sleep(BLING_RATE_LIMIT_MS);
-        const checkRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${prod.bling_product_id}`, { headers });
-        const checkJson = await checkRes.json();
-        if (checkJson?.data?.formato === "V") {
-          // This is a variation stored as a product - delete it
-          await supabase.from("product_images").delete().eq("product_id", prod.id);
-          await supabase.from("product_variants").delete().eq("product_id", prod.id);
-          await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
-          await supabase.from("products").delete().eq("id", prod.id);
-          cleaned++;
-          syncLog.push({ bling_id: prod.bling_product_id, name: prod.name, status: 'skipped', message: 'Removido (era variação importada como produto)', variants: 0 });
-        }
-      } catch (_) { /* ignore */ }
+      // If this product's bling_product_id is in our variation set, it shouldn't be a standalone product
+      if (variationBlingIds.has(prod.bling_product_id)) {
+        // Delete it - it's a variation that was incorrectly imported as a product
+        await supabase.from("product_images").delete().eq("product_id", prod.id);
+        await supabase.from("product_variants").delete().eq("product_id", prod.id);
+        await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
+        await supabase.from("products").delete().eq("id", prod.id);
+        cleaned++;
+        syncLog.push({ bling_id: prod.bling_product_id, name: prod.name, status: 'skipped', message: 'Removido (era variação importada como produto)', variants: 0 });
+      }
     }
   }
 
