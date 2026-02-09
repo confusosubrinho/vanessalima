@@ -222,7 +222,38 @@ export function ProductCarousel({
                         </p>
                       </div>
 
-                      {/* Sizes removed for cleaner cards */}
+                      {/* Size variants */}
+                      {(() => {
+                        const sizes = product.variants
+                          ?.filter(v => v.is_active)
+                          .map(v => ({ size: v.size, inStock: v.stock_quantity > 0 }))
+                          .filter((v, i, arr) => arr.findIndex(a => a.size === v.size) === i)
+                          .sort((a, b) => {
+                            const numA = parseFloat(a.size);
+                            const numB = parseFloat(b.size);
+                            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                            return a.size.localeCompare(b.size);
+                          }) || [];
+                        return sizes.length > 0 ? (
+                          <div>
+                            <p className={`text-[11px] mb-1 font-medium ${isDark && !cardBg ? 'text-secondary-foreground/70' : 'text-muted-foreground'}`}>Tamanho</p>
+                            <div className="flex gap-1 justify-center overflow-x-auto touch-pan-x cursor-grab active:cursor-grabbing" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+                              {sizes.map(({ size, inStock }) => (
+                                <span
+                                  key={size}
+                                  className={`inline-flex items-center justify-center min-w-[26px] h-6 px-1 text-[11px] border rounded flex-shrink-0 ${
+                                    inStock
+                                      ? 'border-border text-foreground bg-background'
+                                      : 'border-border/50 text-muted-foreground/50 line-through bg-muted/50'
+                                  }`}
+                                >
+                                  {size}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
 
                       <div className="space-y-1.5 sm:space-y-2">
                         <Button
