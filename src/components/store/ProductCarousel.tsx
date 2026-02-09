@@ -146,21 +146,23 @@
                return (
                  <div key={product.id} className="flex-shrink-0 w-[280px] md:w-[300px] snap-start group">
                    <Link to={`/produto/${product.slug}`} className="block">
-                     <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
-                       {/* Primary image */}
-                       <img
-                         src={primaryImage?.url || '/placeholder.svg'}
-                         alt={product.name}
-                         className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-0"
-                       />
-                       {/* Secondary image on hover */}
-                       {secondaryImage && (
-                         <img
-                           src={secondaryImage.url}
-                           alt={product.name}
-                           className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                         />
-                       )}
+                      <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
+                        {/* Primary image */}
+                        <img
+                          src={primaryImage?.url || '/placeholder.svg'}
+                          alt={product.name}
+                          className={`w-full h-full object-cover transition-all duration-500 ${
+                            secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-110'
+                          }`}
+                        />
+                        {/* Secondary image on hover */}
+                        {secondaryImage && (
+                          <img
+                            src={secondaryImage.url}
+                            alt={product.name}
+                            className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                          />
+                        )}
  
                        {/* Badges */}
                        <div className="absolute top-3 left-3 flex flex-col gap-2">

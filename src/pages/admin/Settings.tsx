@@ -165,13 +165,14 @@ export default function Settings() {
 
       <form onSubmit={handleSubmit}>
         <Tabs defaultValue="general" className="space-y-6">
-          <TabsList>
+           <TabsList className="flex-wrap">
             <TabsTrigger value="general">Geral</TabsTrigger>
             <TabsTrigger value="contact">Contato</TabsTrigger>
             <TabsTrigger value="social">Redes Sociais</TabsTrigger>
             <TabsTrigger value="shipping">Frete</TabsTrigger>
             <TabsTrigger value="payments">Pagamentos</TabsTrigger>
             <TabsTrigger value="rede">Gateway Rede</TabsTrigger>
+            <TabsTrigger value="footer">Footer</TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="space-y-4">
@@ -481,6 +482,46 @@ export default function Settings() {
                     <li>Gere ou copie seu token de integração</li>
                     <li>Seu PV está disponível na página inicial do portal</li>
                   </ol>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="footer" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Image className="h-5 w-5" />
+                  Personalização do Footer
+                </CardTitle>
+                <CardDescription>Configure dados da empresa, selos de segurança e formas de pagamento que aparecem no rodapé</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>CNPJ</Label>
+                    <Input
+                      value={(formData as any).cnpj || ''}
+                      onChange={(e) => setFormData({ ...formData, cnpj: e.target.value } as any)}
+                      placeholder="00.000.000/0001-00"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Endereço Completo</Label>
+                    <Input
+                      value={(formData as any).full_address || ''}
+                      onChange={(e) => setFormData({ ...formData, full_address: e.target.value } as any)}
+                      placeholder="Rua, Cidade - UF, CEP"
+                    />
+                  </div>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-2">
+                  <p className="font-medium">Informações exibidas no footer:</p>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                    <li>Formas de pagamento (Visa, Mastercard, Elo, etc.) e selos de segurança são exibidos automaticamente.</li>
+                    <li>Para personalizar as imagens dos selos e bandeiras, entre em contato com o suporte.</li>
+                    <li>O CNPJ e endereço aparecem na linha de dados da empresa.</li>
+                  </ul>
                 </div>
               </CardContent>
             </Card>

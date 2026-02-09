@@ -62,7 +62,9 @@ export function ProductCard({ product }: ProductCardProps) {
         <img
           src={primaryImage?.url || '/placeholder.svg'}
           alt={product.name}
-          className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-0"
+          className={`w-full h-full object-cover transition-all duration-500 ${
+            secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-110'
+          }`}
         />
         {secondaryImage && (
           <img

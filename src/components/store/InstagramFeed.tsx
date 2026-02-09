@@ -53,14 +53,7 @@ export function InstagramFeed() {
     });
   }, [activeIndex, videos]);
 
-  // Auto-advance every 5 seconds (infinite loop)
-  useEffect(() => {
-    if (!videos || videos.length <= 1) return;
-    const timer = setInterval(() => {
-      setActiveIndex(prev => (prev >= videos.length - 1 ? 0 : prev + 1));
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [videos]);
+  // No auto-advance - manual scroll only
 
   const goTo = (direction: 'prev' | 'next') => {
     if (!videos) return;

@@ -93,8 +93,8 @@ export function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-4">
-            <a 
-              href="/#atendimento"
+            <Link 
+              to="/atendimento"
               className="hidden md:flex items-center gap-2 text-sm hover:text-primary transition-colors"
             >
               <HelpCircle className="h-5 w-5" />
@@ -102,7 +102,7 @@ export function Header() {
                 <span className="text-xs text-muted-foreground block">Precisa de Ajuda?</span>
                 <span className="font-medium">Atendimento</span>
               </div>
-            </a>
+            </Link>
             
             <Link to="/conta" className="hidden md:flex items-center gap-2 text-sm hover:text-primary transition-colors">
               <User className="h-5 w-5" />
@@ -284,8 +284,7 @@ export function Header() {
       {/* Navigation with Mega Menu */}
       <nav className="border-t bg-background relative" ref={megaMenuRef}>
         <div className="container-custom">
-          <div className="hidden md:flex items-center justify-center">
-            <div className="flex items-center">
+          <div className="hidden md:flex items-center justify-between w-full">
               {/* All Categories */}
               <div
                 className="relative"
@@ -392,11 +391,10 @@ export function Header() {
                 );
               })}
             </div>
-            <Link to="/bijuterias" className="bg-secondary text-secondary-foreground px-4 py-2 my-2 rounded-full text-sm font-medium hover:bg-secondary/90 transition-colors flex items-center gap-2">
+            <Link to="/bijuterias" className="bg-secondary text-secondary-foreground px-4 py-2 my-2 rounded-full text-sm font-medium hover:bg-secondary/90 transition-colors flex items-center gap-2 flex-shrink-0">
               <Percent className="h-4 w-4" />
               Bijuterias
             </Link>
-            </div>
         </div>
       </nav>
 

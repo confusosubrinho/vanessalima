@@ -22,6 +22,9 @@ import TermosPage from "./pages/TermosPage";
 import TrocasPage from "./pages/TrocasPage";
 import ComoComprarPage from "./pages/ComoComprarPage";
 import FormasPagamentoPage from "./pages/FormasPagamentoPage";
+import AtendimentoPage from "./pages/AtendimentoPage";
+import BestSellersPage from "./pages/BestSellersPage";
+import RastreioPage from "./pages/RastreioPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminLogin from "./pages/admin/AdminLogin";
 import Dashboard from "./pages/admin/Dashboard";
@@ -63,6 +66,9 @@ const App = () => (
             <Route path="/trocas" element={<TrocasPage />} />
             <Route path="/como-comprar" element={<ComoComprarPage />} />
             <Route path="/formas-pagamento" element={<FormasPagamentoPage />} />
+            <Route path="/atendimento" element={<AtendimentoPage />} />
+            <Route path="/mais-vendidos" element={<BestSellersPage />} />
+            <Route path="/rastreio" element={<RastreioPage />} />
             
             {/* Admin routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
