@@ -641,7 +641,7 @@ function BlingPanel() {
           {/* Sync Actions */}
           <div className="space-y-4">
             <h4 className="font-medium text-sm">🔄 Sincronização</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <Button
                 variant="outline"
                 onClick={() => handleSync('sync_products', 'Importação de produtos')}
@@ -669,6 +669,20 @@ function BlingPanel() {
                 )}
                 <span className="text-xs font-medium">Sincronizar Estoque</span>
                 <span className="text-[10px] text-muted-foreground">Bling → Loja</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleSync('cleanup_variations', 'Limpeza de variações duplicadas')}
+                disabled={!!syncing}
+                className="h-auto py-3 flex flex-col items-center gap-1"
+              >
+                {syncing === 'cleanup_variations' ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Filter className="h-5 w-5" />
+                )}
+                <span className="text-xs font-medium">Limpar Duplicados</span>
+                <span className="text-[10px] text-muted-foreground">Remove variações como produto</span>
               </Button>
             </div>
             {syncResult && (

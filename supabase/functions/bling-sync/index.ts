@@ -213,13 +213,16 @@ function extractSizeFromName(name: string): string | null {
 }
 
 // Parse variation attributes from structured string like "Cor:Dourado;Tamanho:35"
+// Also handles Bling V3 pipe format: "Cor:Dourado | Tamanho:35"
 // Also handles full product names with embedded attributes
 function parseVariationAttributes(nome: string): { size: string; color: string | null; colorHex: string | null } {
   if (!nome) return { size: "Único", color: null, colorHex: null };
   
-  // Try structured key:value format first
+  // Try structured key:value format - split by BOTH ";" and "|" (Bling V3 uses pipes)
   const parts: Record<string, string> = {};
-  nome.split(";").forEach(part => {
+  // First normalize: replace "|" with ";" so we can split uniformly
+  const normalized = nome.replace(/\|/g, ";");
+  normalized.split(";").forEach(part => {
     const sepIdx = part.indexOf(":");
     if (sepIdx > 0) {
       const key = part.substring(0, sepIdx).trim().toLowerCase();
@@ -246,7 +249,6 @@ function parseVariationAttributes(nome: string): { size: string; color: string |
   if (color) {
     const normalizedColor = color.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     colorHex = COLOR_MAP[normalizedColor] || null;
-    // Also try the original (not normalized)
     if (!colorHex) {
       colorHex = COLOR_MAP[color.toLowerCase()] || null;
     }
@@ -265,12 +267,38 @@ function extractAttributesFromBlingVariation(
   listingName: string, 
   listingAttributes: string
 ): { size: string; color: string | null; colorHex: string | null; sku: string | null } {
-  // Priority 1: Use the variation's own structured variacao.nome if available
-  // This looks like "Cor:Dourado;Tamanho:35"
   let parsed = { size: "Único", color: null as string | null, colorHex: null as string | null };
   
+  // Priority 0: Check Bling V3 `atributos` array (most reliable)
+  // Structure: [{ id, nome: "Cor", valor: "Azul" }, { id, nome: "Tamanho", valor: "35" }]
+  if (varDetail?.atributos?.length) {
+    for (const attr of varDetail.atributos) {
+      const attrName = (attr.nome || attr.name || "").toLowerCase().trim();
+      const attrValue = (attr.valor || attr.value || "").trim();
+      if (!attrValue) continue;
+      if (attrName === "tamanho" || attrName === "tam" || attrName === "size" || attrName === "numero") {
+        parsed.size = normalizeSize(attrValue);
+      } else if (attrName === "cor" || attrName === "color" || attrName === "colour") {
+        parsed.color = attrValue.charAt(0).toUpperCase() + attrValue.slice(1);
+        const normalizedColor = attrValue.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        parsed.colorHex = COLOR_MAP[normalizedColor] || COLOR_MAP[attrValue.toLowerCase()] || null;
+      }
+    }
+    // If we got at least something from atributos, use it
+    if (parsed.size !== "Único" || parsed.color) {
+      const sku = varDetail?.codigo || null;
+      return { size: parsed.size, color: parsed.color, colorHex: parsed.colorHex, sku };
+    }
+  }
+  
+  // Priority 1: Check variacoes[].variacao or variacao.nome structures
   if (varDetail?.variacao?.nome) {
     parsed = parseVariationAttributes(varDetail.variacao.nome);
+  }
+  
+  // Priority 1b: Try the variation's own nome (Bling V3: "ProdutoBase Cor:X | Tamanho:Y")
+  if (parsed.size === "Único" && !parsed.color && varDetail?.nome) {
+    parsed = parseVariationAttributes(varDetail.nome);
   }
   
   // Priority 2: Use listing attributes string (from parent name parsing)
@@ -665,7 +693,7 @@ async function upsertParentWithVariants(
 }
 
 // ─── Main Sync Products ───
-async function syncProducts(supabase: any, token: string) {
+async function syncProducts(supabase: any, token: string, batchLimit: number = 0, batchOffset: number = 0) {
   const headers = blingHeaders(token);
   let page = 1;
   let totalImported = 0;
@@ -868,7 +896,17 @@ async function syncProducts(supabase: any, token: string) {
     return 0;
   });
 
-  for (const [parentBlingId, group] of sortedGroups) {
+  // Apply batch offset/limit if specified
+  let processableGroups = sortedGroups;
+  if (batchOffset > 0) {
+    processableGroups = processableGroups.slice(batchOffset);
+  }
+  if (batchLimit > 0) {
+    processableGroups = processableGroups.slice(0, batchLimit);
+  }
+  console.log(`Processing ${processableGroups.length} groups (offset=${batchOffset}, limit=${batchLimit || 'all'}, total=${sortedGroups.length})`);
+
+  for (const [parentBlingId, group] of processableGroups) {
     if (processedParentIds.has(parentBlingId)) continue;
     processedParentIds.add(parentBlingId);
 
@@ -1014,7 +1052,12 @@ async function syncProducts(supabase: any, token: string) {
     errors: totalErrors,
     cleaned,
     totalBlingListItems: allListingItems.length,
+    totalGroups: sortedGroups.length,
     totalProcessed: processedParentIds.size,
+    batchOffset: batchOffset,
+    batchLimit: batchLimit || sortedGroups.length,
+    hasMore: batchLimit > 0 && (batchOffset + batchLimit) < sortedGroups.length,
+    nextOffset: batchLimit > 0 ? batchOffset + batchLimit : 0,
     log: syncLog,
   };
 
@@ -1226,12 +1269,119 @@ serve(async (req) => {
       }
 
       case "sync_products":
-        result = await syncProducts(supabase, token);
+        result = await syncProducts(supabase, token, payload.limit || 0, payload.offset || 0);
         break;
+
+      case "debug_product": {
+        if (!payload.search) throw new Error("Informe o campo 'search' com nome ou ID do produto");
+        const headers = blingHeaders(token);
+        
+        // Search by name in Bling
+        let blingProduct: any = null;
+        const searchUrl = `${BLING_API_URL}/produtos?pesquisa=${encodeURIComponent(payload.search)}&limite=5`;
+        const searchRes = await fetchWithRateLimit(searchUrl, { headers });
+        const searchJson = await searchRes.json();
+        
+        const listings = searchJson?.data || [];
+        const debugInfo: any = { listings: listings.map((p: any) => ({ id: p.id, nome: p.descricao || p.nome, formato: p.formato })) };
+        
+        if (listings.length > 0) {
+          // Fetch detail of first match
+          const firstId = listings[0].id;
+          await sleep(BLING_RATE_LIMIT_MS);
+          const detailRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${firstId}`, { headers });
+          const detailJson = await detailRes.json();
+          blingProduct = detailJson?.data;
+          
+          debugInfo.detail = {
+            id: blingProduct?.id,
+            nome: blingProduct?.nome,
+            formato: blingProduct?.formato,
+            situacao: blingProduct?.situacao,
+            codigo: blingProduct?.codigo,
+            preco: blingProduct?.preco,
+            categoria: blingProduct?.categoria,
+            produtoPai: blingProduct?.produtoPai || blingProduct?.idProdutoPai,
+            atributos: blingProduct?.atributos,
+            variacoes: blingProduct?.variacoes?.map((v: any) => ({
+              id: v.id,
+              nome: v.nome,
+              codigo: v.codigo,
+              preco: v.preco,
+              atributos: v.atributos,
+            })),
+            variacoesCount: blingProduct?.variacoes?.length || 0,
+          };
+          
+          // If it has variations, fetch detail of first variation
+          if (blingProduct?.variacoes?.length > 0) {
+            const firstVarId = blingProduct.variacoes[0].id;
+            await sleep(BLING_RATE_LIMIT_MS);
+            const varRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${firstVarId}`, { headers });
+            const varJson = await varRes.json();
+            const varDetail = varJson?.data;
+            debugInfo.firstVariationDetail = {
+              id: varDetail?.id,
+              nome: varDetail?.nome,
+              codigo: varDetail?.codigo,
+              formato: varDetail?.formato,
+              produtoPai: varDetail?.produtoPai || varDetail?.idProdutoPai,
+              atributos: varDetail?.atributos,
+              variacao: varDetail?.variacao,
+              estoque: varDetail?.estoque,
+            };
+            
+            // Test our attribute extraction
+            const extracted = extractAttributesFromBlingVariation(varDetail, blingProduct.variacoes[0].nome || "", "");
+            debugInfo.extractedAttributes = extracted;
+          }
+          
+          // Also test name parsing
+          debugInfo.nameParseTest = extractParentInfoFromName(listings[0].descricao || listings[0].nome || "");
+        }
+        
+        result = debugInfo;
+        break;
+      }
 
       case "sync_stock":
         result = await syncStock(supabase, token);
         break;
+
+      case "cleanup_variations": {
+        // Remove products that are actually variations (have Cor:X;Tamanho:Y in name)
+        // These should be variants under their parent, not standalone products
+        const { data: variationProducts } = await supabase
+          .from("products")
+          .select("id, name, bling_product_id")
+          .or("name.like.%Cor:%,name.like.%Tamanho:%");
+        
+        let cleanedCount = 0;
+        const cleanedNames: string[] = [];
+        for (const prod of (variationProducts || [])) {
+          // Verify this product's bling_product_id exists as a variant under another product
+          const { data: existsAsVariant } = await supabase
+            .from("product_variants")
+            .select("id")
+            .eq("bling_variant_id", prod.bling_product_id)
+            .maybeSingle();
+          
+          if (existsAsVariant) {
+            // Safe to delete - it exists as a variant under its parent
+            await supabase.from("product_images").delete().eq("product_id", prod.id);
+            await supabase.from("product_variants").delete().eq("product_id", prod.id);
+            await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
+            await supabase.from("buy_together_products").delete().eq("product_id", prod.id);
+            await supabase.from("buy_together_products").delete().eq("related_product_id", prod.id);
+            await supabase.from("products").delete().eq("id", prod.id);
+            cleanedCount++;
+            cleanedNames.push(prod.name);
+          }
+        }
+        
+        result = { cleaned: cleanedCount, names: cleanedNames.slice(0, 20) };
+        break;
+      }
 
       case "create_order":
         result = await createOrder(supabase, token, payload.order_id);
