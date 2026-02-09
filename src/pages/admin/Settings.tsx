@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Store, Phone, Instagram, Facebook, Truck, CreditCard, Save, Upload, Image } from 'lucide-react';
+import { Store, Phone, Instagram, Facebook, Truck, CreditCard, Save, Upload, Image, AlertTriangle } from 'lucide-react';
+import { ErrorLogsPanel } from '@/components/admin/ErrorLogsPanel';
 
 interface StoreSettings {
   id: string;
@@ -173,7 +174,20 @@ export default function Settings() {
             <TabsTrigger value="payments">Pagamentos</TabsTrigger>
             <TabsTrigger value="rede">Gateway Rede</TabsTrigger>
             <TabsTrigger value="footer">Footer</TabsTrigger>
+            <TabsTrigger value="errors" className="text-destructive">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Logs de Erros
+            </TabsTrigger>
           </TabsList>
+
+          {/* Error Logs Tab - outside the form since it's independent */}
+          <TabsContent value="errors">
+            <Card>
+              <CardContent className="pt-6">
+                <ErrorLogsPanel />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="general" className="space-y-4">
             <Card>

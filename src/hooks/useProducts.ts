@@ -1,6 +1,7 @@
- import { useQuery } from '@tanstack/react-query';
- import { supabase } from '@/integrations/supabase/client';
- import { Product, Category, Banner, StoreSettings } from '@/types/database';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Product, Category, Banner, StoreSettings } from '@/types/database';
+import { logApiError } from '@/lib/errorLogger';
  
  export function useProducts(categorySlug?: string) {
    return useQuery({
@@ -29,9 +30,19 @@
          }
        }
  
-       const { data, error } = await query;
-       if (error) throw error;
-       return data as Product[];
+      const { data, error } = await query;
+      if (error) {
+        logApiError('useProducts', error, { categorySlug });
+        // On JWT expired, try without auth by signing out
+        if (error.message?.includes('JWT expired')) {
+          await supabase.auth.signOut();
+          const { data: retryData, error: retryError } = await query;
+          if (retryError) throw retryError;
+          return retryData as Product[];
+        }
+        throw error;
+      }
+      return data as Product[];
      },
    });
  }

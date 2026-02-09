@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { ScrollToTop } from "@/components/store/ScrollToTop";
+import { AdminErrorIndicator } from "@/components/store/AdminErrorIndicator";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ProductDetail from "./pages/ProductDetail";
@@ -39,12 +40,25 @@ import Settings from "./pages/admin/Settings";
 import CodeSettings from "./pages/admin/CodeSettings";
 import Integrations from "./pages/admin/Integrations";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error: any) => {
+        // Don't retry on JWT expired - session recovery handles it
+        if (error?.message?.includes('JWT expired')) return false;
+        return failureCount < 2;
+      },
+      staleTime: 1000 * 60, // 1 min stale
+      refetchOnWindowFocus: true,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <CartProvider>
       <TooltipProvider>
+        <AdminErrorIndicator />
         <Toaster />
         <Sonner />
         <BrowserRouter>
