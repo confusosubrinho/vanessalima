@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Eye, Mail, Phone, Calendar, DollarSign, ArrowUpDown, ShoppingBag, Download, Upload } from 'lucide-react';
+import { Search, Eye, Mail, Phone, Calendar, DollarSign, ArrowUpDown, ShoppingBag, Download, Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -36,8 +36,11 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Customer } from '@/types/database';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Customers() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [sortBy, setSortBy] = useState<string>('newest');
@@ -46,6 +49,8 @@ export default function Customers() {
   const [minSpent, setMinSpent] = useState<string>('');
   const [maxSpent, setMaxSpent] = useState<string>('');
   const [minOrders, setMinOrders] = useState<string>('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
 
   const { data: customers, isLoading } = useQuery({
     queryKey: ['admin-customers'],
@@ -157,10 +162,141 @@ export default function Customers() {
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await readFileAsText(file);
-    const rows = parseCSV(text);
-    console.log(`${rows.length} clientes lidos`);
-    if (importRef.current) importRef.current.value = '';
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const text = await readFileAsText(file);
+      
+      // Parse semicolon-separated Tray CSV
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) {
+        toast({ title: 'CSV vazio ou inválido', variant: 'destructive' });
+        return;
+      }
+
+      // Parse header to find column indices
+      const parseRow = (line: string) => line.split(';').map(cell => cell.replace(/^"|"$/g, '').trim());
+      const header = parseRow(lines[0]);
+      
+      const col = (name: string) => {
+        const variants: Record<string, string[]> = {
+          name: ['Nome cliente', 'nome cliente', 'Nome'],
+          email: ['E-mail', 'e-mail', 'Email', 'email'],
+          phone: ['Telefone principal', 'telefone principal', 'Telefone', 'telefone'],
+          phone2: ['Telefone 2', 'telefone 2'],
+          birthday: ['Data nascimento', 'data nascimento'],
+          orders: ['Total pedidos', 'total pedidos'],
+          date: ['Data cadastro', 'data cadastro'],
+        };
+        const keys = variants[name] || [name];
+        for (const k of keys) {
+          // Normalize accents for matching (CSV may have encoding issues)
+          const idx = header.findIndex(h => {
+            const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            return norm(h) === norm(k) || h.includes(k) || k.includes(h);
+          });
+          if (idx >= 0) return idx;
+        }
+        return -1;
+      };
+
+      const nameIdx = col('name');
+      const emailIdx = col('email');
+      const phoneIdx = col('phone');
+      const phone2Idx = col('phone2');
+      const birthdayIdx = col('birthday');
+      const ordersIdx = col('orders');
+      const dateIdx = col('date');
+
+      if (nameIdx < 0 || emailIdx < 0) {
+        toast({ title: 'Colunas obrigatórias não encontradas', description: 'O CSV precisa ter "Nome cliente" e "E-mail"', variant: 'destructive' });
+        return;
+      }
+
+      // Get existing emails to skip duplicates
+      const { data: existingCustomers } = await supabase.from('customers').select('email');
+      const existingEmails = new Set((existingCustomers || []).map(c => c.email.toLowerCase()));
+
+      let imported = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+      const batch: any[] = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const cells = parseRow(lines[i]);
+        const name = cells[nameIdx];
+        const email = cells[emailIdx];
+
+        if (!name || !email || !email.includes('@')) {
+          skipped++;
+          continue;
+        }
+
+        if (existingEmails.has(email.toLowerCase())) {
+          skipped++;
+          continue;
+        }
+
+        // Parse phone - remove quotes and apostrophes
+        let phone = phoneIdx >= 0 ? cells[phoneIdx]?.replace(/'/g, '') : '';
+        if (!phone && phone2Idx >= 0) phone = cells[phone2Idx]?.replace(/'/g, '') || '';
+
+        // Parse birthday (DD/MM/YYYY → YYYY-MM-DD)
+        let birthday: string | null = null;
+        if (birthdayIdx >= 0 && cells[birthdayIdx]) {
+          const parts = cells[birthdayIdx].split('/');
+          if (parts.length === 3 && parts[2].length === 4) {
+            birthday = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          }
+        }
+
+        // Parse registration date
+        let createdAt: string | undefined;
+        if (dateIdx >= 0 && cells[dateIdx]) {
+          const parts = cells[dateIdx].split('/');
+          if (parts.length === 3 && parts[2].length === 4) {
+            createdAt = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T00:00:00Z`;
+          }
+        }
+
+        const totalOrders = ordersIdx >= 0 ? parseInt(cells[ordersIdx]) || 0 : 0;
+
+        batch.push({
+          full_name: name,
+          email: email.toLowerCase(),
+          phone: phone || null,
+          birthday: birthday,
+          total_orders: totalOrders,
+          total_spent: 0,
+          ...(createdAt ? { created_at: createdAt } : {}),
+        });
+
+        existingEmails.add(email.toLowerCase());
+        imported++;
+      }
+
+      // Insert in batches of 50
+      for (let i = 0; i < batch.length; i += 50) {
+        const chunk = batch.slice(i, i + 50);
+        const { error } = await supabase.from('customers').insert(chunk);
+        if (error) {
+          errors.push(`Lote ${Math.floor(i / 50) + 1}: ${error.message}`);
+        }
+      }
+
+      setImportResult({ imported, skipped, errors });
+      queryClient.invalidateQueries({ queryKey: ['admin-customers'] });
+      toast({
+        title: 'Importação concluída!',
+        description: `${imported} importados, ${skipped} ignorados${errors.length > 0 ? `, ${errors.length} erros` : ''}`,
+      });
+    } catch (err: any) {
+      toast({ title: 'Erro na importação', description: err.message, variant: 'destructive' });
+    } finally {
+      setImporting(false);
+      if (importRef.current) importRef.current.value = '';
+    }
   };
 
   return (
@@ -176,16 +312,41 @@ export default function Customers() {
             Exportar
           </Button>
           <label>
-            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
-            <Button variant="outline" size="sm" asChild>
+            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
+            <Button variant="outline" size="sm" asChild disabled={importing}>
               <span>
-                <Upload className="h-4 w-4 mr-2" />
-                Importar
+                {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                {importing ? 'Importando...' : 'Importar Tray'}
               </span>
             </Button>
           </label>
         </div>
       </div>
+
+      {/* Import result */}
+      {importResult && (
+        <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-4 w-4 text-primary" />
+            <p className="text-sm font-medium">Resultado da Importação</p>
+            <button onClick={() => setImportResult(null)} className="ml-auto text-muted-foreground hover:text-foreground text-xs">✕</button>
+          </div>
+          <div className="flex gap-4 text-sm">
+            <span className="text-primary font-medium">{importResult.imported} importados</span>
+            <span className="text-muted-foreground">{importResult.skipped} ignorados (duplicados/inválidos)</span>
+            {importResult.errors.length > 0 && (
+              <span className="text-destructive">{importResult.errors.length} erros</span>
+            )}
+          </div>
+          {importResult.errors.length > 0 && (
+            <div className="text-xs text-destructive space-y-1 mt-2">
+              {importResult.errors.map((err, i) => (
+                <p key={i} className="flex items-start gap-1"><AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />{err}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
