@@ -25,18 +25,16 @@ const Index = () => {
       <FeaturesBar />
       <CategoryGrid />
       
-      {/* Bijuterias section */}
-      {saleProducts.length > 0 && (
-        <ProductCarousel
-          products={saleProducts}
-          title="Bijuterias"
-          subtitle="Acessórios que completam seu look"
-          showViewAll
-          viewAllLink="/bijuterias"
-          isLoading={productsLoading}
-          darkBg
-        />
-      )}
+      {/* Mais Vendidos section */}
+      <ProductCarousel
+        products={featuredProducts || []}
+        title="Mais Vendidos"
+        subtitle="Os modelos mais amados pelas nossas clientes"
+        showViewAll
+        viewAllLink="/mais-vendidos"
+        isLoading={featuredLoading}
+        cardBg
+      />
 
       {/* Highlight Banners Section */}
       <HighlightBanners />
@@ -44,13 +42,17 @@ const Index = () => {
       {/* Shop by Size */}
       <ShopBySize />
 
-      {/* Featured products */}
-      <ProductCarousel
-        products={featuredProducts || []}
-        title="Destaques"
-        subtitle="Os modelos mais amados pelas nossas clientes"
-        isLoading={featuredLoading}
-      />
+      {/* Sale products */}
+      {saleProducts.length > 0 && (
+        <ProductCarousel
+          products={saleProducts}
+          title="Promoções"
+          subtitle="Ofertas imperdíveis para você"
+          showViewAll
+          viewAllLink="/promocoes"
+          isLoading={productsLoading}
+        />
+      )}
 
       {/* New arrivals */}
       <ProductCarousel

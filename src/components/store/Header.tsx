@@ -93,16 +93,35 @@ export function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-4">
-            <Link 
-              to="/atendimento"
-              className="hidden md:flex items-center gap-2 text-sm hover:text-primary transition-colors"
+            <div
+              className="hidden md:flex relative"
+              onMouseEnter={() => setActiveMegaMenu('atendimento')}
+              onMouseLeave={() => setActiveMegaMenu(null)}
             >
-              <HelpCircle className="h-5 w-5" />
-              <div className="text-left">
-                <span className="text-xs text-muted-foreground block">Precisa de Ajuda?</span>
-                <span className="font-medium">Atendimento</span>
-              </div>
-            </Link>
+              <Link 
+                to="/atendimento"
+                className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
+              >
+                <HelpCircle className="h-5 w-5" />
+                <div className="text-left">
+                  <span className="text-xs text-muted-foreground block">Precisa de Ajuda?</span>
+                  <span className="font-medium">Atendimento</span>
+                </div>
+              </Link>
+              {activeMegaMenu === 'atendimento' && (
+                <div className="absolute top-full right-0 mt-1 bg-background border rounded-lg shadow-xl z-50 py-2 w-48 animate-fade-in">
+                  <Link to="/rastreio" className="block px-4 py-2 text-sm hover:bg-muted transition-colors" onClick={() => setActiveMegaMenu(null)}>
+                    📦 Rastrear Pedido
+                  </Link>
+                  <Link to="/atendimento" className="block px-4 py-2 text-sm hover:bg-muted transition-colors" onClick={() => setActiveMegaMenu(null)}>
+                    💬 Fale Conosco
+                  </Link>
+                  <Link to="/faq" className="block px-4 py-2 text-sm hover:bg-muted transition-colors" onClick={() => setActiveMegaMenu(null)}>
+                    ❓ Perguntas Frequentes
+                  </Link>
+                </div>
+              )}
+            </div>
             
             <Link to="/conta" className="hidden md:flex items-center gap-2 text-sm hover:text-primary transition-colors">
               <User className="h-5 w-5" />
@@ -284,10 +303,10 @@ export function Header() {
       {/* Navigation with Mega Menu */}
       <nav className="border-t bg-background relative" ref={megaMenuRef}>
         <div className="container-custom">
-          <div className="hidden md:flex items-center justify-between w-full">
+          <div className="hidden md:flex items-center w-full">
               {/* All Categories */}
               <div
-                className="relative"
+                className="relative flex-shrink-0"
                 onMouseEnter={() => setActiveMegaMenu('all')}
                 onMouseLeave={() => setActiveMegaMenu(null)}
               >
@@ -298,7 +317,7 @@ export function Header() {
                 </button>
                 
               {activeMegaMenu === 'all' && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-[min(1200px,90vw)] bg-background border rounded-lg shadow-xl z-50 p-6 grid grid-cols-4 gap-6 animate-fade-in">
+                  <div className="absolute top-full left-0 w-[min(1200px,90vw)] bg-background border rounded-lg shadow-xl z-50 p-6 grid grid-cols-4 gap-6 animate-fade-in">
                     {categories?.map((category) => (
                       <div key={category.id}>
                         <Link
@@ -308,12 +327,17 @@ export function Header() {
                         >
                           <span className="group-hover:text-primary transition-colors">{category.name}</span>
                         </Link>
-                        {/* Subcategories would appear here */}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* Bijuterias button inline */}
+              <Link to="/bijuterias" className="flex-shrink-0 nav-link flex items-center gap-1.5 py-4 px-3 hover:bg-muted transition-colors text-primary font-medium">
+                <Percent className="h-3.5 w-3.5" />
+                Bijuterias
+              </Link>
 
               {/* Individual category links with mega menu showing products */}
               {mainCategories.map((category) => {
@@ -322,19 +346,40 @@ export function Header() {
                 return (
                   <div
                     key={category.id}
-                    className="relative"
+                    className="relative flex-shrink-0"
                     onMouseEnter={() => setActiveMegaMenu(category.slug)}
                     onMouseLeave={() => setActiveMegaMenu(null)}
                   >
                     <Link
                       to={`/categoria/${category.slug}`}
-                      className="nav-link flex items-center gap-1 py-4 px-3 hover:bg-muted transition-colors"
+                      className="nav-link flex items-center gap-1 py-4 px-3 hover:bg-muted transition-colors whitespace-nowrap"
                     >
                       {category.name}
                     </Link>
                     
                     {activeMegaMenu === category.slug && (
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 w-[min(900px,80vw)] bg-background border rounded-lg shadow-xl z-50 p-6 animate-fade-in">
+                      <div
+                        className="absolute top-full bg-background border rounded-lg shadow-xl z-50 p-6 animate-fade-in w-[min(800px,80vw)]"
+                        style={{
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          maxWidth: 'calc(100vw - 2rem)',
+                        }}
+                        ref={(el) => {
+                          if (el) {
+                            const rect = el.getBoundingClientRect();
+                            if (rect.right > window.innerWidth - 16) {
+                              el.style.left = 'auto';
+                              el.style.right = '0';
+                              el.style.transform = 'none';
+                            }
+                            if (rect.left < 16) {
+                              el.style.left = '0';
+                              el.style.transform = 'none';
+                            }
+                          }
+                        }}
+                      >
                         <div className="flex gap-6">
                           <div className="w-1/3">
                             <h3 className="font-bold text-lg mb-3">{category.name}</h3>
@@ -391,10 +436,6 @@ export function Header() {
                 );
               })}
             </div>
-            <Link to="/bijuterias" className="bg-secondary text-secondary-foreground px-4 py-2 my-2 rounded-full text-sm font-medium hover:bg-secondary/90 transition-colors flex items-center gap-2 flex-shrink-0">
-              <Percent className="h-4 w-4" />
-              Bijuterias
-            </Link>
         </div>
       </nav>
 

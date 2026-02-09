@@ -24,14 +24,14 @@ export function Newsletter() {
   };
 
   return (
-    <section className="py-16 bg-secondary text-secondary-foreground">
+    <section className="py-16 bg-[hsl(0,0%,12%)] text-white">
       <div className="container-custom">
         <div className="max-w-2xl mx-auto text-center">
           <Mail className="h-10 w-10 mx-auto mb-4 text-primary" />
           <h2 className="text-2xl md:text-3xl font-bold mb-2">
             Ganhe 5% de desconto
           </h2>
-          <p className="text-secondary-foreground/70 mb-6">
+          <p className="text-white/70 mb-6">
             Assine nossa newsletter e receba um cupom exclusivo de 5% de desconto na sua primeira compra!
           </p>
           <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
@@ -40,7 +40,7 @@ export function Newsletter() {
               placeholder="Seu melhor email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="flex-1 bg-secondary-foreground/10 border-secondary-foreground/20 text-secondary-foreground placeholder:text-secondary-foreground/50 rounded-full"
+              className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/50 rounded-full"
               required
             />
             <Button

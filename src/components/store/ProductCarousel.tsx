@@ -7,25 +7,27 @@
  import { useCart } from '@/contexts/CartContext';
  import { useToast } from '@/hooks/use-toast';
  
- interface ProductCarouselProps {
-   products: Product[];
-   title?: string;
-   subtitle?: string;
-   showViewAll?: boolean;
-   viewAllLink?: string;
-   isLoading?: boolean;
-   darkBg?: boolean;
- }
+interface ProductCarouselProps {
+  products: Product[];
+  title?: string;
+  subtitle?: string;
+  showViewAll?: boolean;
+  viewAllLink?: string;
+  isLoading?: boolean;
+  darkBg?: boolean;
+  cardBg?: boolean;
+}
  
  export function ProductCarousel({
    products,
    title,
    subtitle,
-   showViewAll,
-   viewAllLink,
-   isLoading,
-   darkBg = false,
- }: ProductCarouselProps) {
+  showViewAll,
+  viewAllLink,
+  isLoading,
+  darkBg = false,
+  cardBg = false,
+}: ProductCarouselProps) {
    const scrollRef = useRef<HTMLDivElement>(null);
    const { addItem } = useCart();
    const { toast } = useToast();
@@ -144,7 +146,7 @@
                const installmentPrice = (currentPrice / 12).toFixed(2);
  
                return (
-                 <div key={product.id} className="flex-shrink-0 w-[280px] md:w-[300px] snap-start group">
+                 <div key={product.id} className={`flex-shrink-0 w-[280px] md:w-[300px] snap-start group ${cardBg ? 'bg-background rounded-xl shadow-sm border p-3' : ''}`}>
                    <Link to={`/produto/${product.slug}`} className="block">
                       <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
                         {/* Primary image */}
