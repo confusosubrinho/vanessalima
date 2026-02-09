@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown } from 'lucide-react';
+import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -483,6 +483,7 @@ function BlingPanel() {
 
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const [syncLogFilter, setSyncLogFilter] = useState<string>('all');
   const [blingStores, setBlingStores] = useState<{id: string; name: string; type: string}[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
 
@@ -703,11 +704,31 @@ function BlingPanel() {
                   <p className="text-muted-foreground">Total de itens no Bling: <strong>{syncResult.totalBlingListItems}</strong> | Produtos processados: <strong>{syncResult.totalProcessed}</strong> | Ignorados (variações): <strong>{syncResult.skipped || 0}</strong> | Limpos: <strong>{syncResult.cleaned || 0}</strong></p>
                 )}
                 {syncResult.log?.length > 0 && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer font-medium text-xs hover:text-primary">
-                      📋 Log detalhado ({syncResult.log.length} itens)
-                    </summary>
-                    <div className="mt-2 max-h-64 overflow-y-auto border rounded">
+                  <div className="mt-3 space-y-2">
+                    <p className="font-medium text-xs">📋 Log detalhado ({syncResult.log.length} itens)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { key: 'all', label: 'Todos', count: syncResult.log.length },
+                        { key: 'imported', label: '✅ Novos', count: syncResult.log.filter((e: any) => e.status === 'imported').length },
+                        { key: 'updated', label: '🔄 Atualizados', count: syncResult.log.filter((e: any) => e.status === 'updated').length },
+                        { key: 'grouped', label: '🔗 Agrupados', count: syncResult.log.filter((e: any) => e.status === 'grouped').length },
+                        { key: 'error', label: '❌ Erros', count: syncResult.log.filter((e: any) => e.status === 'error').length },
+                        { key: 'skipped', label: '⏭ Ignorados', count: syncResult.log.filter((e: any) => e.status === 'skipped').length },
+                      ].filter(f => f.count > 0).map(f => (
+                        <button
+                          key={f.key}
+                          onClick={() => setSyncLogFilter(f.key)}
+                          className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                            syncLogFilter === f.key
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'border-border hover:border-primary/50'
+                          }`}
+                        >
+                          {f.label} ({f.count})
+                        </button>
+                      ))}
+                    </div>
+                    <div className="max-h-80 overflow-y-auto border rounded">
                       <table className="w-full text-[11px]">
                         <thead className="bg-muted sticky top-0">
                           <tr>
@@ -719,12 +740,14 @@ function BlingPanel() {
                           </tr>
                         </thead>
                         <tbody>
-                          {syncResult.log.map((entry: any, idx: number) => (
-                            <tr key={idx} className={`border-t ${entry.status === 'error' ? 'bg-red-50 dark:bg-red-950/20' : entry.status === 'imported' ? 'bg-green-50 dark:bg-green-950/20' : entry.status === 'updated' ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
+                          {syncResult.log
+                            .filter((entry: any) => syncLogFilter === 'all' || entry.status === syncLogFilter)
+                            .map((entry: any, idx: number) => (
+                            <tr key={idx} className={`border-t ${entry.status === 'error' ? 'bg-destructive/10' : entry.status === 'imported' ? 'bg-primary/5' : entry.status === 'updated' ? 'bg-accent/30' : ''}`}>
                               <td className="p-1.5 font-mono">{entry.bling_id}</td>
                               <td className="p-1.5 max-w-[200px] truncate">{entry.name}</td>
                               <td className="p-1.5">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${entry.status === 'imported' ? 'bg-green-200 text-green-800' : entry.status === 'updated' ? 'bg-blue-200 text-blue-800' : entry.status === 'grouped' ? 'bg-purple-200 text-purple-800' : entry.status === 'error' ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-800'}`}>
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${entry.status === 'imported' ? 'bg-primary/20 text-primary' : entry.status === 'updated' ? 'bg-accent text-accent-foreground' : entry.status === 'grouped' ? 'bg-secondary text-secondary-foreground' : entry.status === 'error' ? 'bg-destructive/20 text-destructive' : 'bg-muted text-muted-foreground'}`}>
                                   {entry.status === 'imported' ? '✅ Novo' : entry.status === 'updated' ? '🔄 Atualizado' : entry.status === 'grouped' ? '🔗 Agrupado' : entry.status === 'error' ? '❌ Erro' : '⏭ Ignorado'}
                                 </span>
                               </td>
@@ -735,7 +758,7 @@ function BlingPanel() {
                         </tbody>
                       </table>
                     </div>
-                  </details>
+                  </div>
                 )}
               </div>
             )}

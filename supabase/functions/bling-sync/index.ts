@@ -11,6 +11,75 @@ const BLING_TOKEN_URL = "https://bling.com.br/Api/v3/oauth/token";
 
 const STANDARD_SIZES = ['33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44'];
 
+// ─── Color Map (same as COMMON_COLORS in ProductVariantsManager) ───
+const COLOR_MAP: Record<string, string> = {
+  'preto': '#000000',
+  'branco': '#FFFFFF',
+  'vermelho': '#EF4444',
+  'azul': '#3B82F6',
+  'rosa': '#EC4899',
+  'nude': '#D4A574',
+  'caramelo': '#C68642',
+  'marrom': '#8B4513',
+  'dourado': '#FFD700',
+  'prata': '#C0C0C0',
+  'verde': '#22C55E',
+  'bege': '#F5F5DC',
+  'amarelo': '#EAB308',
+  'laranja': '#F97316',
+  'cinza': '#6B7280',
+  'vinho': '#722F37',
+  'bordo': '#800020',
+  'coral': '#FF7F50',
+  'lilas': '#C8A2C8',
+  'roxo': '#7C3AED',
+  'creme': '#FFFDD0',
+  'camel': '#C19A6B',
+  'off white': '#FAF9F6',
+  'off-white': '#FAF9F6',
+  'animal print': '#C68642',
+  'onca': '#C68642',
+  'oncinha': '#C68642',
+  'leopardo': '#C68642',
+  'zebra': '#000000',
+  'snake': '#8B8682',
+  'croco': '#556B2F',
+  'jeans': '#4169E1',
+  'mostarda': '#FFDB58',
+  'terracota': '#E2725B',
+  'areia': '#C2B280',
+  'petroleo': '#1B3A4B',
+  'oliva': '#808000',
+  'chocolate': '#7B3F00',
+  'cafe': '#6F4E37',
+  'cappuccino': '#A78B71',
+  'cobre': '#B87333',
+  'bronze': '#CD7F32',
+  'ouro': '#FFD700',
+  'rose': '#FF007F',
+  'rosê': '#FF007F',
+  'rose gold': '#B76E79',
+  'champagne': '#F7E7CE',
+  'perola': '#F0EAD6',
+  'pérola': '#F0EAD6',
+  'turquesa': '#40E0D0',
+  'marsala': '#986868',
+  'goiaba': '#E85D75',
+  'salmao': '#FA8072',
+  'salmão': '#FA8072',
+  'fuchsia': '#FF00FF',
+  'magenta': '#FF00FF',
+  'grafite': '#474A51',
+  'caqui': '#C3B091',
+  'mel': '#EB9605',
+  'natural': '#F5F5DC',
+  'transparente': '#FFFFFF',
+  'multicolor': '#FF69B4',
+  'colorido': '#FF69B4',
+};
+
+const COLOR_KEYWORDS = Object.keys(COLOR_MAP);
+
 interface SyncLogEntry {
   bling_id: number;
   name: string;
@@ -89,9 +158,49 @@ function normalizeSize(raw: string): string {
   return trimmed;
 }
 
-// Parse variation attributes from name like "Cor:Dourado;Tamanho:35"
-function parseVariationAttributes(nome: string): { size: string; color: string | null } {
-  if (!nome) return { size: "Único", color: null };
+// Extract color from a product name by searching for known color keywords
+function extractColorFromName(name: string): string | null {
+  if (!name) return null;
+  const lower = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // Sort keywords by length descending so longer matches take priority (e.g. "off white" before "branco")
+  const sorted = [...COLOR_KEYWORDS].sort((a, b) => b.length - a.length);
+  for (const keyword of sorted) {
+    const normalizedKeyword = keyword.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (lower.includes(normalizedKeyword)) {
+      // Return the properly capitalized version
+      return keyword.charAt(0).toUpperCase() + keyword.slice(1);
+    }
+  }
+  return null;
+}
+
+// Extract size number from a string (looks for shoe sizes 33-44 or clothing sizes)
+function extractSizeFromName(name: string): string | null {
+  if (!name) return null;
+  // Try structured format first: "tamanho:35" or "Tamanho: 35"
+  const structuredMatch = name.match(/tamanho\s*[:=]\s*(\d+)/i);
+  if (structuredMatch) return structuredMatch[1];
+  // Try "Tam. 35" or "Tam 35"
+  const tamMatch = name.match(/tam\.?\s*(\d+)/i);
+  if (tamMatch) return tamMatch[1];
+  // Try "numero:35" or "num:35"
+  const numMatch = name.match(/n[uú]mero?\s*[:=]\s*(\d+)/i);
+  if (numMatch) return numMatch[1];
+  // Try to find a shoe size number (33-44) as standalone number
+  const sizeNumbers = name.match(/\b(3[3-9]|4[0-4])\b/g);
+  if (sizeNumbers && sizeNumbers.length === 1) return sizeNumbers[0];
+  // Try clothing sizes
+  const clothingMatch = name.match(/\b(PP|GG|XG|EXG|EXGG)\b/i) || name.match(/\b([PMGU])\b/i);
+  if (clothingMatch) return clothingMatch[1].toUpperCase();
+  return null;
+}
+
+// Parse variation attributes from structured string like "Cor:Dourado;Tamanho:35"
+// Also handles full product names with embedded attributes
+function parseVariationAttributes(nome: string): { size: string; color: string | null; colorHex: string | null } {
+  if (!nome) return { size: "Único", color: null, colorHex: null };
+  
+  // Try structured key:value format first
   const parts: Record<string, string> = {};
   nome.split(";").forEach(part => {
     const sepIdx = part.indexOf(":");
@@ -101,12 +210,83 @@ function parseVariationAttributes(nome: string): { size: string; color: string |
       if (key && value) parts[key] = value;
     }
   });
-  const rawSize = parts["tamanho"] || parts["tam"] || parts["size"] || parts["numero"] || parts["num"] || null;
-  const color = parts["cor"] || parts["color"] || parts["colour"] || null;
-  if (!rawSize && !color) {
-    return { size: normalizeSize(nome), color: null };
+  
+  let rawSize = parts["tamanho"] || parts["tam"] || parts["size"] || parts["numero"] || parts["num"] || null;
+  let color = parts["cor"] || parts["color"] || parts["colour"] || null;
+  
+  // If no structured size found, try extracting from full name
+  if (!rawSize) {
+    rawSize = extractSizeFromName(nome);
   }
-  return { size: normalizeSize(rawSize || "Único"), color };
+  
+  // If no structured color found, try extracting from full name
+  if (!color) {
+    color = extractColorFromName(nome);
+  }
+  
+  // Resolve color hex
+  let colorHex: string | null = null;
+  if (color) {
+    const normalizedColor = color.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    colorHex = COLOR_MAP[normalizedColor] || null;
+    // Also try the original (not normalized)
+    if (!colorHex) {
+      colorHex = COLOR_MAP[color.toLowerCase()] || null;
+    }
+  }
+  
+  return { 
+    size: normalizeSize(rawSize || "Único"), 
+    color, 
+    colorHex 
+  };
+}
+
+// Enhanced extraction: uses Bling variation detail object + product name
+function extractAttributesFromBlingVariation(
+  varDetail: any, 
+  listingName: string, 
+  listingAttributes: string
+): { size: string; color: string | null; colorHex: string | null; sku: string | null } {
+  // Priority 1: Use the variation's own structured variacao.nome if available
+  // This looks like "Cor:Dourado;Tamanho:35"
+  let parsed = { size: "Único", color: null as string | null, colorHex: null as string | null };
+  
+  if (varDetail?.variacao?.nome) {
+    parsed = parseVariationAttributes(varDetail.variacao.nome);
+  }
+  
+  // Priority 2: Use listing attributes string (from parent name parsing)
+  if (parsed.size === "Único" && !parsed.color && listingAttributes) {
+    const fromAttrs = parseVariationAttributes(listingAttributes);
+    if (fromAttrs.size !== "Único") parsed.size = fromAttrs.size;
+    if (fromAttrs.color) { parsed.color = fromAttrs.color; parsed.colorHex = fromAttrs.colorHex; }
+  }
+  
+  // Priority 3: Try the full product name
+  const fullName = varDetail?.nome || listingName || "";
+  if (parsed.size === "Único") {
+    const sizeFromName = extractSizeFromName(fullName);
+    if (sizeFromName) parsed.size = normalizeSize(sizeFromName);
+  }
+  if (!parsed.color) {
+    const colorFromName = extractColorFromName(fullName);
+    if (colorFromName) {
+      parsed.color = colorFromName;
+      const normalizedColor = colorFromName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      parsed.colorHex = COLOR_MAP[normalizedColor] || COLOR_MAP[colorFromName.toLowerCase()] || null;
+    }
+  }
+  
+  // SKU: prefer variation's codigo
+  const sku = varDetail?.codigo || null;
+  
+  return { 
+    size: parsed.size, 
+    color: parsed.color, 
+    colorHex: parsed.colorHex, 
+    sku 
+  };
 }
 
 // Extract parent Bling ID and variation attributes from a product name
@@ -277,37 +457,35 @@ async function upsertParentWithVariants(
   // Source 1: Variations from the parent detail's `variacoes` array
   if (parentDetail.variacoes?.length) {
     for (const v of parentDetail.variacoes) {
-      const parsed = parseVariationAttributes(v.nome || "");
       let varStock = 0;
       let varPrice = basePrice;
-      let varSku = v.codigo || null;
       let varActive = true;
+      let varDetailObj: any = null;
 
       try {
         const varDetailRes = await fetch(`${BLING_API_URL}/produtos/${v.id}`, { headers });
         const varDetailJson = await varDetailRes.json();
-        const varDetail = varDetailJson?.data;
-        if (varDetail) {
-          varStock = varDetail.estoque?.saldoVirtualTotal ?? 0;
-          if (varDetail.preco && varDetail.preco > 0) varPrice = varDetail.preco;
-          varSku = varDetail.codigo || varSku;
-          varActive = varDetail.situacao === "A";
+        varDetailObj = varDetailJson?.data;
+        if (varDetailObj) {
+          varStock = varDetailObj.estoque?.saldoVirtualTotal ?? 0;
+          if (varDetailObj.preco && varDetailObj.preco > 0) varPrice = varDetailObj.preco;
+          varActive = varDetailObj.situacao === "A";
 
-          // Add unique images from variation
-          if (varDetail.midia?.imagens?.internas?.length) {
+          if (varDetailObj.midia?.imagens?.internas?.length) {
             const existingImages = await supabase
               .from("product_images")
               .select("url")
               .eq("product_id", productId);
             const existingUrls = new Set((existingImages.data || []).map((i: any) => i.url));
-            const newImages = varDetail.midia.imagens.internas
+            const extracted = extractAttributesFromBlingVariation(varDetailObj, v.nome || "", "");
+            const newImages = varDetailObj.midia.imagens.internas
               .filter((img: any) => !existingUrls.has(img.link))
               .map((img: any, idx: number) => ({
                 product_id: productId,
                 url: img.link,
                 is_primary: false,
                 display_order: 100 + idx,
-                alt_text: `${parentDetail.nome} - ${parsed.size}${parsed.color ? ` ${parsed.color}` : ""}`,
+                alt_text: `${parentDetail.nome} - ${extracted.size}${extracted.color ? ` ${extracted.color}` : ""}`,
               }));
             if (newImages.length) await supabase.from("product_images").insert(newImages);
           }
@@ -321,13 +499,15 @@ async function upsertParentWithVariants(
         } catch (_) { /* ignore */ }
       }
 
+      const extracted = extractAttributesFromBlingVariation(varDetailObj, v.nome || "", "");
       const priceModifier = varPrice - basePrice;
       const varData: any = {
         product_id: productId,
-        size: parsed.size,
-        color: parsed.color,
+        size: extracted.size,
+        color: extracted.color,
+        color_hex: extracted.colorHex,
         stock_quantity: varStock,
-        sku: varSku,
+        sku: extracted.sku || v.codigo || null,
         is_active: varActive,
         bling_variant_id: v.id,
         price_modifier: priceModifier !== 0 ? priceModifier : 0,
@@ -354,7 +534,6 @@ async function upsertParentWithVariants(
   // These are items with names like "Product (PARENT_ID) Cor:X;Tamanho:Y"
   // Only process if not already handled by variacoes array above
   for (const vi of variationItems) {
-    // Check if this variation was already synced via the variacoes array
     const { data: alreadySynced } = await supabase
       .from("product_variants")
       .select("id")
@@ -363,34 +542,32 @@ async function upsertParentWithVariants(
 
     if (alreadySynced && syncedVariantIds.has(alreadySynced.id)) continue;
 
-    const parsed = parseVariationAttributes(vi.attributes);
     let varStock = 0;
     let varPrice = basePrice;
-    let varSku: string | null = null;
     let varActive = true;
+    let varDetailObj: any = null;
 
     try {
       const varDetailRes = await fetch(`${BLING_API_URL}/produtos/${vi.blingId}`, { headers });
       const varDetailJson = await varDetailRes.json();
-      const varDetail = varDetailJson?.data;
-      if (varDetail) {
-        varStock = varDetail.estoque?.saldoVirtualTotal ?? 0;
-        if (varDetail.preco && varDetail.preco > 0) varPrice = varDetail.preco;
-        varSku = varDetail.codigo || null;
-        varActive = varDetail.situacao === "A";
+      varDetailObj = varDetailJson?.data;
+      if (varDetailObj) {
+        varStock = varDetailObj.estoque?.saldoVirtualTotal ?? 0;
+        if (varDetailObj.preco && varDetailObj.preco > 0) varPrice = varDetailObj.preco;
+        varActive = varDetailObj.situacao === "A";
 
-        // Add unique images
-        if (varDetail.midia?.imagens?.internas?.length) {
+        if (varDetailObj.midia?.imagens?.internas?.length) {
           const existingImages = await supabase.from("product_images").select("url").eq("product_id", productId);
           const existingUrls = new Set((existingImages.data || []).map((i: any) => i.url));
-          const newImages = varDetail.midia.imagens.internas
+          const extracted = extractAttributesFromBlingVariation(varDetailObj, vi.name, vi.attributes);
+          const newImages = varDetailObj.midia.imagens.internas
             .filter((img: any) => !existingUrls.has(img.link))
             .map((img: any, idx: number) => ({
               product_id: productId,
               url: img.link,
               is_primary: false,
               display_order: 200 + idx,
-              alt_text: `${parentDetail.nome} - ${parsed.size}${parsed.color ? ` ${parsed.color}` : ""}`,
+              alt_text: `${parentDetail.nome} - ${extracted.size}${extracted.color ? ` ${extracted.color}` : ""}`,
             }));
           if (newImages.length) await supabase.from("product_images").insert(newImages);
         }
@@ -404,13 +581,15 @@ async function upsertParentWithVariants(
       } catch (_) { /* ignore */ }
     }
 
+    const extracted = extractAttributesFromBlingVariation(varDetailObj, vi.name, vi.attributes);
     const priceModifier = varPrice - basePrice;
     const varData: any = {
       product_id: productId,
-      size: parsed.size,
-      color: parsed.color,
+      size: extracted.size,
+      color: extracted.color,
+      color_hex: extracted.colorHex,
       stock_quantity: varStock,
-      sku: varSku,
+      sku: extracted.sku || null,
       is_active: varActive,
       bling_variant_id: vi.blingId,
       price_modifier: priceModifier !== 0 ? priceModifier : 0,
