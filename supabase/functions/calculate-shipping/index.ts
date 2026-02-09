@@ -68,7 +68,7 @@ serve(async (req) => {
     const isSandbox = settings?.melhor_envio_sandbox !== false;
     const baseUrl = isSandbox
       ? "https://sandbox.melhorenvio.com.br"
-      : "https://api.melhorenvio.com.br";
+      : "https://melhorenvio.com.br";
 
     const body = {
       from: { postal_code: "85010020" }, // Store origin CEP - Guarapuava PR area
