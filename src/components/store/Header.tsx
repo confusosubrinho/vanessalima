@@ -347,14 +347,8 @@ export function Header() {
                 )}
               </div>
 
-              {/* Bijuterias button inline - right side */}
-              <div className="flex-1" />
-              <Link to="/bijuterias" className="flex-shrink-0 flex items-center gap-1.5 py-2 px-4 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors font-medium text-sm">
-                <Percent className="h-3.5 w-3.5" />
-                Bijuterias
-              </Link>
-
-              {/* Individual category links with mega menu showing products */}
+              {/* Individual category links - centered */}
+              <div className="flex-1 flex items-center justify-center">
               {mainCategories.map((category) => {
                 const categoryProducts = getProductsForCategory(category.id);
                 
@@ -450,6 +444,13 @@ export function Header() {
                   </div>
                 );
               })}
+              </div>
+
+              {/* Bijuterias button - right side */}
+              <Link to="/bijuterias" className="flex-shrink-0 flex items-center gap-1.5 py-2 px-5 bg-secondary text-secondary-foreground rounded-full hover:bg-secondary/80 transition-colors font-medium text-sm ml-2">
+                <Percent className="h-3.5 w-3.5" />
+                Bijuterias
+              </Link>
             </div>
         </div>
       </nav>
