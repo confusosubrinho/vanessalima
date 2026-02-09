@@ -44,47 +44,61 @@ const Index = () => {
         cardBg
       />
 
-      <Suspense fallback={<SectionFallback />}>
-        <BijuteriasSection />
-      </Suspense>
+      <div className="content-lazy">
+        <Suspense fallback={<SectionFallback />}>
+          <BijuteriasSection />
+        </Suspense>
+      </div>
 
-      <Suspense fallback={<SectionFallback />}>
-        <HighlightBanners />
-      </Suspense>
+      <div className="content-lazy">
+        <Suspense fallback={<SectionFallback />}>
+          <HighlightBanners />
+        </Suspense>
+      </div>
 
-      <Suspense fallback={<SectionFallback />}>
-        <ShopBySize />
-      </Suspense>
+      <div className="content-lazy">
+        <Suspense fallback={<SectionFallback />}>
+          <ShopBySize />
+        </Suspense>
+      </div>
 
       {saleProducts.length > 0 && (
-        <ProductCarousel
-          products={saleProducts}
-          title="Promoções"
-          subtitle="Ofertas imperdíveis para você"
-          showViewAll
-          viewAllLink="/promocoes"
-          isLoading={productsLoading}
-        />
+        <div className="content-lazy">
+          <ProductCarousel
+            products={saleProducts}
+            title="Promoções"
+            subtitle="Ofertas imperdíveis para você"
+            showViewAll
+            viewAllLink="/promocoes"
+            isLoading={productsLoading}
+          />
+        </div>
       )}
 
-      <Suspense fallback={<SectionFallback />}>
-        <ProductGrid
-          products={newProducts}
-          title="Novidades"
-          subtitle="Acabou de chegar na loja"
-          isLoading={productsLoading}
-          showViewAll
-          viewAllLink="/novidades"
-        />
-      </Suspense>
+      <div className="content-lazy">
+        <Suspense fallback={<SectionFallback />}>
+          <ProductGrid
+            products={newProducts}
+            title="Novidades"
+            subtitle="Acabou de chegar na loja"
+            isLoading={productsLoading}
+            showViewAll
+            viewAllLink="/novidades"
+          />
+        </Suspense>
+      </div>
 
-      <Suspense fallback={<SectionFallback />}>
-        <InstagramFeed />
-      </Suspense>
+      <div className="content-lazy">
+        <Suspense fallback={<SectionFallback />}>
+          <InstagramFeed />
+        </Suspense>
+      </div>
 
-      <Suspense fallback={<SectionFallback />}>
-        <Newsletter />
-      </Suspense>
+      <div className="content-lazy">
+        <Suspense fallback={<SectionFallback />}>
+          <Newsletter />
+        </Suspense>
+      </div>
     </StoreLayout>
   );
 };

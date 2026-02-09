@@ -177,6 +177,21 @@
     animation: slideUp 0.3s ease-out;
   }
 
+  /* Performance: hide scrollbars */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Performance: content-visibility for off-screen sections */
+  .content-lazy {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 400px;
+  }
+
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -192,4 +207,9 @@
       transform: translateY(0);
     }
   }
+}
+
+/* Performance: reduce paint for fixed elements */
+.fixed {
+  will-change: transform;
 }

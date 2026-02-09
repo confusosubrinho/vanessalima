@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -76,12 +76,12 @@ export function ProductCarousel({
     }
   };
 
-  const formatPrice = (price: number) => {
+  const formatPrice = useCallback((price: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
     }).format(price);
-  };
+  }, []);
 
   const handleQuickBuy = (product: Product, e: React.MouseEvent) => {
     e.preventDefault();
@@ -179,12 +179,20 @@ export function ProductCarousel({
                           className={`w-full h-full object-cover transition-all duration-500 ${
                             secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-110'
                           }`}
+                          loading="lazy"
+                          decoding="async"
+                          width={300}
+                          height={400}
                         />
                         {secondaryImage && (
                           <img
                             src={secondaryImage.url}
                             alt={secondaryImage.alt_text || product.name}
                             className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                            loading="lazy"
+                            decoding="async"
+                            width={300}
+                            height={400}
                           />
                         )}
                         <div className="absolute top-3 left-3 flex flex-col gap-2">

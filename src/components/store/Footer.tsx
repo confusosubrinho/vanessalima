@@ -4,7 +4,7 @@ import logo from '@/assets/logo.png';
 
 export function Footer() {
   return (
-    <footer className="bg-secondary text-secondary-foreground">
+    <footer className="bg-secondary text-secondary-foreground content-lazy">
       <div className="container-custom py-8 sm:py-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           {/* Logo and description */}
