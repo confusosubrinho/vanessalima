@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter } from 'lucide-react';
+import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload } from 'lucide-react';
+import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -171,12 +172,57 @@ export default function Orders() {
   };
 
   const hasActiveFilters = statusFilter !== 'all' || dateFrom || dateTo || minValue || maxValue;
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = () => {
+    if (!orders) return;
+    const exportData = orders.map(o => ({
+      numero: o.order_number,
+      cliente: o.shipping_name,
+      cidade: o.shipping_city,
+      estado: o.shipping_state,
+      status: statusLabels[o.status] || o.status,
+      subtotal: o.subtotal,
+      frete: o.shipping_cost,
+      desconto: o.discount_amount,
+      total: o.total_amount,
+      data: new Date(o.created_at).toLocaleDateString('pt-BR'),
+      rastreio: o.tracking_code || '',
+    }));
+    exportToCSV(exportData, 'pedidos');
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await readFileAsText(file);
+    const rows = parseCSV(text);
+    console.log(`${rows.length} pedidos lidos`);
+    if (importRef.current) importRef.current.value = '';
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Pedidos</h1>
-        <p className="text-muted-foreground">Gerencie os pedidos da sua loja</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Pedidos</h1>
+          <p className="text-muted-foreground">Gerencie os pedidos da sua loja</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar
+          </Button>
+          <label>
+            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+            <Button variant="outline" size="sm" asChild>
+              <span>
+                <Upload className="h-4 w-4 mr-2" />
+                Importar
+              </span>
+            </Button>
+          </label>
+        </div>
       </div>
 
       {/* Filters */}

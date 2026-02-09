@@ -72,18 +72,19 @@ export interface Product {
    created_at: string;
  }
  
- export interface Banner {
-   id: string;
-   title: string | null;
-   subtitle: string | null;
-   image_url: string;
-   cta_text: string | null;
-   cta_url: string | null;
-   display_order: number;
-   is_active: boolean;
-   created_at: string;
-   updated_at: string;
- }
+export interface Banner {
+  id: string;
+  title: string | null;
+  subtitle: string | null;
+  image_url: string;
+  mobile_image_url: string | null;
+  cta_text: string | null;
+  cta_url: string | null;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
  
  export interface Coupon {
    id: string;

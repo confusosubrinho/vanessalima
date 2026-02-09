@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown } from 'lucide-react';
+import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -181,6 +182,39 @@ export default function Products() {
   };
 
   const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all';
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = () => {
+    if (!products) return;
+    const exportData = products.map(p => ({
+      nome: p.name,
+      slug: p.slug,
+      sku: p.sku || '',
+      preco_base: p.base_price,
+      preco_promocional: p.sale_price || '',
+      categoria: p.category?.name || '',
+      ativo: p.is_active ? 'Sim' : 'Não',
+      destaque: p.is_featured ? 'Sim' : 'Não',
+      novo: p.is_new ? 'Sim' : 'Não',
+      marca: p.brand || '',
+      material: p.material || '',
+    }));
+    exportToCSV(exportData, 'produtos');
+    toast({ title: 'Produtos exportados!' });
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await readFileAsText(file);
+      const rows = parseCSV(text);
+      toast({ title: `${rows.length} linhas lidas do CSV`, description: 'Importação em desenvolvimento.' });
+    } catch (err: any) {
+      toast({ title: 'Erro na importação', description: err.message, variant: 'destructive' });
+    }
+    if (importRef.current) importRef.current.value = '';
+  };
 
   return (
     <div className="space-y-6">
@@ -189,10 +223,25 @@ export default function Products() {
           <h1 className="text-3xl font-bold">Produtos</h1>
           <p className="text-muted-foreground">Gerencie os produtos da sua loja</p>
         </div>
-        <Button onClick={handleNewProduct}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Produto
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar
+          </Button>
+          <label>
+            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+            <Button variant="outline" size="sm" asChild>
+              <span>
+                <Upload className="h-4 w-4 mr-2" />
+                Importar
+              </span>
+            </Button>
+          </label>
+          <Button onClick={handleNewProduct}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Produto
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

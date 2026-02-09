@@ -56,6 +56,51 @@ export type Database = {
         }
         Relationships: []
       }
+      buy_together_products: {
+        Row: {
+          created_at: string
+          discount_percent: number | null
+          display_order: number | null
+          id: string
+          is_active: boolean | null
+          product_id: string
+          related_product_id: string
+        }
+        Insert: {
+          created_at?: string
+          discount_percent?: number | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          product_id: string
+          related_product_id: string
+        }
+        Update: {
+          created_at?: string
+          discount_percent?: number | null
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          product_id?: string
+          related_product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buy_together_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buy_together_products_related_product_id_fkey"
+            columns: ["related_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -211,6 +256,50 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      instagram_videos: {
+        Row: {
+          created_at: string
+          display_order: number | null
+          id: string
+          is_active: boolean | null
+          product_id: string | null
+          thumbnail_url: string | null
+          updated_at: string
+          username: string | null
+          video_url: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          product_id?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          username?: string | null
+          video_url: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          is_active?: boolean | null
+          product_id?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string
+          username?: string | null
+          video_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instagram_videos_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       order_items: {
         Row: {
@@ -517,6 +606,7 @@ export type Database = {
           sku: string | null
           slug: string
           updated_at: string
+          video_url: string | null
           weight: number | null
           width: number | null
         }
@@ -548,6 +638,7 @@ export type Database = {
           sku?: string | null
           slug: string
           updated_at?: string
+          video_url?: string | null
           weight?: number | null
           width?: number | null
         }
@@ -579,6 +670,7 @@ export type Database = {
           sku?: string | null
           slug?: string
           updated_at?: string
+          video_url?: string | null
           weight?: number | null
           width?: number | null
         }

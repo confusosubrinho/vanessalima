@@ -13,7 +13,10 @@ import { ProductCarousel } from '@/components/store/ProductCarousel';
 import { ProductReviews } from '@/components/store/ProductReviews';
 import { PaymentMethodsModal } from '@/components/store/PaymentMethodsModal';
 import { BuyTogether } from '@/components/store/BuyTogether';
+import { FloatingVideo } from '@/components/store/FloatingVideo';
 import { useRecentProducts, useRelatedProducts } from '@/hooks/useRecentProducts';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function ProductDetail() {
   const { slug } = useParams<{ slug: string }>();
@@ -26,6 +29,23 @@ export default function ProductDetail() {
 
   const { data: recentProducts } = useRecentProducts(product?.id);
   const { data: relatedProducts } = useRelatedProducts(product?.category_id, product?.id);
+
+  // Fetch buy together products configured for this product
+  const { data: buyTogetherProducts } = useQuery({
+    queryKey: ['buy-together', product?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('buy_together_products' as any)
+        .select('*, related_product:products!buy_together_products_related_product_id_fkey(*, images:product_images(*), variants:product_variants(*))')
+        .eq('product_id', product!.id)
+        .eq('is_active', true)
+        .order('display_order', { ascending: true });
+      
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!product?.id,
+  });
 
   if (isLoading) {
     return (
@@ -83,24 +103,15 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (!selectedSize) {
-      toast({
-        title: 'Selecione um tamanho',
-        variant: 'destructive',
-      });
+      toast({ title: 'Selecione um tamanho', variant: 'destructive' });
       return;
     }
-
     const variant = variants.find(v => v.size === selectedSize);
     if (!variant) return;
-
     addItem(product, variant, quantity);
-    toast({
-      title: 'Produto adicionado ao carrinho!',
-      description: `${product.name} - Tam. ${selectedSize}`,
-    });
+    toast({ title: 'Produto adicionado ao carrinho!', description: `${product.name} - Tam. ${selectedSize}` });
   };
 
-  // Build product characteristics from available fields
   const characteristics = [
     { label: 'Material', value: product.material },
     { label: 'Marca', value: product.brand },
@@ -113,8 +124,20 @@ export default function ProductDetail() {
     { label: 'Padrão', value: product.pattern },
   ].filter(c => c.value);
 
+  // Get configured buy together related products
+  const configuredRelatedProducts = buyTogetherProducts?.map((bt: any) => bt.related_product).filter(Boolean) || [];
+  const buyTogetherDiscount = buyTogetherProducts?.[0]?.discount_percent || 5;
+
+  // Use configured products if available, otherwise fall back to related
+  const buyTogetherList = configuredRelatedProducts.length > 0 ? configuredRelatedProducts : (relatedProducts?.slice(0, 3) || []);
+
   return (
     <StoreLayout>
+      {/* Floating Video */}
+      {(product as any).video_url && (
+        <FloatingVideo videoUrl={(product as any).video_url} productName={product.name} />
+      )}
+
       {/* Breadcrumb */}
       <div className="bg-muted/30 py-3">
         <div className="container-custom">
@@ -139,22 +162,15 @@ export default function ProductDetail() {
           {/* Images */}
           <div className="space-y-4">
             <div className="aspect-square rounded-lg overflow-hidden bg-muted relative">
-              {/* Badges */}
               <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
                 {product.is_new && (
-                  <Badge className="bg-primary text-primary-foreground border-0 px-3 py-1">
-                    Lançamento
-                  </Badge>
+                  <Badge className="bg-primary text-primary-foreground border-0 px-3 py-1">Lançamento</Badge>
                 )}
                 {hasDiscount && (
-                  <Badge className="bg-destructive text-destructive-foreground border-0 px-3 py-1">
-                    -{discountPercentage}% OFF
-                  </Badge>
+                  <Badge className="bg-destructive text-destructive-foreground border-0 px-3 py-1">-{discountPercentage}% OFF</Badge>
                 )}
                 {product.is_featured && !product.is_new && !hasDiscount && (
-                  <Badge className="bg-warning text-warning-foreground border-0 px-3 py-1">
-                    Destaque
-                  </Badge>
+                  <Badge className="bg-warning text-warning-foreground border-0 px-3 py-1">Destaque</Badge>
                 )}
               </div>
               <img
@@ -173,17 +189,12 @@ export default function ProductDetail() {
                       index === selectedImage ? 'border-primary' : 'border-transparent'
                     }`}
                   >
-                    <img
-                      src={image.url}
-                      alt={`${product.name} - ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={image.url} alt={`${product.name} - ${index + 1}`} className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>
             )}
 
-            {/* Tabs for Description, Characteristics, Warranty, Payment */}
             <Tabs defaultValue="description" className="w-full">
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="description">Descrição</TabsTrigger>
@@ -225,9 +236,7 @@ export default function ProductDetail() {
                     </div>
                     <div>
                       <h4 className="font-medium">Garantia de 30 dias</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Todos os nossos produtos possuem garantia de 30 dias contra defeitos de fabricação.
-                      </p>
+                      <p className="text-sm text-muted-foreground">Todos os nossos produtos possuem garantia de 30 dias contra defeitos de fabricação.</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
@@ -236,9 +245,7 @@ export default function ProductDetail() {
                     </div>
                     <div>
                       <h4 className="font-medium">Trocas e Devoluções</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Primeira troca gratuita em até 7 dias após o recebimento.
-                      </p>
+                      <p className="text-sm text-muted-foreground">Primeira troca gratuita em até 7 dias após o recebimento.</p>
                     </div>
                   </div>
                 </div>
@@ -248,10 +255,9 @@ export default function ProductDetail() {
                 <div className="space-y-4">
                   <div className="p-4 border rounded-lg">
                     <h4 className="font-medium text-primary mb-2">PIX</h4>
-                    <p className="text-2xl font-bold">{formatPrice(currentPrice)}</p>
+                    <p className="text-2xl font-bold">{formatPrice(currentPrice * 0.95)}</p>
                     <p className="text-sm text-muted-foreground">À vista com 5% de desconto</p>
                   </div>
-                  
                   <div className="p-4 border rounded-lg">
                     <h4 className="font-medium mb-2">Cartão de Crédito</h4>
                     <p className="text-lg font-bold">até 6x de R$ {installmentPrice}</p>
@@ -259,16 +265,12 @@ export default function ProductDetail() {
                     <div className="mt-3 pt-3 border-t">
                       <p className="text-sm text-muted-foreground mb-2">Parcelas disponíveis:</p>
                       <div className="grid grid-cols-2 gap-2 text-sm">
-                        <span>1x de {formatPrice(currentPrice)}</span>
-                        <span>2x de {formatPrice(currentPrice / 2)}</span>
-                        <span>3x de {formatPrice(currentPrice / 3)}</span>
-                        <span>4x de {formatPrice(currentPrice / 4)}</span>
-                        <span>5x de {formatPrice(currentPrice / 5)}</span>
-                        <span>6x de {formatPrice(currentPrice / 6)}</span>
+                        {[1,2,3,4,5,6].map(n => (
+                          <span key={n}>{n}x de {formatPrice(currentPrice / n)}</span>
+                        ))}
                       </div>
                     </div>
                   </div>
-
                   <div className="flex gap-2 justify-center">
                     <img src="https://images.tcdn.com.br/files/1313274/themes/5/img/settings/stripe-new-card.png" alt="Cartões aceitos" className="h-8" />
                   </div>
@@ -280,32 +282,25 @@ export default function ProductDetail() {
           {/* Product info */}
           <div className="space-y-6">
             <div>
-              {product.sku && (
-                <p className="text-sm text-muted-foreground mb-1">SKU: {product.sku}</p>
-              )}
+              {product.sku && <p className="text-sm text-muted-foreground mb-1">SKU: {product.sku}</p>}
               <h1 className="text-3xl font-bold">{product.name}</h1>
             </div>
 
-            {/* Price */}
             <div className="space-y-1">
               {hasDiscount && (
                 <p className="text-muted-foreground line-through text-lg">{formatPrice(Number(product.base_price))}</p>
               )}
               <p className="text-3xl font-bold text-foreground">{formatPrice(currentPrice)}</p>
-              <p className="text-muted-foreground">
-                ou 6x de R$ {installmentPrice} sem juros
-              </p>
+              <p className="text-muted-foreground">ou 6x de R$ {installmentPrice} sem juros</p>
               <PaymentMethodsModal basePrice={currentPrice} maxInstallments={6} />
             </div>
 
-            {/* Size selector */}
             <div>
               <label className="block font-medium mb-2">Tamanho</label>
               <div className="flex flex-wrap gap-2">
                 {sizes.map((size) => {
                   const variant = variants.find(v => v.size === size);
                   const outOfStock = !variant || variant.stock_quantity === 0;
-                  
                   return (
                     <button
                       key={size}
@@ -326,38 +321,23 @@ export default function ProductDetail() {
               </div>
             </div>
 
-            {/* Quantity */}
             <div>
               <label className="block font-medium mb-2">Quantidade</label>
               <div className="flex items-center gap-4">
                 <div className="flex items-center border rounded-lg">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))}>
                     <Minus className="h-4 w-4" />
                   </Button>
                   <span className="w-12 text-center font-medium">{quantity}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setQuantity(quantity + 1)}
-                  >
+                  <Button variant="ghost" size="icon" onClick={() => setQuantity(quantity + 1)}>
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-4">
-              <Button
-                size="lg"
-                className="flex-1"
-                onClick={handleAddToCart}
-                disabled={!isInStock}
-              >
+              <Button size="lg" className="flex-1" onClick={handleAddToCart} disabled={!isInStock}>
                 <ShoppingBag className="h-5 w-5 mr-2" />
                 {isInStock ? 'Adicionar ao Carrinho' : 'Esgotado'}
               </Button>
@@ -366,7 +346,6 @@ export default function ProductDetail() {
               </Button>
             </div>
 
-            {/* WhatsApp - Round button with border */}
             <a
               href={`https://wa.me/5542991120205?text=Olá, gostei deste produto: ${product.name}`}
               target="_blank"
@@ -377,7 +356,6 @@ export default function ProductDetail() {
               Comprar pelo WhatsApp
             </a>
             
-            {/* Shipping Calculator */}
             <div className="pt-4">
               <ShippingCalculator />
             </div>
@@ -386,27 +364,22 @@ export default function ProductDetail() {
       </div>
 
       {/* Buy Together Section */}
-      {relatedProducts && relatedProducts.length > 0 && (
-        <BuyTogether currentProduct={product} relatedProducts={relatedProducts.slice(0, 3)} />
+      {buyTogetherList.length > 0 && (
+        <BuyTogether 
+          currentProduct={product} 
+          relatedProducts={buyTogetherList} 
+          discountPercent={buyTogetherDiscount}
+        />
       )}
 
-      {/* Reviews Section */}
       <ProductReviews productId={product.id} productName={product.name} />
 
-      {/* Related Products */}
       {relatedProducts && relatedProducts.length > 0 && (
-        <ProductCarousel 
-          title="Produtos Relacionados" 
-          products={relatedProducts} 
-        />
+        <ProductCarousel title="Produtos Relacionados" products={relatedProducts} />
       )}
 
-      {/* Recent Products */}
       {recentProducts && recentProducts.length > 0 && (
-        <ProductCarousel 
-          title="Lançamentos" 
-          products={recentProducts} 
-        />
+        <ProductCarousel title="Lançamentos" products={recentProducts} />
       )}
     </StoreLayout>
   );
