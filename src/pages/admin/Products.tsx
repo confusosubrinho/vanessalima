@@ -1,11 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload } from 'lucide-react';
+import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -64,6 +65,7 @@ interface Product {
   bling_product_id: number | null;
   category?: { id: string; name: string } | null;
   images?: { id: string; url: string; alt_text: string | null; display_order: number; is_primary: boolean; media_type: string }[];
+  variants?: { id: string; stock_quantity: number }[];
 }
 
 export default function Products() {
@@ -77,6 +79,7 @@ export default function Products() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<string>('all');
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['admin-products'],
@@ -86,7 +89,8 @@ export default function Products() {
         .select(`
           *,
           category:categories(*),
-          images:product_images(*)
+          images:product_images(*),
+          variants:product_variants(id, stock_quantity)
         `)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -129,11 +133,34 @@ export default function Products() {
     }).format(price);
   };
 
+  // Helper: check if product is out of stock
+  const isOutOfStock = (p: Product) => {
+    if (!p.variants || p.variants.length === 0) return false;
+    return p.variants.every(v => v.stock_quantity <= 0);
+  };
+
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    const all = products || [];
+    return {
+      all: all.length,
+      outOfStock: all.filter(isOutOfStock).length,
+      inactive: all.filter(p => !p.is_active).length,
+    };
+  }, [products]);
+
   // Filter products
   let filteredProducts = products?.filter(p =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (p.sku?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
   ) || [];
+
+  // Tab filter
+  if (activeTab === 'out-of-stock') {
+    filteredProducts = filteredProducts.filter(isOutOfStock);
+  } else if (activeTab === 'inactive') {
+    filteredProducts = filteredProducts.filter(p => !p.is_active);
+  }
 
   // Category filter
   if (categoryFilter !== 'all') {
@@ -188,10 +215,11 @@ export default function Products() {
     setCategoryFilter('all');
     setStatusFilter('all');
     setSourceFilter('all');
+    setActiveTab('all');
     setSearchQuery('');
   };
 
-  const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all';
+  const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sourceFilter !== 'all' || activeTab !== 'all';
   const importRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -253,6 +281,23 @@ export default function Products() {
           </Button>
         </div>
       </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="all">
+            Todos ({tabCounts.all})
+          </TabsTrigger>
+          <TabsTrigger value="out-of-stock" className="gap-1.5">
+            <PackageX className="h-3.5 w-3.5" />
+            Sem Estoque ({tabCounts.outOfStock})
+          </TabsTrigger>
+          <TabsTrigger value="inactive" className="gap-1.5">
+            <EyeOff className="h-3.5 w-3.5" />
+            Inativos ({tabCounts.inactive})
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
@@ -390,6 +435,12 @@ export default function Products() {
                         <Badge variant="outline" className="border-blue-500 text-blue-600 dark:text-blue-400">Bling</Badge>
                       ) : (
                         <Badge variant="outline" className="border-muted-foreground text-muted-foreground">Manual</Badge>
+                      )}
+                      {isOutOfStock(product) && (
+                        <Badge variant="destructive" className="gap-1">
+                          <PackageX className="h-3 w-3" />
+                          Sem Estoque
+                        </Badge>
                       )}
                       {product.is_featured && <Badge variant="outline">Destaque</Badge>}
                       {product.is_new && <Badge className="bg-primary">Novo</Badge>}

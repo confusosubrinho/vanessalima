@@ -95,22 +95,39 @@ async function syncProducts(supabase: any, token: string) {
       const basePrice = detail.preco || 0;
       const salePrice = detail.precoPromocional && detail.precoPromocional < basePrice ? detail.precoPromocional : null;
 
-      // Find category by name
+      // Smart category assignment
       let categoryId = null;
-      if (detail.categoria?.descricao) {
-        const { data: cat } = await supabase
+      const categoryName = detail.categoria?.descricao;
+      if (categoryName) {
+        // 1. Try exact match
+        let { data: cat } = await supabase
           .from("categories")
           .select("id")
-          .eq("name", detail.categoria.descricao)
+          .eq("name", categoryName)
           .maybeSingle();
+
+        // 2. Try case-insensitive / partial match
+        if (!cat) {
+          const normalized = categoryName.toLowerCase().trim();
+          const { data: allCats } = await supabase.from("categories").select("id, name");
+          if (allCats?.length) {
+            // Fuzzy: check if any existing category contains or is contained by the bling category name
+            const match = allCats.find((c: any) => {
+              const n = c.name.toLowerCase().trim();
+              return n === normalized || n.includes(normalized) || normalized.includes(n);
+            });
+            if (match) cat = match;
+          }
+        }
+
         if (cat) {
           categoryId = cat.id;
         } else {
-          // Create category
-          const catSlug = slugify(detail.categoria.descricao);
+          // 3. Auto-create category
+          const catSlug = slugify(categoryName);
           const { data: newCat } = await supabase
             .from("categories")
-            .insert({ name: detail.categoria.descricao, slug: catSlug, is_active: true })
+            .insert({ name: categoryName, slug: catSlug, is_active: true })
             .select("id")
             .single();
           if (newCat) categoryId = newCat.id;
