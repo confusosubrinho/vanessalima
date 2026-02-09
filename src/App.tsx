@@ -40,6 +40,9 @@ import HighlightBanners from "./pages/admin/HighlightBanners";
 import Settings from "./pages/admin/Settings";
 import CodeSettings from "./pages/admin/CodeSettings";
 import Integrations from "./pages/admin/Integrations";
+import SalesDashboard from "./pages/admin/SalesDashboard";
+import ManualRegistration from "./pages/admin/ManualRegistration";
+import ConversionManual from "./pages/admin/ConversionManual";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,8 +101,11 @@ const App = () => (
               <Route path="banners" element={<Banners />} />
               <Route path="banners-destaque" element={<HighlightBanners />} />
               <Route path="integracoes" element={<Integrations />} />
+              <Route path="vendas" element={<SalesDashboard />} />
+              <Route path="registro-manual" element={<ManualRegistration />} />
               <Route path="configuracoes" element={<Settings />} />
               <Route path="configuracoes/codigo" element={<CodeSettings />} />
+              <Route path="configuracoes/conversoes" element={<ConversionManual />} />
             </Route>
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

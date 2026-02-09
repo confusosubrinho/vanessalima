@@ -9,7 +9,10 @@ import {
   Settings, 
   LogOut,
   ChevronDown,
-  Plug
+  Plug,
+  BarChart3,
+  BookOpen,
+  PenSquare
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -52,6 +55,14 @@ const menuItems: MenuItem[] = [
   },
   { title: 'Pedidos', url: '/admin/pedidos', icon: ShoppingCart },
   { title: 'Clientes', url: '/admin/clientes', icon: Users },
+  {
+    title: 'Vendas',
+    icon: BarChart3,
+    children: [
+      { title: 'Análise de Vendas', url: '/admin/vendas' },
+      { title: 'Registro Manual', url: '/admin/registro-manual' },
+    ]
+  },
   { 
     title: 'Marketing', 
     icon: Tags,
@@ -68,6 +79,7 @@ const menuItems: MenuItem[] = [
     children: [
       { title: 'Loja', url: '/admin/configuracoes' },
       { title: 'Código Externo', url: '/admin/configuracoes/codigo' },
+      { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes' },
     ]
   },
 ];
