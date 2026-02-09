@@ -34,6 +34,7 @@ export default function Categories() {
     slug: '',
     description: '',
     image_url: '',
+    banner_image_url: '',
     is_active: true,
     display_order: 0,
     seo_title: '',
@@ -41,6 +42,7 @@ export default function Categories() {
     seo_keywords: '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const { data: categories, isLoading } = useQuery({
@@ -58,28 +60,31 @@ export default function Categories() {
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       let imageUrl = data.image_url;
+      let bannerUrl = data.banner_image_url;
+      setIsUploading(true);
 
-      // Upload image if selected
+      // Upload category image if selected
       if (imageFile) {
-        setIsUploading(true);
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `category-${Date.now()}.${fileExt}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('product-media')
-          .upload(fileName, imageFile);
-        
+        const { error: uploadError } = await supabase.storage.from('product-media').upload(fileName, imageFile);
         if (uploadError) throw uploadError;
-        
-        const { data: urlData } = supabase.storage
-          .from('product-media')
-          .getPublicUrl(fileName);
-        
+        const { data: urlData } = supabase.storage.from('product-media').getPublicUrl(fileName);
         imageUrl = urlData.publicUrl;
-        setIsUploading(false);
       }
 
-      const categoryData = { ...data, image_url: imageUrl };
+      // Upload banner image if selected
+      if (bannerFile) {
+        const fileExt = bannerFile.name.split('.').pop();
+        const fileName = `category-banner-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('product-media').upload(fileName, bannerFile);
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from('product-media').getPublicUrl(fileName);
+        bannerUrl = urlData.publicUrl;
+      }
+
+      setIsUploading(false);
+      const categoryData = { ...data, image_url: imageUrl, banner_image_url: bannerUrl };
 
       if (editingCategory) {
         const { error } = await supabase
@@ -124,6 +129,7 @@ export default function Categories() {
         slug: category.slug,
         description: category.description || '',
         image_url: category.image_url || '',
+        banner_image_url: (category as any).banner_image_url || '',
         is_active: category.is_active ?? true,
         display_order: category.display_order ?? 0,
         seo_title: (category as any).seo_title || '',
@@ -137,6 +143,7 @@ export default function Categories() {
         slug: '',
         description: '',
         image_url: '',
+        banner_image_url: '',
         is_active: true,
         display_order: (categories?.length || 0) + 1,
         seo_title: '',
@@ -145,6 +152,7 @@ export default function Categories() {
       });
     }
     setImageFile(null);
+    setBannerFile(null);
     setIsDialogOpen(true);
   };
 
@@ -156,6 +164,7 @@ export default function Categories() {
         slug: '',
         description: '',
         image_url: '',
+        banner_image_url: '',
         is_active: true,
         display_order: 0,
         seo_title: '',
@@ -163,6 +172,7 @@ export default function Categories() {
         seo_keywords: '',
       });
     setImageFile(null);
+    setBannerFile(null);
   };
 
   const generateSlug = (name: string) => {
@@ -337,6 +347,33 @@ export default function Categories() {
                     accept="image/*"
                     className="hidden"
                     onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Banner Horizontal (recomendado: 1200x400px)</Label>
+              <div className="flex items-center gap-4">
+                {(formData.banner_image_url || bannerFile) && (
+                  <img
+                    src={bannerFile ? URL.createObjectURL(bannerFile) : formData.banner_image_url}
+                    alt="Banner Preview"
+                    className="w-40 h-14 rounded-lg object-cover"
+                  />
+                )}
+                <label className="flex-1">
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-primary transition-colors">
+                    <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      Upload banner horizontal
+                    </p>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => setBannerFile(e.target.files?.[0] || null)}
                   />
                 </label>
               </div>

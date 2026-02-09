@@ -3,6 +3,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -111,6 +112,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
   const [formData, setFormData] = useState<ProductFormData>(initialFormData);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [variants, setVariants] = useState<VariantItem[]>([]);
+  const [characteristics, setCharacteristics] = useState<{ name: string; value: string }[]>([]);
 
   const { data: categories } = useQuery({
     queryKey: ['admin-categories'],
@@ -177,10 +179,24 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
           is_active: v.is_active ?? true,
         })));
       }
+      // Load existing characteristics
+      if (editingProduct.id) {
+        supabase
+          .from('product_characteristics' as any)
+          .select('*')
+          .eq('product_id', editingProduct.id)
+          .order('display_order')
+          .then(({ data: chars }) => {
+            if (chars) {
+              setCharacteristics((chars as any[]).map((c: any) => ({ name: c.name, value: c.value })));
+            }
+          });
+      }
     } else {
       setFormData(initialFormData);
       setMedia([]);
       setVariants([]);
+      setCharacteristics([]);
     }
   }, [editingProduct, open]);
 
@@ -274,6 +290,24 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
             .insert(variantInserts);
           if (varError) throw varError;
         }
+
+        // Handle characteristics
+        if (productId) {
+          await supabase.from('product_characteristics' as any).delete().eq('product_id', productId);
+          if (characteristics.length > 0) {
+            const charInserts = characteristics
+              .filter(c => c.name && c.value)
+              .map((c, i) => ({
+                product_id: productId,
+                name: c.name,
+                value: c.value,
+                display_order: i,
+              }));
+            if (charInserts.length > 0) {
+              await supabase.from('product_characteristics' as any).insert(charInserts);
+            }
+          }
+        }
       }
 
       return productId;
@@ -303,10 +337,11 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
         <form onSubmit={handleSubmit}>
           <Tabs defaultValue="basic" className="w-full">
             <div className="px-6">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="basic">Básico</TabsTrigger>
                 <TabsTrigger value="media">Mídia</TabsTrigger>
                 <TabsTrigger value="variants">Variantes</TabsTrigger>
+                <TabsTrigger value="characteristics">Características</TabsTrigger>
                 <TabsTrigger value="shipping">Frete & GMC</TabsTrigger>
                 <TabsTrigger value="seo">SEO</TabsTrigger>
               </TabsList>
@@ -628,6 +663,64 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
                   }}
                   onChange={(seo) => setFormData({ ...formData, ...seo })}
                 />
+              </TabsContent>
+
+              <TabsContent value="characteristics" className="mt-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium">Características do Produto</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCharacteristics([...characteristics, { name: '', value: '' }])}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Adicionar
+                  </Button>
+                </div>
+                {characteristics.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Nenhuma característica adicionada. Clique em "Adicionar" para incluir informações como Material, Solado, Forro, etc.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {characteristics.map((char, index) => (
+                      <div key={index} className="flex gap-3 items-start">
+                        <div className="flex-1">
+                          <Input
+                            placeholder="Ex: Material"
+                            value={char.name}
+                            onChange={(e) => {
+                              const updated = [...characteristics];
+                              updated[index].name = e.target.value;
+                              setCharacteristics(updated);
+                            }}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <Input
+                            placeholder="Ex: Couro Legítimo"
+                            value={char.value}
+                            onChange={(e) => {
+                              const updated = [...characteristics];
+                              updated[index].value = e.target.value;
+                              setCharacteristics(updated);
+                            }}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive flex-shrink-0"
+                          onClick={() => setCharacteristics(characteristics.filter((_, i) => i !== index))}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
             </ScrollArea>
           </Tabs>

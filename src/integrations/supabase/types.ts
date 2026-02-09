@@ -103,6 +103,7 @@ export type Database = {
       }
       categories: {
         Row: {
+          banner_image_url: string | null
           created_at: string
           description: string | null
           display_order: number | null
@@ -118,6 +119,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          banner_image_url?: string | null
           created_at?: string
           description?: string | null
           display_order?: number | null
@@ -133,6 +135,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          banner_image_url?: string | null
           created_at?: string
           description?: string | null
           display_order?: number | null
@@ -446,6 +449,41 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_characteristics: {
+        Row: {
+          created_at: string
+          display_order: number | null
+          id: string
+          name: string
+          product_id: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          name: string
+          product_id: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          name?: string
+          product_id?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_characteristics_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]

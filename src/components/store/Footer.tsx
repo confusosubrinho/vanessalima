@@ -83,7 +83,7 @@ export function Footer() {
       </div>
 
       {/* Payment methods & security seals */}
-      <div className="border-t border-secondary-foreground/10">
+      <div className="border-t border-secondary-foreground/20">
         <div className="container-custom py-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Payment methods */}
@@ -118,7 +118,7 @@ export function Footer() {
       </div>
 
       {/* Company info - single line */}
-      <div className="border-t border-secondary-foreground/10">
+      <div className="bg-secondary-foreground/5">
         <div className="container-custom py-3">
           <p className="text-xs text-secondary-foreground/50 text-center">
             Vanessa S. de Lima Store · CNPJ: 19.947.968/0001-58 · Rua Professor Cleto - até 669/670, União da Vitória - PR, CEP: 84600140 · contato@vanessalimashoes.com.br · 42 99112-0205
@@ -127,7 +127,7 @@ export function Footer() {
       </div>
 
       {/* Credits */}
-      <div className="border-t border-secondary-foreground/10">
+      <div className="bg-secondary-foreground/5">
         <div className="container-custom py-3">
           <p className="text-xs text-secondary-foreground/40 text-center">
             © 2025 Vanessa Lima Shoes. Todos os direitos reservados. · Criado com ❤️ por <a href="https://studioninja.com.br" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors font-medium">Studio Ninja</a>
