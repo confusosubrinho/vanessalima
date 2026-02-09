@@ -14,7 +14,76 @@ import { useToast } from '@/hooks/use-toast';
 import { compressImageToWebP } from '@/lib/imageCompressor';
 import { Plus, Pencil, Trash2, GripVertical, Upload, Monitor, Smartphone, Video, Image as ImageIcon } from 'lucide-react';
 
+// Browser-side video compression using canvas + MediaRecorder
+async function compressVideo(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+
+    video.onloadedmetadata = () => {
+      // Scale down resolution to reduce size
+      const scale = Math.min(1, 720 / Math.max(video.videoWidth, video.videoHeight));
+      const width = Math.round(video.videoWidth * scale);
+      const height = Math.round(video.videoHeight * scale);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+
+      const stream = canvas.captureStream(24); // 24fps
+      const chunks: Blob[] = [];
+
+      // Try webm first, fallback to mp4
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+        ? 'video/webm;codecs=vp9'
+        : MediaRecorder.isTypeSupported('video/webm')
+        ? 'video/webm'
+        : 'video/mp4';
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 1_500_000, // 1.5Mbps for good compression
+      });
+
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = () => {
+        URL.revokeObjectURL(video.src);
+        const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
+        if (blob.size > 30 * 1024 * 1024) {
+          reject(new Error('Still too large'));
+        } else {
+          resolve(blob);
+        }
+      };
+      recorder.onerror = () => reject(new Error('Recording failed'));
+
+      video.onplay = () => {
+        recorder.start();
+        const drawFrame = () => {
+          if (video.ended || video.paused) {
+            recorder.stop();
+            return;
+          }
+          ctx.drawImage(video, 0, 0, width, height);
+          requestAnimationFrame(drawFrame);
+        };
+        drawFrame();
+      };
+
+      video.onended = () => { if (recorder.state === 'recording') recorder.stop(); };
+      video.onerror = () => reject(new Error('Video load failed'));
+      video.play().catch(reject);
+    };
+
+    video.onerror = () => reject(new Error('Video load failed'));
+  });
+}
+
 // ─── Banners Section (reuse logic from Banners page) ───
+
 
 interface Banner {
   id: string;
@@ -252,16 +321,26 @@ function InstagramVideosSection() {
   const handleVideoUpload = useCallback(async (file: File) => {
     setUploading(true);
     try {
-      // Compress video by limiting file size - just upload as-is for now
-      const maxSize = 10 * 1024 * 1024; // 10MB limit
+      const maxSize = 30 * 1024 * 1024; // 30MB limit
+      let fileToUpload: File | Blob = file;
+      let finalName = file.name;
+
       if (file.size > maxSize) {
-        toast({ title: 'Vídeo muito grande', description: 'O vídeo deve ter no máximo 10MB. Comprima antes de enviar.', variant: 'destructive' });
-        setUploading(false);
-        return;
+        // Compress video using canvas + MediaRecorder for browser-side compression
+        toast({ title: 'Comprimindo vídeo...', description: 'Aguarde, otimizando o vídeo para upload.' });
+        try {
+          fileToUpload = await compressVideo(file);
+          finalName = 'compressed.webm';
+        } catch {
+          toast({ title: 'Vídeo muito grande', description: 'Não foi possível comprimir automaticamente. Reduza o vídeo para no máximo 30MB.', variant: 'destructive' });
+          setUploading(false);
+          return;
+        }
       }
-      const ext = file.name.split('.').pop() || 'mp4';
+
+      const ext = finalName.split('.').pop() || 'mp4';
       const fileName = `videos/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('product-media').upload(fileName, file, { contentType: file.type });
+      const { error: uploadError } = await supabase.storage.from('product-media').upload(fileName, fileToUpload, { contentType: fileToUpload instanceof File ? fileToUpload.type : 'video/webm' });
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('product-media').getPublicUrl(fileName);
       setFormData(prev => ({ ...prev, video_url: publicUrl }));

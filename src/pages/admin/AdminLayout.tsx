@@ -164,7 +164,7 @@ function AdminSidebar() {
                         <SidebarMenuButton 
                           className={cn(
                             "w-full justify-between",
-                            isGroupActive(item.children) && "bg-muted"
+                            isGroupActive(item.children) && "bg-primary/15 text-primary font-semibold"
                           )}
                         >
                           <span className="flex items-center gap-2">
