@@ -223,11 +223,11 @@ export default function ProductDetail() {
             )}
 
             <Tabs defaultValue="description" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="description">Descrição</TabsTrigger>
-                <TabsTrigger value="characteristics">Características</TabsTrigger>
-                <TabsTrigger value="warranty">Garantia</TabsTrigger>
-                <TabsTrigger value="payment">Pagamento</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+                <TabsTrigger value="description" className="text-xs sm:text-sm py-2">Descrição</TabsTrigger>
+                <TabsTrigger value="characteristics" className="text-xs sm:text-sm py-2">Detalhes</TabsTrigger>
+                <TabsTrigger value="warranty" className="text-xs sm:text-sm py-2">Garantia</TabsTrigger>
+                <TabsTrigger value="payment" className="text-xs sm:text-sm py-2">Pagamento</TabsTrigger>
               </TabsList>
               
               <TabsContent value="description" className="mt-4">
@@ -310,14 +310,14 @@ export default function ProductDetail() {
           <div className="space-y-6">
             <div>
               {product.sku && <p className="text-sm text-muted-foreground mb-1">SKU: {product.sku}</p>}
-              <h1 className="text-3xl font-bold">{product.name}</h1>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">{product.name}</h1>
             </div>
 
             <div className="space-y-1">
               {hasDiscount && (
                 <p className="text-muted-foreground line-through text-lg">{formatPrice(Number(product.base_price))}</p>
               )}
-              <p className="text-3xl font-bold text-foreground">{formatPrice(currentPrice)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-foreground">{formatPrice(currentPrice)}</p>
               <p className="text-muted-foreground">ou 6x de R$ {installmentPrice} sem juros</p>
               <PaymentMethodsModal basePrice={currentPrice} maxInstallments={6} />
             </div>
@@ -387,9 +387,9 @@ export default function ProductDetail() {
               </div>
             </div>
 
-            <div className="flex gap-4">
-              <Button size="lg" className="flex-1 rounded-full" onClick={handleAddToCart} disabled={!isInStock}>
-                <ShoppingBag className="h-5 w-5 mr-2" />
+            <div className="flex gap-2 sm:gap-4">
+              <Button size="lg" className="flex-1 rounded-full text-sm sm:text-base" onClick={handleAddToCart} disabled={!isInStock}>
+                <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
                 {isInStock ? 'Adicionar ao Carrinho' : 'Esgotado'}
               </Button>
               <Button size="lg" variant="outline" className="rounded-full">

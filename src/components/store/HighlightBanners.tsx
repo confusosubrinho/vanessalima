@@ -74,12 +74,12 @@ export function HighlightBanners() {
   return (
     <section className="py-12 bg-muted/30">
       <div className="container-custom">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {displayBanners.map((banner) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4">
+          {displayBanners.map((banner, index) => (
             <Link
               key={banner.id}
               to={banner.link_url || '#'}
-              className="relative aspect-square overflow-hidden rounded-lg group"
+              className={`relative aspect-square overflow-hidden rounded-lg group ${index === 0 && displayBanners.length === 3 ? 'col-span-2 md:col-span-1' : ''}`}
             >
               <img
                 src={banner.image_url}

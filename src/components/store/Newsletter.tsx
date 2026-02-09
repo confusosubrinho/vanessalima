@@ -24,14 +24,14 @@ export function Newsletter() {
   };
 
   return (
-    <section className="py-16 bg-[hsl(0,0%,12%)] text-white">
+    <section className="py-10 sm:py-16 bg-[hsl(0,0%,12%)] text-white">
       <div className="container-custom">
-        <div className="max-w-2xl mx-auto text-center">
-          <Mail className="h-10 w-10 mx-auto mb-4 text-primary" />
-          <h2 className="text-2xl md:text-3xl font-bold mb-2">
+        <div className="max-w-2xl mx-auto text-center px-2">
+          <Mail className="h-8 w-8 sm:h-10 sm:w-10 mx-auto mb-3 sm:mb-4 text-primary" />
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">
             Ganhe 5% de desconto
           </h2>
-          <p className="text-white/70 mb-6">
+          <p className="text-white/70 mb-4 sm:mb-6 text-sm sm:text-base">
             Assine nossa newsletter e receba um cupom exclusivo de 5% de desconto na sua primeira compra!
           </p>
           <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">

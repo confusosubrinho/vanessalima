@@ -129,7 +129,7 @@ export function InstagramFeed() {
               <div
                 key={video.id}
                 className={`flex-shrink-0 snap-center transition-all duration-500 cursor-pointer ${
-                  isActive ? 'w-[280px] md:w-[320px] scale-100 opacity-100' : 'w-[220px] md:w-[260px] scale-95 opacity-70'
+                  isActive ? 'w-[200px] sm:w-[250px] md:w-[320px] scale-100 opacity-100' : 'w-[160px] sm:w-[200px] md:w-[260px] scale-95 opacity-70'
                 }`}
                 onClick={() => setActiveIndex(index)}
               >
