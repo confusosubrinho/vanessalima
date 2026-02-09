@@ -8,6 +8,8 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ProductDetail from "./pages/ProductDetail";
 import CategoryPage from "./pages/CategoryPage";
+import SizePage from "./pages/SizePage";
+import BijuteriasPage from "./pages/BijuteriasPage";
 import Auth from "./pages/Auth";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
@@ -42,6 +44,8 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/carrinho" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/tamanho/:size" element={<SizePage />} />
+            <Route path="/bijuterias" element={<BijuteriasPage />} />
             
             {/* Admin routes */}
             <Route path="/admin/login" element={<AdminLogin />} />

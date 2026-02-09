@@ -25,15 +25,17 @@ const Index = () => {
       <CategoryGrid />
       
       {/* Bijuterias section */}
-      <ProductCarousel
-        products={saleProducts}
-        title="Bijuterias"
-        subtitle="Acessórios que completam seu look"
-        showViewAll
-        viewAllLink="/bijuterias"
-        isLoading={productsLoading}
-        darkBg
-      />
+      {saleProducts.length > 0 && (
+        <ProductCarousel
+          products={saleProducts}
+          title="Bijuterias"
+          subtitle="Acessórios que completam seu look"
+          showViewAll
+          viewAllLink="/bijuterias"
+          isLoading={productsLoading}
+          darkBg
+        />
+      )}
 
       {/* Highlight Banners Section */}
       <HighlightBanners />

@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { ProductMediaUpload } from './ProductMediaUpload';
 import { ProductSEOFields } from './ProductSEOFields';
+import { ProductVariantsManager, VariantItem } from './ProductVariantsManager';
 import { Category } from '@/types/database';
 
 interface MediaItem {
@@ -97,6 +98,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
   const { toast } = useToast();
   const [formData, setFormData] = useState<ProductFormData>(initialFormData);
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [variants, setVariants] = useState<VariantItem[]>([]);
 
   const { data: categories } = useQuery({
     queryKey: ['admin-categories'],
@@ -150,9 +152,23 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
           media_type: img.media_type || 'image',
         })));
       }
+      // Load existing variants
+      if (editingProduct.variants) {
+        setVariants(editingProduct.variants.map((v: any) => ({
+          id: v.id,
+          size: v.size || '',
+          color: v.color || '',
+          color_hex: v.color_hex || '',
+          stock_quantity: v.stock_quantity || 0,
+          price_modifier: v.price_modifier || 0,
+          sku: v.sku || '',
+          is_active: v.is_active ?? true,
+        })));
+      }
     } else {
       setFormData(initialFormData);
       setMedia([]);
+      setVariants([]);
     }
   }, [editingProduct, open]);
 
@@ -227,6 +243,25 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
           
           if (mediaError) throw mediaError;
         }
+
+        // Handle variants - delete old and insert new
+        await supabase.from('product_variants').delete().eq('product_id', productId);
+        if (variants.length > 0) {
+          const variantInserts = variants.map(v => ({
+            product_id: productId,
+            size: v.size,
+            color: v.color || null,
+            color_hex: v.color_hex || null,
+            stock_quantity: v.stock_quantity,
+            price_modifier: v.price_modifier || 0,
+            sku: v.sku || null,
+            is_active: v.is_active,
+          }));
+          const { error: varError } = await supabase
+            .from('product_variants')
+            .insert(variantInserts);
+          if (varError) throw varError;
+        }
       }
 
       return productId;
@@ -256,9 +291,10 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
         <form onSubmit={handleSubmit}>
           <Tabs defaultValue="basic" className="w-full">
             <div className="px-6">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="basic">Básico</TabsTrigger>
                 <TabsTrigger value="media">Mídia</TabsTrigger>
+                <TabsTrigger value="variants">Variantes</TabsTrigger>
                 <TabsTrigger value="shipping">Frete & GMC</TabsTrigger>
                 <TabsTrigger value="seo">SEO</TabsTrigger>
               </TabsList>
@@ -382,6 +418,14 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
                   productId={editingProduct?.id}
                   media={media}
                   onChange={setMedia}
+                />
+              </TabsContent>
+              
+              <TabsContent value="variants" className="mt-4">
+                <ProductVariantsManager
+                  variants={variants}
+                  onChange={setVariants}
+                  productId={editingProduct?.id}
                 />
               </TabsContent>
               

@@ -25,6 +25,7 @@ export default function ProductDetail() {
   const { toast } = useToast();
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
 
   const { data: recentProducts } = useRecentProducts(product?.id);
@@ -83,6 +84,13 @@ export default function ProductDetail() {
   const images = product.images || [];
   const variants = product.variants?.filter(v => v.is_active) || [];
   const sizes = [...new Set(variants.map(v => v.size))].sort((a, b) => Number(a) - Number(b));
+  const colors = [...new Map(variants.filter(v => v.color).map(v => [v.color, { name: v.color!, hex: v.color_hex }])).values()];
+  
+  // Filter sizes by selected color
+  const availableSizes = selectedColor
+    ? [...new Set(variants.filter(v => v.color === selectedColor).map(v => v.size))].sort((a, b) => Number(a) - Number(b))
+    : sizes;
+  
   const hasDiscount = product.sale_price && product.sale_price < product.base_price;
   const discountPercentage = hasDiscount
     ? Math.round((1 - Number(product.sale_price) / Number(product.base_price)) * 100)
@@ -98,8 +106,27 @@ export default function ProductDetail() {
   const currentPrice = Number(product.sale_price || product.base_price);
   const installmentPrice = (currentPrice / 6).toFixed(2);
 
-  const selectedVariant = variants.find(v => v.size === selectedSize);
+  const selectedVariant = selectedColor && selectedSize
+    ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
+    : variants.find(v => v.size === selectedSize);
   const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : true;
+
+  const handleColorSelect = (colorName: string) => {
+    setSelectedColor(colorName);
+    setSelectedSize(null);
+    // Find variant image for this color - look for matching variant with image
+    // For now, cycle to the first image matching the color name in alt text or order
+    const colorVariant = variants.find(v => v.color === colorName);
+    if (colorVariant) {
+      // If variant has a linked image (via alt_text containing color name), select it
+      const colorImageIndex = images.findIndex(img => 
+        img.alt_text?.toLowerCase().includes(colorName.toLowerCase())
+      );
+      if (colorImageIndex >= 0) {
+        setSelectedImage(colorImageIndex);
+      }
+    }
+  };
 
   const handleAddToCart = () => {
     if (!selectedSize) {
@@ -295,11 +322,35 @@ export default function ProductDetail() {
               <PaymentMethodsModal basePrice={currentPrice} maxInstallments={6} />
             </div>
 
+            {/* Color Selector */}
+            {colors.length > 0 && (
+              <div>
+                <label className="block font-medium mb-2">Cor{selectedColor && `: ${selectedColor}`}</label>
+                <div className="flex flex-wrap gap-2">
+                  {colors.map(({ name, hex }) => (
+                    <button
+                      key={name}
+                      onClick={() => handleColorSelect(name!)}
+                      className={`w-10 h-10 rounded-full border-2 transition-all ${
+                        selectedColor === name
+                          ? 'border-primary ring-2 ring-primary ring-offset-2'
+                          : 'border-border hover:border-primary'
+                      }`}
+                      style={{ backgroundColor: hex || '#ccc' }}
+                      title={name || ''}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block font-medium mb-2">Tamanho</label>
               <div className="flex flex-wrap gap-2">
-                {sizes.map((size) => {
-                  const variant = variants.find(v => v.size === size);
+                {availableSizes.map((size) => {
+                  const variant = selectedColor
+                    ? variants.find(v => v.size === size && v.color === selectedColor)
+                    : variants.find(v => v.size === size);
                   const outOfStock = !variant || variant.stock_quantity === 0;
                   return (
                     <button
