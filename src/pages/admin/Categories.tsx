@@ -36,6 +36,9 @@ export default function Categories() {
     image_url: '',
     is_active: true,
     display_order: 0,
+    seo_title: '',
+    seo_description: '',
+    seo_keywords: '',
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -123,6 +126,9 @@ export default function Categories() {
         image_url: category.image_url || '',
         is_active: category.is_active ?? true,
         display_order: category.display_order ?? 0,
+        seo_title: (category as any).seo_title || '',
+        seo_description: (category as any).seo_description || '',
+        seo_keywords: (category as any).seo_keywords || '',
       });
     } else {
       setEditingCategory(null);
@@ -133,6 +139,9 @@ export default function Categories() {
         image_url: '',
         is_active: true,
         display_order: (categories?.length || 0) + 1,
+        seo_title: '',
+        seo_description: '',
+        seo_keywords: '',
       });
     }
     setImageFile(null);
@@ -142,14 +151,17 @@ export default function Categories() {
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingCategory(null);
-    setFormData({
-      name: '',
-      slug: '',
-      description: '',
-      image_url: '',
-      is_active: true,
-      display_order: 0,
-    });
+      setFormData({
+        name: '',
+        slug: '',
+        description: '',
+        image_url: '',
+        is_active: true,
+        display_order: 0,
+        seo_title: '',
+        seo_description: '',
+        seo_keywords: '',
+      });
     setImageFile(null);
   };
 
@@ -345,6 +357,42 @@ export default function Categories() {
                 checked={formData.is_active}
                 onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
               />
+            </div>
+
+            {/* SEO Fields */}
+            <div className="border-t pt-4 mt-4">
+              <h3 className="font-semibold mb-3">SEO</h3>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Título SEO</Label>
+                  <Input
+                    value={formData.seo_title}
+                    onChange={(e) => setFormData({ ...formData, seo_title: e.target.value })}
+                    placeholder="Título para mecanismos de busca"
+                    maxLength={60}
+                  />
+                  <p className="text-xs text-muted-foreground">{formData.seo_title.length}/60 caracteres</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Descrição SEO</Label>
+                  <Textarea
+                    value={formData.seo_description}
+                    onChange={(e) => setFormData({ ...formData, seo_description: e.target.value })}
+                    placeholder="Descrição para mecanismos de busca"
+                    maxLength={160}
+                    rows={2}
+                  />
+                  <p className="text-xs text-muted-foreground">{formData.seo_description.length}/160 caracteres</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Palavras-chave SEO</Label>
+                  <Input
+                    value={formData.seo_keywords}
+                    onChange={(e) => setFormData({ ...formData, seo_keywords: e.target.value })}
+                    placeholder="palavra1, palavra2, palavra3"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">

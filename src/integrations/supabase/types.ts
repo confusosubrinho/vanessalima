@@ -65,6 +65,9 @@ export type Database = {
           image_url: string | null
           is_active: boolean | null
           name: string
+          seo_description: string | null
+          seo_keywords: string | null
+          seo_title: string | null
           slug: string
           updated_at: string
         }
@@ -76,6 +79,9 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean | null
           name: string
+          seo_description?: string | null
+          seo_keywords?: string | null
+          seo_title?: string | null
           slug: string
           updated_at?: string
         }
@@ -87,6 +93,9 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean | null
           name?: string
+          seo_description?: string | null
+          seo_keywords?: string | null
+          seo_title?: string | null
           slug?: string
           updated_at?: string
         }
@@ -626,6 +635,7 @@ export type Database = {
         Row: {
           address: string | null
           body_code: string | null
+          cash_discount: number | null
           contact_email: string | null
           contact_phone: string | null
           contact_whatsapp: string | null
@@ -637,10 +647,14 @@ export type Database = {
           head_code: string | null
           id: string
           instagram_url: string | null
+          installment_interest_rate: number | null
+          installments_without_interest: number | null
           logo_url: string | null
           max_installments: number | null
           melhor_envio_sandbox: boolean | null
           melhor_envio_token: string | null
+          min_installment_value: number | null
+          pix_discount: number | null
           store_name: string | null
           tiktok_pixel_id: string | null
           updated_at: string
@@ -648,6 +662,7 @@ export type Database = {
         Insert: {
           address?: string | null
           body_code?: string | null
+          cash_discount?: number | null
           contact_email?: string | null
           contact_phone?: string | null
           contact_whatsapp?: string | null
@@ -659,10 +674,14 @@ export type Database = {
           head_code?: string | null
           id?: string
           instagram_url?: string | null
+          installment_interest_rate?: number | null
+          installments_without_interest?: number | null
           logo_url?: string | null
           max_installments?: number | null
           melhor_envio_sandbox?: boolean | null
           melhor_envio_token?: string | null
+          min_installment_value?: number | null
+          pix_discount?: number | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string
@@ -670,6 +689,7 @@ export type Database = {
         Update: {
           address?: string | null
           body_code?: string | null
+          cash_discount?: number | null
           contact_email?: string | null
           contact_phone?: string | null
           contact_whatsapp?: string | null
@@ -681,10 +701,14 @@ export type Database = {
           head_code?: string | null
           id?: string
           instagram_url?: string | null
+          installment_interest_rate?: number | null
+          installments_without_interest?: number | null
           logo_url?: string | null
           max_installments?: number | null
           melhor_envio_sandbox?: boolean | null
           melhor_envio_token?: string | null
+          min_installment_value?: number | null
+          pix_discount?: number | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string

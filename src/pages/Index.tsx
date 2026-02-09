@@ -5,6 +5,7 @@ import { CategoryGrid } from '@/components/store/CategoryGrid';
 import { ProductCarousel } from '@/components/store/ProductCarousel';
 import { HighlightBanners } from '@/components/store/HighlightBanners';
 import { InstagramFeed } from '@/components/store/InstagramFeed';
+import { ShopBySize } from '@/components/store/ShopBySize';
 import { useFeaturedProducts, useProducts } from '@/hooks/useProducts';
 
 const Index = () => {
@@ -23,19 +24,22 @@ const Index = () => {
       <FeaturesBar />
       <CategoryGrid />
       
-      {/* Sale section */}
+      {/* Bijuterias section */}
       <ProductCarousel
         products={saleProducts}
-        title="50% Off Em Modelos Selecionados"
-        subtitle="Promoção por tempo limitado, aproveite!"
+        title="Bijuterias"
+        subtitle="Acessórios que completam seu look"
         showViewAll
-        viewAllLink="/outlet"
+        viewAllLink="/bijuterias"
         isLoading={productsLoading}
         darkBg
       />
 
       {/* Highlight Banners Section */}
       <HighlightBanners />
+
+      {/* Shop by Size */}
+      <ShopBySize />
 
       {/* Featured products */}
       <ProductCarousel
