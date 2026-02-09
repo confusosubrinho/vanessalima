@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, ShoppingBag, Menu, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, ChevronUp, Truck } from 'lucide-react';
+import { User, ShoppingBag, Menu, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, ChevronUp, Truck, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useCart } from '@/contexts/CartContext';
 import { useCategories, useProducts } from '@/hooks/useProducts';
+import { useIsMobile } from '@/hooks/use-mobile';
 import logo from '@/assets/logo.png';
 import { ShippingCalculator } from './ShippingCalculator';
 import { CouponInput } from './CouponInput';
@@ -18,6 +19,7 @@ export function Header() {
   const navigate = useNavigate();
   const { itemCount, items, subtotal, removeItem, updateQuantity, isCartOpen, setIsCartOpen, discount, selectedShipping, total } = useCart();
   const { data: categories } = useCategories();
+  const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeMegaMenu, setActiveMegaMenu] = useState<string | null>(null);
   const [couponOpen, setCouponOpen] = useState(false);
@@ -116,6 +118,10 @@ export function Header() {
                   </Link>
                 </div>
                 <div className="border-t mt-4 pt-3 px-2 space-y-0.5">
+                  <Link to="/favoritos" className="flex items-center gap-3 py-3 px-3 hover:bg-muted rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
+                    <Heart className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">Favoritos</span>
+                  </Link>
                   <Link to="/conta" className="flex items-center gap-3 py-3 px-3 hover:bg-muted rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
                     <User className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm">Minha Conta</span>
@@ -160,6 +166,9 @@ export function Header() {
 
           {/* Actions */}
           <div className="flex items-center gap-2 sm:gap-4">
+            <Link to="/favoritos" className="hidden md:flex items-center gap-1 text-sm hover:text-primary transition-colors">
+              <Heart className="h-5 w-5" />
+            </Link>
             <div
               className="hidden md:flex relative"
               onMouseEnter={() => setActiveMegaMenu('atendimento')}
@@ -292,30 +301,33 @@ export function Header() {
                         ))}
                       </div>
 
-                      {/* Product suggestions */}
-                      <div className="pt-3 border-t">
-                        <CartProductSuggestions compact />
-                      </div>
+                      {/* Product suggestions & Shipping/Coupon - desktop only */}
+                      {!isMobile && (
+                        <>
+                          <div className="pt-3 border-t">
+                            <CartProductSuggestions compact />
+                          </div>
 
-                      {/* Shipping & Coupon */}
-                      <div className="border-t pt-3 mt-3 space-y-3">
-                        <ShippingCalculator compact />
-                        
-                        <Collapsible open={couponOpen} onOpenChange={setCouponOpen}>
-                          <CollapsibleTrigger asChild>
-                            <button className="flex items-center justify-between w-full p-2 text-sm font-medium hover:bg-muted/50 rounded-lg transition-colors">
-                              <div className="flex items-center gap-2">
-                                <Percent className="h-4 w-4 text-primary" />
-                                <span>Cupom de Desconto</span>
-                              </div>
-                              {couponOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </button>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="pt-2">
-                            <CouponInput compact />
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </div>
+                          <div className="border-t pt-3 mt-3 space-y-3">
+                            <ShippingCalculator compact />
+                            
+                            <Collapsible open={couponOpen} onOpenChange={setCouponOpen}>
+                              <CollapsibleTrigger asChild>
+                                <button className="flex items-center justify-between w-full p-2 text-sm font-medium hover:bg-muted/50 rounded-lg transition-colors">
+                                  <div className="flex items-center gap-2">
+                                    <Percent className="h-4 w-4 text-primary" />
+                                    <span>Cupom de Desconto</span>
+                                  </div>
+                                  {couponOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                </button>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="pt-2">
+                                <CouponInput compact />
+                              </CollapsibleContent>
+                            </Collapsible>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Fixed bottom: totals + buttons */}

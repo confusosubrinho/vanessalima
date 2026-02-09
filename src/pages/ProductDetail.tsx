@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StoreLayout } from '@/components/store/StoreLayout';
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProduct } from '@/hooks/useProducts';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
+import { useFavorites } from '@/hooks/useFavorites';
 import { ShippingCalculator } from '@/components/store/ShippingCalculator';
 import { ProductCarousel } from '@/components/store/ProductCarousel';
 import { ProductReviews } from '@/components/store/ProductReviews';
@@ -20,11 +21,13 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function ProductDetail() {
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading } = useProduct(slug || '');
   const { addItem } = useCart();
   const { toast } = useToast();
+  const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -426,8 +429,20 @@ export default function ProductDetail() {
                 <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
                 {isInStock ? 'Adicionar ao Carrinho' : 'Esgotado'}
               </Button>
-              <Button size="lg" variant="outline" className="rounded-full">
-                <Heart className="h-5 w-5" />
+              <Button
+                size="lg"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    toast({ title: 'Faça login para favoritar', description: 'Crie sua conta para salvar seus produtos favoritos.' });
+                    navigate('/auth');
+                    return;
+                  }
+                  toggleFavorite(product.id);
+                }}
+              >
+                <Heart className={`h-5 w-5 ${isFavorite(product.id) ? 'fill-destructive text-destructive' : ''}`} />
               </Button>
             </div>
 
@@ -435,9 +450,9 @@ export default function ProductDetail() {
               href={`https://wa.me/5542991120205?text=Olá, gostei deste produto: ${product.name}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 py-3 px-6 border-2 border-success text-success rounded-full hover:bg-success/10 transition-colors font-medium"
+              className="flex items-center justify-center gap-1.5 py-2 px-4 border border-[#25D366] text-[#25D366] rounded-full hover:bg-[#25D366]/10 transition-colors font-medium text-sm"
             >
-              <MessageCircle className="h-5 w-5" />
+              <MessageCircle className="h-4 w-4" />
               Comprar pelo WhatsApp
             </a>
             

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,38 @@ export function ProductCarousel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const { data: settings } = useStoreSettings();
   const [variantProduct, setVariantProduct] = useState<Product | null>(null);
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragScrollLeft = useRef(0);
+
+  // Touch/mouse drag support
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onDown = (e: PointerEvent) => {
+      isDragging.current = true;
+      dragStartX.current = e.pageX - el.offsetLeft;
+      dragScrollLeft.current = el.scrollLeft;
+      if (e.pointerType === 'mouse') e.preventDefault();
+    };
+    const onUp = () => { isDragging.current = false; };
+    const onMove = (e: PointerEvent) => {
+      if (!isDragging.current) return;
+      if (e.pointerType === 'mouse') e.preventDefault();
+      const x = e.pageX - el.offsetLeft;
+      el.scrollLeft = dragScrollLeft.current - (x - dragStartX.current) * 1.5;
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointerleave', onUp);
+    el.addEventListener('pointermove', onMove);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointerleave', onUp);
+      el.removeEventListener('pointermove', onMove);
+    };
+  }, []);
 
   const whatsappNumber = settings?.contact_whatsapp?.replace(/\D/g, '') || '5542991120205';
 
@@ -64,6 +96,7 @@ export function ProductCarousel({
           {title && (
             <div className="mb-8">
               <h2 className="text-2xl font-bold">{title}</h2>
+
               {subtitle && <p className={`mt-1 ${darkBg ? 'text-secondary-foreground/70' : 'text-muted-foreground'}`}>{subtitle}</p>}
             </div>
           )}
@@ -123,8 +156,8 @@ export function ProductCarousel({
 
             <div
               ref={scrollRef}
-              className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 snap-x snap-mandatory"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 snap-x snap-mandatory touch-pan-x cursor-grab active:cursor-grabbing"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
             >
               {products.map((product) => {
                 const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
@@ -231,7 +264,7 @@ export function ProductCarousel({
                         </Button>
                         <Button
                           variant="outline"
-                          className="w-full rounded-full text-primary border-primary hover:bg-primary/5 text-xs sm:text-sm h-8 sm:h-10"
+                          className="w-full rounded-full text-primary border-primary hover:bg-primary/5 text-[10px] sm:text-xs h-7 sm:h-8 px-2"
                           asChild
                         >
                           <a
@@ -240,9 +273,8 @@ export function ProductCarousel({
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                            <span className="hidden sm:inline">Comprar pelo Whats</span>
-                            <span className="sm:hidden">WhatsApp</span>
+                            <MessageCircle className="h-3 w-3 mr-1" />
+                            WhatsApp
                           </a>
                         </Button>
                       </div>

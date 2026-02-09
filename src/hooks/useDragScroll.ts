@@ -6,29 +6,24 @@ export function useDragScroll() {
   const startX = useRef(0);
   const scrollLeft = useRef(0);
 
-  const onMouseDown = useCallback((e: MouseEvent) => {
+  const onPointerDown = useCallback((e: PointerEvent) => {
     const el = ref.current;
     if (!el) return;
     isDown.current = true;
     el.style.cursor = 'grabbing';
     startX.current = e.pageX - el.offsetLeft;
     scrollLeft.current = el.scrollLeft;
-    e.preventDefault();
+    if (e.pointerType === 'mouse') e.preventDefault();
   }, []);
 
-  const onMouseLeave = useCallback(() => {
+  const onPointerUp = useCallback(() => {
     isDown.current = false;
     if (ref.current) ref.current.style.cursor = 'grab';
   }, []);
 
-  const onMouseUp = useCallback(() => {
-    isDown.current = false;
-    if (ref.current) ref.current.style.cursor = 'grab';
-  }, []);
-
-  const onMouseMove = useCallback((e: MouseEvent) => {
+  const onPointerMove = useCallback((e: PointerEvent) => {
     if (!isDown.current || !ref.current) return;
-    e.preventDefault();
+    if (e.pointerType === 'mouse') e.preventDefault();
     const x = e.pageX - ref.current.offsetLeft;
     const walk = (x - startX.current) * 1.5;
     ref.current.scrollLeft = scrollLeft.current - walk;
@@ -37,17 +32,17 @@ export function useDragScroll() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.addEventListener('mousedown', onMouseDown);
-    el.addEventListener('mouseleave', onMouseLeave);
-    el.addEventListener('mouseup', onMouseUp);
-    el.addEventListener('mousemove', onMouseMove);
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointerleave', onPointerUp);
+    el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointermove', onPointerMove);
     return () => {
-      el.removeEventListener('mousedown', onMouseDown);
-      el.removeEventListener('mouseleave', onMouseLeave);
-      el.removeEventListener('mouseup', onMouseUp);
-      el.removeEventListener('mousemove', onMouseMove);
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('pointerleave', onPointerUp);
+      el.removeEventListener('pointerup', onPointerUp);
+      el.removeEventListener('pointermove', onPointerMove);
     };
-  }, [onMouseDown, onMouseLeave, onMouseUp, onMouseMove]);
+  }, [onPointerDown, onPointerUp, onPointerMove]);
 
   return ref;
 }

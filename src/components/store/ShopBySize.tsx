@@ -36,7 +36,7 @@ export function ShopBySize() {
           <p className="text-muted-foreground mt-1">Encontre seu número perfeito</p>
         </div>
 
-        <div className="flex gap-3 overflow-x-auto scrollbar-hide justify-start md:justify-center pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="flex gap-3 overflow-x-auto scrollbar-hide justify-start md:justify-center pb-2 touch-pan-x cursor-grab active:cursor-grabbing" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
           {sizes.map((size) => (
             <Link
               key={size}

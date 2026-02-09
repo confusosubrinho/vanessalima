@@ -27,6 +27,7 @@ import AtendimentoPage from "./pages/AtendimentoPage";
 import BestSellersPage from "./pages/BestSellersPage";
 import RastreioPage from "./pages/RastreioPage";
 import OrderConfirmation from "./pages/OrderConfirmation";
+import FavoritesPage from "./pages/FavoritesPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminLogin from "./pages/admin/AdminLogin";
 import Dashboard from "./pages/admin/Dashboard";
@@ -94,6 +95,7 @@ const App = () => (
             <Route path="/mais-vendidos" element={<BestSellersPage />} />
             <Route path="/rastreio" element={<RastreioPage />} />
             <Route path="/pedido-confirmado" element={<OrderConfirmation />} />
+            <Route path="/favoritos" element={<FavoritesPage />} />
             
             {/* Admin routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
