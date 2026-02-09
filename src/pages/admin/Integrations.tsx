@@ -724,8 +724,8 @@ function BlingPanel() {
                               <td className="p-1.5 font-mono">{entry.bling_id}</td>
                               <td className="p-1.5 max-w-[200px] truncate">{entry.name}</td>
                               <td className="p-1.5">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${entry.status === 'imported' ? 'bg-green-200 text-green-800' : entry.status === 'updated' ? 'bg-blue-200 text-blue-800' : entry.status === 'error' ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-800'}`}>
-                                  {entry.status === 'imported' ? '✅ Novo' : entry.status === 'updated' ? '🔄 Atualizado' : entry.status === 'error' ? '❌ Erro' : '⏭ Ignorado'}
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${entry.status === 'imported' ? 'bg-green-200 text-green-800' : entry.status === 'updated' ? 'bg-blue-200 text-blue-800' : entry.status === 'grouped' ? 'bg-purple-200 text-purple-800' : entry.status === 'error' ? 'bg-red-200 text-red-800' : 'bg-gray-200 text-gray-800'}`}>
+                                  {entry.status === 'imported' ? '✅ Novo' : entry.status === 'updated' ? '🔄 Atualizado' : entry.status === 'grouped' ? '🔗 Agrupado' : entry.status === 'error' ? '❌ Erro' : '⏭ Ignorado'}
                                 </span>
                               </td>
                               <td className="p-1.5 text-center">{entry.variants || '-'}</td>
