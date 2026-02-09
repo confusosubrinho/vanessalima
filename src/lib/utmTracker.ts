@@ -82,12 +82,33 @@ export async function trackSession(): Promise<void> {
   const existing = sessionStorage.getItem('vl_session_tracked');
   if (existing) return;
 
+  // Don't track admin sessions
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .eq('role', 'admin');
+      
+      if (roles && roles.length > 0) {
+        sessionStorage.setItem('vl_session_tracked', 'true');
+        return; // Skip tracking for admins
+      }
+    }
+  } catch {
+    // Continue tracking if role check fails
+  }
+
   const sessionId = getSessionId();
   const utm = captureUTMData();
 
   try {
+    const { data: { session } } = await supabase.auth.getSession();
     await supabase.from('traffic_sessions' as any).insert({
       session_id: sessionId,
+      user_id: session?.user?.id || null,
       utm_source: utm.utm_source,
       utm_medium: utm.utm_medium,
       utm_campaign: utm.utm_campaign,

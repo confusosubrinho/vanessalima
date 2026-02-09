@@ -9,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Store, Phone, Instagram, Facebook, Truck, CreditCard, Save, Upload, Image, AlertTriangle } from 'lucide-react';
+import { Store, Phone, Instagram, Facebook, Truck, CreditCard, Save, Upload, Image, AlertTriangle, Shield } from 'lucide-react';
 import { ErrorLogsPanel } from '@/components/admin/ErrorLogsPanel';
+import { TwoFactorSetup } from '@/components/admin/TwoFactorSetup';
 
 interface StoreSettings {
   id: string;
@@ -171,20 +172,29 @@ export default function Settings() {
             <TabsTrigger value="contact">Contato</TabsTrigger>
             <TabsTrigger value="social">Redes Sociais</TabsTrigger>
             <TabsTrigger value="footer">Footer</TabsTrigger>
-            <TabsTrigger value="errors" className="text-destructive">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              Logs de Erros
-            </TabsTrigger>
-          </TabsList>
+             <TabsTrigger value="security">
+               <Shield className="h-3 w-3 mr-1" />
+               Segurança
+             </TabsTrigger>
+             <TabsTrigger value="errors" className="text-destructive">
+               <AlertTriangle className="h-3 w-3 mr-1" />
+               Logs de Erros
+             </TabsTrigger>
+           </TabsList>
 
-          {/* Error Logs Tab - outside the form since it's independent */}
-          <TabsContent value="errors">
-            <Card>
-              <CardContent className="pt-6">
-                <ErrorLogsPanel />
-              </CardContent>
-            </Card>
-          </TabsContent>
+           {/* Security Tab */}
+           <TabsContent value="security">
+             <TwoFactorSetup />
+           </TabsContent>
+
+           {/* Error Logs Tab */}
+           <TabsContent value="errors">
+             <Card>
+               <CardContent className="pt-6">
+                 <ErrorLogsPanel />
+               </CardContent>
+             </Card>
+           </TabsContent>
 
           <TabsContent value="general" className="space-y-4">
             <Card>

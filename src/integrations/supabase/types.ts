@@ -541,6 +541,30 @@ export type Database = {
           },
         ]
       }
+      login_attempts: {
+        Row: {
+          attempted_at: string
+          email: string
+          id: string
+          ip_hash: string | null
+          success: boolean | null
+        }
+        Insert: {
+          attempted_at?: string
+          email: string
+          id?: string
+          ip_hash?: string | null
+          success?: boolean | null
+        }
+        Update: {
+          attempted_at?: string
+          email?: string
+          id?: string
+          ip_hash?: string | null
+          success?: boolean | null
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           created_at: string
@@ -1219,6 +1243,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_login_rate_limit: { Args: { p_email: string }; Returns: boolean }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {

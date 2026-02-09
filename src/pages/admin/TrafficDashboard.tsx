@@ -49,11 +49,29 @@ export default function TrafficDashboard() {
   const { data: sessions, isLoading } = useQuery({
     queryKey: ['traffic-sessions'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Get admin user IDs to exclude from traffic
+      const { data: adminRoles } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'admin');
+      
+      const adminIds = (adminRoles || []).map(r => r.user_id);
+
+      let query = supabase
         .from('traffic_sessions' as any)
         .select('*')
         .order('created_at', { ascending: false })
         .limit(500);
+
+      // Exclude admin sessions
+      if (adminIds.length > 0) {
+        // Filter out sessions from admin users
+        for (const id of adminIds) {
+          query = query.neq('user_id', id);
+        }
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as unknown as TrafficSession[];
     },
