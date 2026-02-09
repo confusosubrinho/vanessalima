@@ -137,7 +137,7 @@ export function ProductCarousel({
                 const installmentPrice = (currentPrice / 12).toFixed(2);
 
                 return (
-                  <div key={product.id} className={`flex-shrink-0 w-[280px] md:w-[300px] snap-start group ${cardBg ? 'bg-background rounded-xl shadow-sm border p-3' : ''}`}>
+                  <div key={product.id} className={`flex-shrink-0 w-[200px] sm:w-[240px] md:w-[280px] lg:w-[300px] snap-start group ${cardBg ? 'bg-background rounded-xl shadow-sm border p-2 sm:p-3' : ''}`}>
                     <Link to={`/produto/${product.slug}`} className="block">
                       <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
                         <img
@@ -181,7 +181,7 @@ export function ProductCarousel({
                             {formatPrice(Number(product.base_price))}
                           </p>
                         )}
-                        <p className={`text-xl font-bold ${isDark && !cardBg ? 'text-secondary-foreground' : 'text-foreground'}`}>
+                        <p className={`text-base sm:text-xl font-bold ${isDark && !cardBg ? 'text-secondary-foreground' : 'text-foreground'}`}>
                           {formatPrice(currentPrice)}
                         </p>
                         <p className={`text-sm ${isDark && !cardBg ? 'text-secondary-foreground/70' : 'text-muted-foreground'}`}>
@@ -222,16 +222,16 @@ export function ProductCarousel({
                         ) : null;
                       })()}
 
-                      <div className="space-y-2">
+                      <div className="space-y-1.5 sm:space-y-2">
                         <Button
-                          className="w-full rounded-full"
+                          className="w-full rounded-full text-xs sm:text-sm h-8 sm:h-10"
                           onClick={(e) => handleQuickBuy(product, e)}
                         >
                           Comprar
                         </Button>
                         <Button
                           variant="outline"
-                          className="w-full rounded-full text-primary border-primary hover:bg-primary/5"
+                          className="w-full rounded-full text-primary border-primary hover:bg-primary/5 text-xs sm:text-sm h-8 sm:h-10"
                           asChild
                         >
                           <a
@@ -240,8 +240,9 @@ export function ProductCarousel({
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <MessageCircle className="h-4 w-4 mr-2" />
-                            Comprar pelo Whats
+                            <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                            <span className="hidden sm:inline">Comprar pelo Whats</span>
+                            <span className="sm:hidden">WhatsApp</span>
                           </a>
                         </Button>
                       </div>

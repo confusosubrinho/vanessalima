@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, ShoppingBag, Menu, X, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, ChevronUp } from 'lucide-react';
+import { User, ShoppingBag, Menu, X, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, ChevronUp, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -63,15 +63,15 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 bg-background shadow-sm">
       {/* Top bar - Promo */}
-      <div className="bg-primary text-primary-foreground text-sm py-2">
+      <div className="bg-primary text-primary-foreground text-xs sm:text-sm py-1.5 sm:py-2">
         <div className="container-custom flex items-center justify-center">
-          <span className="font-medium">Frete grátis para as compras acima de R$ 399*</span>
+          <span className="font-medium text-center">Frete grátis para compras acima de R$ 399*</span>
         </div>
       </div>
 
       {/* Main header */}
-      <div className="container-custom py-4">
-        <div className="flex items-center gap-6">
+      <div className="container-custom py-2 sm:py-4">
+        <div className="flex items-center gap-2 sm:gap-4 md:gap-6">
           {/* Mobile menu */}
           <Button
             variant="ghost"
@@ -93,7 +93,7 @@ export function Header() {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             <div
               className="hidden md:flex relative"
               onMouseEnter={() => setActiveMegaMenu('atendimento')}
@@ -461,26 +461,44 @@ export function Header() {
       </nav>
 
       {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden bg-background border-t animate-fade-in">
-          <div className="container-custom py-4 space-y-2">
+       {mobileMenuOpen && (
+        <div className="md:hidden bg-background border-t animate-fade-in max-h-[70vh] overflow-y-auto">
+          <div className="container-custom py-3 space-y-1">
             {categories?.map((category) => (
               <Link
                 key={category.id}
                 to={`/categoria/${category.slug}`}
-                className="block py-2 hover:text-primary transition-colors"
+                className="flex items-center gap-3 py-3 px-2 hover:text-primary hover:bg-muted/50 transition-colors rounded-lg"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                {category.name}
+                {category.image_url && (
+                  <img src={category.image_url} alt={category.name} className="w-8 h-8 rounded-full object-cover" />
+                )}
+                <span className="font-medium">{category.name}</span>
               </Link>
             ))}
             <Link
               to="/bijuterias"
-              className="block py-2 text-primary font-medium"
+              className="flex items-center gap-3 py-3 px-2 text-primary font-medium hover:bg-primary/5 rounded-lg"
               onClick={() => setMobileMenuOpen(false)}
             >
+              <Percent className="h-4 w-4" />
               Bijuterias
             </Link>
+            <div className="border-t pt-3 mt-2 space-y-1">
+              <Link to="/conta" className="flex items-center gap-3 py-2 px-2 hover:bg-muted/50 rounded-lg" onClick={() => setMobileMenuOpen(false)}>
+                <User className="h-4 w-4" />
+                <span>Minha Conta</span>
+              </Link>
+              <Link to="/atendimento" className="flex items-center gap-3 py-2 px-2 hover:bg-muted/50 rounded-lg" onClick={() => setMobileMenuOpen(false)}>
+                <HelpCircle className="h-4 w-4" />
+                <span>Atendimento</span>
+              </Link>
+              <Link to="/rastreio" className="flex items-center gap-3 py-2 px-2 hover:bg-muted/50 rounded-lg" onClick={() => setMobileMenuOpen(false)}>
+                <Truck className="h-4 w-4" />
+                <span>Rastrear Pedido</span>
+              </Link>
+            </div>
           </div>
         </div>
       )}

@@ -54,11 +54,11 @@ export function WhatsAppFloat() {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="fixed bottom-6 right-6 z-50 bg-[#25D366] hover:bg-[#20bd5a] text-white p-4 rounded-full shadow-2xl transition-all hover:scale-110 group"
+      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 bg-[#25D366] hover:bg-[#20bd5a] text-white p-3 sm:p-4 rounded-full shadow-2xl transition-all hover:scale-110 group"
       aria-label="Falar no WhatsApp"
     >
-      <MessageCircle className="h-7 w-7" />
-      <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-background text-foreground text-sm px-3 py-2 rounded-lg shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border">
+      <MessageCircle className="h-6 w-6 sm:h-7 sm:w-7" />
+      <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-background text-foreground text-sm px-3 py-2 rounded-lg shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border hidden sm:block">
         Fale conosco!
       </span>
     </a>

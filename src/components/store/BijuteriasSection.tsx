@@ -45,18 +45,18 @@ export function BijuteriasSection() {
   return (
     <section className="py-12">
       <div className="container-custom">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
           <div>
-            <h2 className="text-2xl font-bold">Bijuterias</h2>
-            <p className="text-muted-foreground mt-1">Acessórios para completar seu look</p>
+            <h2 className="text-xl sm:text-2xl font-bold">Bijuterias</h2>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">Acessórios para completar seu look</p>
           </div>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" size="sm" className="sm:size-default">
             <Link to="/bijuterias">Ver todas</Link>
           </Button>
         </div>
 
         {/* Filters */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-2 mb-4 sm:mb-6 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {filters.map(f => (
             <button
               key={f.key}

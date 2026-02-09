@@ -39,14 +39,14 @@ export default function Cart() {
   return (
     <StoreLayout>
       <div className="container-custom py-8">
-        <div className="flex items-center gap-4 mb-8">
+        <div className="flex items-center gap-2 sm:gap-4 mb-6 sm:mb-8">
           <Button variant="ghost" size="icon" asChild>
             <Link to="/">
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">Carrinho de Compras</h1>
-          <span className="text-muted-foreground">({items.length} {items.length === 1 ? 'item' : 'itens'})</span>
+          <h1 className="text-lg sm:text-2xl font-bold">Carrinho de Compras</h1>
+          <span className="text-muted-foreground text-sm">({items.length} {items.length === 1 ? 'item' : 'itens'})</span>
         </div>
 
         {/* Free shipping progress */}
@@ -73,7 +73,7 @@ export default function Cart() {
           {/* Cart items */}
           <div className="lg:col-span-2 space-y-4">
             {items.map((item) => (
-              <div key={item.variant.id} className="flex gap-4 p-4 border rounded-lg">
+              <div key={item.variant.id} className="flex gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg">
                 <Link to={`/produto/${item.product.slug}`}>
                   <img
                     src={item.product.images?.[0]?.url || '/placeholder.svg'}

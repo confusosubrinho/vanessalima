@@ -215,14 +215,14 @@ export default function Checkout() {
       {/* Progress steps */}
       <div className="bg-background border-b">
         <div className="container-custom py-4">
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex items-center justify-center gap-2 sm:gap-4">
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-center">
                 <button
                   id={`btn-checkout-step-${step.id}`}
                   onClick={() => index < currentStepIndex && setCurrentStep(step.id as Step)}
                   disabled={index > currentStepIndex}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full transition-colors ${
+                  className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-colors text-xs sm:text-sm ${
                     currentStep === step.id
                       ? 'bg-primary text-primary-foreground'
                       : index < currentStepIndex
@@ -238,7 +238,7 @@ export default function Checkout() {
                   <span className="hidden sm:inline font-medium">{step.label}</span>
                 </button>
                 {index < steps.length - 1 && (
-                  <ChevronRight className="h-4 w-4 mx-2 text-muted-foreground" />
+                  <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4 mx-1 sm:mx-2 text-muted-foreground" />
                 )}
               </div>
             ))}

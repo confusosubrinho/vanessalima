@@ -39,7 +39,7 @@ import { Button } from '@/components/ui/button';
    return (
      <section className="py-12">
        <div className="container-custom">
-         <h2 className="text-2xl font-bold text-center mb-2">Navegue por Categorias</h2>
+         <h2 className="text-xl sm:text-2xl font-bold text-center mb-2">Navegue por Categorias</h2>
          <div className="w-16 h-1 bg-secondary mx-auto mb-8" />
 
         <div className="relative">
@@ -73,14 +73,14 @@ import { Button } from '@/components/ui/button';
                 to={`/categoria/${category.slug}`}
                 className="group text-center flex-shrink-0 snap-start"
               >
-                <div className="w-[130px] md:w-[150px] h-[130px] md:h-[150px] rounded-full overflow-hidden bg-muted mb-3 mx-auto ring-2 ring-transparent group-hover:ring-primary transition-all">
+                <div className="w-[90px] h-[90px] sm:w-[120px] sm:h-[120px] md:w-[150px] md:h-[150px] rounded-full overflow-hidden bg-muted mb-2 sm:mb-3 mx-auto ring-2 ring-transparent group-hover:ring-primary transition-all">
                   <img
                     src={category.image_url || '/placeholder.svg'}
                     alt={category.name}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                   />
                 </div>
-                <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
+                <h3 className="font-medium text-foreground group-hover:text-primary transition-colors text-xs sm:text-sm md:text-base">
                   {category.name}
                 </h3>
               </Link>
