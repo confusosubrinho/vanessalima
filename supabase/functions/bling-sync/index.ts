@@ -8,6 +8,23 @@ const corsHeaders = {
 
 const BLING_API_URL = "https://bling.com.br/Api/v3";
 const BLING_TOKEN_URL = "https://bling.com.br/Api/v3/oauth/token";
+const BLING_RATE_LIMIT_MS = 400; // 400ms between requests = ~2.5 req/s (limit is 3/s)
+
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
+async function fetchWithRateLimit(url: string, options: RequestInit): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url, options);
+    if (res.status === 429) {
+      const waitMs = (attempt + 1) * 1500; // 1.5s, 3s, 4.5s
+      console.log(`Rate limited, waiting ${waitMs}ms before retry...`);
+      await sleep(waitMs);
+      continue;
+    }
+    return res;
+  }
+  return fetch(url, options); // final attempt
+}
 
 const STANDARD_SIZES = ['33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44'];
 
@@ -463,7 +480,8 @@ async function upsertParentWithVariants(
       let varDetailObj: any = null;
 
       try {
-        const varDetailRes = await fetch(`${BLING_API_URL}/produtos/${v.id}`, { headers });
+        await sleep(BLING_RATE_LIMIT_MS);
+        const varDetailRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${v.id}`, { headers });
         const varDetailJson = await varDetailRes.json();
         varDetailObj = varDetailJson?.data;
         if (varDetailObj) {
@@ -493,7 +511,7 @@ async function upsertParentWithVariants(
       } catch (e) {
         console.error(`Error fetching variation detail ${v.id}:`, e);
         try {
-          const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${v.id}`, { headers });
+          const stockRes = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${v.id}`, { headers });
           const stockJson = await stockRes.json();
           varStock = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
         } catch (_) { /* ignore */ }
@@ -548,7 +566,8 @@ async function upsertParentWithVariants(
     let varDetailObj: any = null;
 
     try {
-      const varDetailRes = await fetch(`${BLING_API_URL}/produtos/${vi.blingId}`, { headers });
+      await sleep(BLING_RATE_LIMIT_MS);
+      const varDetailRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${vi.blingId}`, { headers });
       const varDetailJson = await varDetailRes.json();
       varDetailObj = varDetailJson?.data;
       if (varDetailObj) {
@@ -575,7 +594,7 @@ async function upsertParentWithVariants(
     } catch (e) {
       console.error(`Error fetching listed variation ${vi.blingId}:`, e);
       try {
-        const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${vi.blingId}`, { headers });
+        const stockRes = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${vi.blingId}`, { headers });
         const stockJson = await stockRes.json();
         varStock = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
       } catch (_) { /* ignore */ }
@@ -609,7 +628,7 @@ async function upsertParentWithVariants(
   if (variantCount === 0) {
     let stockQty = 0;
     try {
-      const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${parentBlingId}`, { headers });
+      const stockRes = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${parentBlingId}`, { headers });
       const stockJson = await stockRes.json();
       stockQty = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
     } catch (_) { /* ignore */ }
@@ -692,7 +711,8 @@ async function syncProducts(supabase: any, token: string) {
       if (page === 1) console.log(`Filtering by Bling store ID: ${blingStoreId}`);
     }
     console.log(`Fetching Bling products page ${page}...`);
-    const res = await fetch(url, { headers });
+    await sleep(BLING_RATE_LIMIT_MS);
+    const res = await fetchWithRateLimit(url, { headers });
     const json = await res.json();
 
     if (!res.ok) {
@@ -781,8 +801,8 @@ async function syncProducts(supabase: any, token: string) {
     processedParentIds.add(parentBlingId);
 
     try {
-      // Fetch parent product detail
-      const detailRes = await fetch(`${BLING_API_URL}/produtos/${parentBlingId}`, { headers });
+      await sleep(BLING_RATE_LIMIT_MS);
+      const detailRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${parentBlingId}`, { headers });
       const detailJson = await detailRes.json();
       let parentDetail = detailJson?.data;
 
@@ -790,7 +810,8 @@ async function syncProducts(supabase: any, token: string) {
         // Parent not found in API - might have been deleted
         // If we have variation items, try to construct from first variation
         if (group.variationItems.length > 0) {
-          const firstVarRes = await fetch(`${BLING_API_URL}/produtos/${group.variationItems[0].blingId}`, { headers });
+          await sleep(BLING_RATE_LIMIT_MS);
+          const firstVarRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${group.variationItems[0].blingId}`, { headers });
           const firstVarJson = await firstVarRes.json();
           const firstVarDetail = firstVarJson?.data;
 
@@ -819,7 +840,8 @@ async function syncProducts(supabase: any, token: string) {
         const actualParentId = parentDetail.produtoPai?.id || parentDetail.idProdutoPai;
         if (actualParentId && !processedParentIds.has(actualParentId)) {
           // Redirect: fetch actual parent and process it instead
-          const actualRes = await fetch(`${BLING_API_URL}/produtos/${actualParentId}`, { headers });
+          await sleep(BLING_RATE_LIMIT_MS);
+          const actualRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${actualParentId}`, { headers });
           const actualJson = await actualRes.json();
           if (actualJson?.data && actualJson.data.formato !== "V") {
             parentDetail = actualJson.data;
@@ -886,7 +908,8 @@ async function syncProducts(supabase: any, token: string) {
     for (const prod of blingProducts) {
       if (processedParentIds.has(prod.bling_product_id)) continue;
       try {
-        const checkRes = await fetch(`${BLING_API_URL}/produtos/${prod.bling_product_id}`, { headers });
+        await sleep(BLING_RATE_LIMIT_MS);
+        const checkRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${prod.bling_product_id}`, { headers });
         const checkJson = await checkRes.json();
         if (checkJson?.data?.formato === "V") {
           // This is a variation stored as a product - delete it
@@ -936,7 +959,8 @@ async function syncStock(supabase: any, token: string) {
     const ids = batch.map((p: any) => p.bling_product_id);
     const idsParam = ids.map((id: number) => `idsProdutos[]=${id}`).join("&");
 
-    const res = await fetch(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
+    await sleep(BLING_RATE_LIMIT_MS);
+    const res = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
     const json = await res.json();
 
     if (!res.ok) {
