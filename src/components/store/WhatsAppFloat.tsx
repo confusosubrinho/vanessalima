@@ -1,19 +1,21 @@
 import { MessageCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-
-const WHATSAPP_NUMBER = '5542991120205';
+import { useStoreSettings } from '@/hooks/useProducts';
 
 function getMessageForRoute(pathname: string): string {
   if (pathname.startsWith('/produto/')) {
-    const slug = pathname.replace('/produto/', '');
-    return `Olá! Estou vendo o produto ${slug} no site e gostaria de mais informações.`;
+    const slug = pathname.replace('/produto/', '').replace(/-/g, ' ');
+    return `Olá! Estou vendo o produto "${slug}" no site e gostaria de mais informações.`;
   }
-  if (pathname === '/carrinho' || pathname === '/checkout') {
+  if (pathname === '/carrinho') {
+    return 'Olá! Tenho itens no carrinho e gostaria de ajuda para finalizar minha compra.';
+  }
+  if (pathname === '/checkout') {
     return 'Olá! Estou finalizando uma compra e preciso de ajuda.';
   }
   if (pathname.startsWith('/categoria/')) {
-    const cat = pathname.replace('/categoria/', '');
-    return `Olá! Estou navegando na categoria ${cat} e gostaria de ajuda para escolher.`;
+    const cat = pathname.replace('/categoria/', '').replace(/-/g, ' ');
+    return `Olá! Estou navegando na categoria "${cat}" e gostaria de ajuda para escolher.`;
   }
   if (pathname === '/bijuterias') {
     return 'Olá! Estou olhando as bijuterias e gostaria de saber mais!';
@@ -30,17 +32,22 @@ function getMessageForRoute(pathname: string): string {
   if (pathname === '/trocas') {
     return 'Olá! Gostaria de fazer uma troca ou devolução.';
   }
-  return 'Olá! Estou visitando o site da Vanessa Lima Shoes e gostaria de mais informações.';
+  if (pathname === '/pedido-confirmado') {
+    return 'Olá! Acabei de fazer um pedido e gostaria de confirmar os detalhes.';
+  }
+  return 'Olá! Estou visitando a loja e gostaria de mais informações.';
 }
 
 export function WhatsAppFloat() {
   const location = useLocation();
+  const { data: settings } = useStoreSettings();
   
-  // Don't show on admin pages or checkout
-  if (location.pathname.startsWith('/admin') || location.pathname === '/checkout') return null;
+  // Don't show on admin pages
+  if (location.pathname.startsWith('/admin')) return null;
 
+  const whatsappNumber = settings?.contact_whatsapp?.replace(/\D/g, '') || '5542991120205';
   const message = getMessageForRoute(location.pathname);
-  const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+  const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
   return (
     <a
