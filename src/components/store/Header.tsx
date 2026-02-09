@@ -72,13 +72,13 @@ export function Header() {
       {/* Main header */}
       <div className="container-custom py-2 sm:py-4">
         <div className="flex items-center gap-2 sm:gap-4 md:gap-6">
-          {/* Mobile menu - Sheet sidebar */}
+          {/* Mobile: hamburger left */}
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="md:hidden"
+                className="md:hidden flex-shrink-0"
               >
                 <Menu className="h-6 w-6" />
               </Button>
@@ -90,7 +90,6 @@ export function Header() {
                 </SheetTitle>
               </SheetHeader>
               <div className="flex-1 overflow-y-auto py-2">
-                {/* Category links */}
                 <div className="space-y-0.5 px-2">
                   {mainCategories.map((category) => (
                     <Link
@@ -106,8 +105,6 @@ export function Header() {
                     </Link>
                   ))}
                 </div>
-
-                {/* Bijuterias - black background */}
                 <div className="px-2 mt-2">
                   <Link
                     to="/bijuterias"
@@ -118,8 +115,6 @@ export function Header() {
                     Bijuterias
                   </Link>
                 </div>
-
-                {/* Divider + Account links */}
                 <div className="border-t mt-4 pt-3 px-2 space-y-0.5">
                   <Link to="/conta" className="flex items-center gap-3 py-3 px-3 hover:bg-muted rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
                     <User className="h-4 w-4 text-muted-foreground" />
@@ -139,8 +134,6 @@ export function Header() {
                   </Link>
                 </div>
               </div>
-
-              {/* WhatsApp footer */}
               <div className="border-t p-4">
                 <a
                   href="https://wa.me/5542991120205"
@@ -155,8 +148,8 @@ export function Header() {
             </SheetContent>
           </Sheet>
 
-          {/* Logo */}
-          <Link to="/" className="flex-shrink-0">
+          {/* Logo - centered on mobile */}
+          <Link to="/" className="flex-shrink-0 md:flex-shrink-0 flex-1 md:flex-none flex justify-center md:justify-start">
             <img src={logo} alt="Vanessa Lima Shoes" className="h-10 md:h-14" />
           </Link>
 
@@ -216,24 +209,25 @@ export function Header() {
                   )}
                 </Button>
               </SheetTrigger>
-              <SheetContent className="w-full sm:max-w-lg flex flex-col">
-                <SheetHeader>
+              <SheetContent className="w-[85vw] max-w-lg flex flex-col p-0">
+                <SheetHeader className="p-4 pb-0">
                   <SheetTitle>Carrinho de Compras</SheetTitle>
                 </SheetHeader>
                 
-                <div className="flex-1 flex flex-col min-h-0">
-                  {items.length === 0 ? (
-                    <div className="text-center py-8">
-                      <ShoppingBag className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">Seu carrinho está vazio</p>
-                      <Button asChild className="mt-4">
-                        <Link to="/">Continuar comprando</Link>
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
+                {items.length === 0 ? (
+                  <div className="text-center py-8 px-4">
+                    <ShoppingBag className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Seu carrinho está vazio</p>
+                    <Button asChild className="mt-4">
+                      <Link to="/">Continuar comprando</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Scrollable area: everything except CTA buttons */}
+                    <div className="flex-1 overflow-y-auto px-4 pb-2">
                       {/* Free shipping progress bar */}
-                      <div className="bg-muted/50 rounded-lg p-3 mb-4">
+                      <div className="bg-muted/50 rounded-lg p-3 mb-4 mt-2">
                         {hasFreeShipping ? (
                           <p className="text-sm text-primary font-medium text-center">
                             🎉 Parabéns! Você ganhou frete grátis!
@@ -253,49 +247,39 @@ export function Header() {
                         )}
                       </div>
 
-                      {/* Cart items - scrollable */}
-                      <div className="flex-1 overflow-y-auto space-y-3 pr-2 min-h-0">
+                      {/* Cart items */}
+                      <div className="space-y-3">
                         {items.map((item) => (
                           <div key={item.variant.id} className="flex gap-3 border-b pb-3">
                             <img
                               src={item.product.images?.[0]?.url || '/placeholder.svg'}
                               alt={item.product.name}
-                              className="w-20 h-20 object-cover rounded-lg"
+                              className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
                             />
-                            <div className="flex-1">
-                              <div className="flex justify-between">
-                                <div>
-                                  <p className="font-medium text-sm">{item.product.name}</p>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex justify-between gap-1">
+                                <div className="min-w-0">
+                                  <p className="font-medium text-sm line-clamp-1">{item.product.name}</p>
                                   <p className="text-xs text-muted-foreground">
-                                    Tamanho: {item.variant.size}
+                                    Tam: {item.variant.size}
                                   </p>
                                 </div>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
                                   onClick={() => removeItem(item.variant.id)}
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
-                              <div className="flex items-center justify-between mt-2">
+                              <div className="flex items-center justify-between mt-1.5">
                                 <div className="flex items-center border rounded-lg">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() => updateQuantity(item.variant.id, item.quantity - 1)}
-                                  >
+                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateQuantity(item.variant.id, item.quantity - 1)}>
                                     <Minus className="h-3 w-3" />
                                   </Button>
-                                  <span className="w-6 text-center text-sm">{item.quantity}</span>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() => updateQuantity(item.variant.id, item.quantity + 1)}
-                                  >
+                                  <span className="w-5 text-center text-xs">{item.quantity}</span>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateQuantity(item.variant.id, item.quantity + 1)}>
                                     <Plus className="h-3 w-3" />
                                   </Button>
                                 </div>
@@ -312,12 +296,11 @@ export function Header() {
                       <div className="pt-3 border-t">
                         <CartProductSuggestions compact />
                       </div>
-                      {/* Footer section - fixed */}
-                      <div className="border-t pt-4 space-y-3 mt-auto">
-                        {/* Shipping Calculator */}
+
+                      {/* Shipping & Coupon */}
+                      <div className="border-t pt-3 mt-3 space-y-3">
                         <ShippingCalculator compact />
                         
-                        {/* Coupon - Collapsible */}
                         <Collapsible open={couponOpen} onOpenChange={setCouponOpen}>
                           <CollapsibleTrigger asChild>
                             <button className="flex items-center justify-between w-full p-2 text-sm font-medium hover:bg-muted/50 rounded-lg transition-colors">
@@ -332,41 +315,43 @@ export function Header() {
                             <CouponInput compact />
                           </CollapsibleContent>
                         </Collapsible>
-                        
-                        {/* Totals */}
-                        <div className="pt-3 border-t space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Subtotal:</span>
-                            <span>{formatPrice(subtotal)}</span>
-                          </div>
-                          {discount > 0 && (
-                            <div className="flex justify-between text-sm text-primary">
-                              <span>Desconto:</span>
-                              <span>-{formatPrice(discount)}</span>
-                            </div>
-                          )}
-                          {selectedShipping && (
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Frete ({selectedShipping.name}):</span>
-                              <span>{selectedShipping.price === 0 ? 'Grátis' : formatPrice(selectedShipping.price)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                            <span>Total:</span>
-                            <span>{formatPrice(total)}</span>
-                          </div>
-                        </div>
-                        
-                        <Button asChild className="w-full">
-                          <Link to="/checkout" onClick={() => setIsCartOpen(false)}>Finalizar Compra</Link>
-                        </Button>
-                        <Button asChild variant="outline" className="w-full">
-                          <Link to="/carrinho" onClick={() => setIsCartOpen(false)}>Ver Carrinho Completo</Link>
-                        </Button>
                       </div>
-                    </>
-                  )}
-                </div>
+                    </div>
+
+                    {/* Fixed bottom: totals + buttons */}
+                    <div className="border-t px-4 py-3 space-y-2 bg-background">
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal:</span>
+                          <span>{formatPrice(subtotal)}</span>
+                        </div>
+                        {discount > 0 && (
+                          <div className="flex justify-between text-sm text-primary">
+                            <span>Desconto:</span>
+                            <span>-{formatPrice(discount)}</span>
+                          </div>
+                        )}
+                        {selectedShipping && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Frete:</span>
+                            <span>{selectedShipping.price === 0 ? 'Grátis' : formatPrice(selectedShipping.price)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-base font-bold pt-1 border-t">
+                          <span>Total:</span>
+                          <span>{formatPrice(total)}</span>
+                        </div>
+                      </div>
+                      
+                      <Button asChild className="w-full" size="sm">
+                        <Link to="/checkout" onClick={() => setIsCartOpen(false)}>Finalizar Compra</Link>
+                      </Button>
+                      <Button asChild variant="outline" className="w-full" size="sm">
+                        <Link to="/carrinho" onClick={() => setIsCartOpen(false)}>Ver Carrinho Completo</Link>
+                      </Button>
+                    </div>
+                  </>
+                )}
               </SheetContent>
             </Sheet>
           </div>

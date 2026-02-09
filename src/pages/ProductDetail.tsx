@@ -142,7 +142,6 @@ export default function ProductDetail() {
     const variant = variants.find(v => v.size === selectedSize);
     if (!variant) return;
     addItem(product, variant, quantity);
-    toast({ title: 'Produto adicionado ao carrinho!', description: `${product.name} - Tam. ${selectedSize}` });
   };
 
   const characteristics = [

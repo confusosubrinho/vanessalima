@@ -68,12 +68,12 @@ export function CartProductSuggestions({ compact = false }: CartProductSuggestio
         )}
       </div>
 
-      <div className={`grid ${compact ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-4'} gap-2`}>
+      <div className={compact ? 'flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 snap-x' : `grid grid-cols-2 md:grid-cols-4 gap-2`}>
         {suggested.map(product => {
           const img = product.images?.find(i => i.is_primary) || product.images?.[0];
           const price = Number(product.sale_price || product.base_price);
           return (
-            <div key={product.id} className="border rounded-lg overflow-hidden bg-background group">
+            <div key={product.id} className={`border rounded-lg overflow-hidden bg-background group ${compact ? 'flex-shrink-0 w-[120px] snap-start' : ''}`}>
               <Link to={`/produto/${product.slug}`} className="block">
                 <div className="aspect-square overflow-hidden bg-muted">
                   <img
@@ -83,14 +83,14 @@ export function CartProductSuggestions({ compact = false }: CartProductSuggestio
                   />
                 </div>
               </Link>
-              <div className="p-2">
-                <p className="text-xs font-medium line-clamp-1">{product.name}</p>
-                <p className="text-xs font-bold text-primary mt-0.5">{formatPrice(price)}</p>
+              <div className="p-1.5">
+                <p className="text-[10px] font-medium line-clamp-1">{product.name}</p>
+                <p className="text-[10px] font-bold text-primary mt-0.5">{formatPrice(price)}</p>
                 <button
                   onClick={() => setSelectedProduct(product)}
-                  className="w-full mt-1.5 flex items-center justify-center gap-1 text-xs bg-primary text-primary-foreground py-1.5 rounded hover:bg-primary/90 transition-colors"
+                  className="w-full mt-1 flex items-center justify-center gap-1 text-[10px] bg-primary text-primary-foreground py-1 rounded hover:bg-primary/90 transition-colors"
                 >
-                  <ShoppingBag className="h-3 w-3" />
+                  <ShoppingBag className="h-2.5 w-2.5" />
                   Adicionar
                 </button>
               </div>
