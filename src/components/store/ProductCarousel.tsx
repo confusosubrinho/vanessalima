@@ -170,7 +170,7 @@ export function ProductCarousel({
                 const installmentPrice = (currentPrice / 12).toFixed(2);
 
                 return (
-                  <div key={product.id} className={`flex-shrink-0 w-[200px] sm:w-[240px] md:w-[280px] lg:w-[300px] snap-start group ${cardBg ? 'bg-background rounded-xl shadow-sm border p-2 sm:p-3' : ''}`}>
+                  <div key={product.id} className={`flex-shrink-0 w-[200px] sm:w-[240px] md:w-[280px] lg:w-[300px] snap-start group ${cardBg ? 'bg-background rounded-xl shadow-sm hover:shadow-md transition-shadow border p-2 sm:p-3' : ''}`}>
                     <Link to={`/produto/${product.slug}`} className="block">
                       <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
                         <img
@@ -222,38 +222,7 @@ export function ProductCarousel({
                         </p>
                       </div>
 
-                      {/* Size variants */}
-                      {(() => {
-                        const sizes = product.variants
-                          ?.filter(v => v.is_active)
-                          .map(v => ({ size: v.size, inStock: v.stock_quantity > 0 }))
-                          .filter((v, i, arr) => arr.findIndex(a => a.size === v.size) === i)
-                          .sort((a, b) => {
-                            const numA = parseFloat(a.size);
-                            const numB = parseFloat(b.size);
-                            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-                            return a.size.localeCompare(b.size);
-                          }) || [];
-                        return sizes.length > 0 ? (
-                          <div>
-                            <p className={`text-xs mb-1.5 font-medium ${isDark && !cardBg ? 'text-secondary-foreground/70' : 'text-muted-foreground'}`}>Tamanho</p>
-                            <div className="flex gap-1 justify-center overflow-x-auto touch-pan-x cursor-grab active:cursor-grabbing" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
-                              {sizes.map(({ size, inStock }) => (
-                                <span
-                                  key={size}
-                                  className={`inline-flex items-center justify-center min-w-[28px] h-7 px-1.5 text-xs border rounded flex-shrink-0 ${
-                                    inStock
-                                      ? 'border-border text-foreground bg-background'
-                                      : 'border-border/50 text-muted-foreground/50 line-through bg-muted/50'
-                                  }`}
-                                >
-                                  {size}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
+                      {/* Sizes removed for cleaner cards */}
 
                       <div className="space-y-1.5 sm:space-y-2">
                         <Button

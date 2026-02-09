@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Product } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,6 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const sizeScrollRef = useRef<HTMLDivElement>(null);
   const [variantModalOpen, setVariantModalOpen] = useState(false);
   const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
   const { toast } = useToast();
@@ -23,61 +22,11 @@ export function ProductCard({ product }: ProductCardProps) {
   const discountPercentage = hasDiscount
     ? Math.round((1 - Number(product.sale_price) / Number(product.base_price)) * 100)
     : 0;
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
-  };
-
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
   const currentPrice = Number(product.sale_price || product.base_price);
   const pixPrice = currentPrice * 0.95;
-
-  const sizes = product.variants
-    ?.filter(v => v.is_active)
-    .map(v => ({ size: v.size, inStock: v.stock_quantity > 0 }))
-    .filter((v, i, arr) => arr.findIndex(a => a.size === v.size) === i)
-    .sort((a, b) => {
-      const numA = parseFloat(a.size);
-      const numB = parseFloat(b.size);
-      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-      return a.size.localeCompare(b.size);
-    }) || [];
-
   const hasVariants = (product.variants?.filter(v => v.is_active)?.length || 0) > 0;
-
-  useEffect(() => {
-    const el = sizeScrollRef.current;
-    if (!el) return;
-    let isDown = false, startX = 0, sl = 0;
-    const onDown = (e: TouchEvent | MouseEvent) => {
-      isDown = true;
-      const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
-      startX = pageX - el.offsetLeft;
-      sl = el.scrollLeft;
-      if ('preventDefault' in e && !('touches' in e)) { e.preventDefault(); e.stopPropagation(); }
-    };
-    const onUp = () => { isDown = false; };
-    const onMove = (e: TouchEvent | MouseEvent) => {
-      if (!isDown) return;
-      const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
-      if (!('touches' in e)) e.preventDefault();
-      el.scrollLeft = sl - (pageX - el.offsetLeft - startX) * 1.5;
-    };
-    el.addEventListener('mousedown', onDown);
-    el.addEventListener('touchstart', onDown, { passive: true });
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('touchend', onUp);
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('touchmove', onMove, { passive: true });
-    return () => {
-      el.removeEventListener('mousedown', onDown);
-      el.removeEventListener('touchstart', onDown);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('touchend', onUp);
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('touchmove', onMove);
-    };
-  }, []);
-
   const handleBuyClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -99,7 +48,7 @@ export function ProductCard({ product }: ProductCardProps) {
     <>
       <Link
         to={`/produto/${product.slug}`}
-        className="group card-product block"
+        className="group card-product block rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-background border border-border/40"
         id={`product-card-${product.slug}`}
       >
         <div className="relative aspect-square overflow-hidden bg-muted">
@@ -147,42 +96,22 @@ export function ProductCard({ product }: ProductCardProps) {
           )}
         </div>
 
-        <div className="p-4">
+        <div className="p-3">
           <h3 className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-2 text-sm">
             {product.name}
           </h3>
 
-          <div className="mt-2 space-y-1">
+          <div className="mt-2 space-y-0.5">
             {hasDiscount ? (
               <>
-                <p className="price-original">{formatPrice(Number(product.base_price))}</p>
-                <p className="price-sale text-lg">{formatPrice(Number(product.sale_price))}</p>
+                <p className="price-original text-xs">{formatPrice(Number(product.base_price))}</p>
+                <p className="price-sale text-base font-bold">{formatPrice(Number(product.sale_price))}</p>
               </>
             ) : (
-              <p className="price-current text-lg font-bold">{formatPrice(Number(product.base_price))}</p>
+              <p className="price-current text-base font-bold">{formatPrice(Number(product.base_price))}</p>
             )}
-            <p className="text-xs text-muted-foreground">{formatPrice(pixPrice)} via Pix</p>
+            <p className="text-[11px] text-muted-foreground">{formatPrice(pixPrice)} via Pix</p>
           </div>
-
-          {sizes.length > 0 && (
-            <div className="mt-3">
-              <p className="text-xs text-muted-foreground mb-1.5 font-medium">Tamanho</p>
-              <div ref={sizeScrollRef} className="flex gap-1 overflow-x-auto touch-pan-x cursor-grab active:cursor-grabbing select-none" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
-                {sizes.map(({ size, inStock }) => (
-                  <span
-                    key={size}
-                    className={`inline-flex items-center justify-center min-w-[28px] h-7 px-1.5 text-xs border rounded flex-shrink-0 ${
-                      inStock
-                        ? 'border-border text-foreground bg-background'
-                        : 'border-border/50 text-muted-foreground/50 line-through bg-muted/50'
-                    }`}
-                  >
-                    {size}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </Link>
 

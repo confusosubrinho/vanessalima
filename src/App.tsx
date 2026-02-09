@@ -37,6 +37,7 @@ import Orders from "./pages/admin/Orders";
 import Customers from "./pages/admin/Customers";
 import Coupons from "./pages/admin/Coupons";
 import Banners from "./pages/admin/Banners";
+import Personalization from "./pages/admin/Personalization";
 import HighlightBanners from "./pages/admin/HighlightBanners";
 import Settings from "./pages/admin/Settings";
 import CodeSettings from "./pages/admin/CodeSettings";
@@ -107,6 +108,7 @@ const App = () => (
               <Route path="clientes" element={<Customers />} />
               <Route path="cupons" element={<Coupons />} />
               <Route path="banners" element={<Banners />} />
+              <Route path="personalizacao" element={<Personalization />} />
               <Route path="banners-destaque" element={<HighlightBanners />} />
               <Route path="integracoes" element={<Integrations />} />
               <Route path="vendas" element={<SalesDashboard />} />

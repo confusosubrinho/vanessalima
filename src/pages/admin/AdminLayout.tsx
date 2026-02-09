@@ -73,7 +73,7 @@ const menuItems: MenuItem[] = [
     icon: Tags,
     children: [
       { title: 'Cupons', url: '/admin/cupons' },
-      { title: 'Banners Principais', url: '/admin/banners' },
+      { title: 'Personalização', url: '/admin/personalizacao' },
       { title: 'Banners Destaque', url: '/admin/banners-destaque' },
       { title: 'Email Automações', url: '/admin/email-automations' },
     ]

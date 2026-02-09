@@ -4,6 +4,7 @@ import { BannerCarousel } from '@/components/store/BannerCarousel';
 import { FeaturesBar } from '@/components/store/FeaturesBar';
 import { CategoryGrid } from '@/components/store/CategoryGrid';
 import { ProductCarousel } from '@/components/store/ProductCarousel';
+import { ProductGrid } from '@/components/store/ProductGrid';
 import { HighlightBanners } from '@/components/store/HighlightBanners';
 import { InstagramFeed } from '@/components/store/InstagramFeed';
 import { ShopBySize } from '@/components/store/ShopBySize';
@@ -21,10 +22,10 @@ const Index = () => {
   }, []);
 
   // Filter products on sale
-  const saleProducts = allProducts?.filter(p => p.sale_price && p.sale_price < p.base_price) || [];
+  const saleProducts = allProducts?.filter(p => p.sale_price && p.sale_price < p.base_price).slice(0, 10) || [];
   
-  // Filter new products
-  const newProducts = allProducts?.filter(p => p.is_new) || [];
+  // Filter new products - limit to 8 for 2x4 grid
+  const newProducts = allProducts?.filter(p => p.is_new).slice(0, 8) || [];
 
   return (
     <StoreLayout>
@@ -34,7 +35,7 @@ const Index = () => {
       
       {/* Mais Vendidos section */}
       <ProductCarousel
-        products={featuredProducts || []}
+        products={(featuredProducts || []).slice(0, 10)}
         title="Mais Vendidos"
         subtitle="Os modelos mais amados pelas nossas clientes"
         showViewAll
@@ -64,8 +65,8 @@ const Index = () => {
         />
       )}
 
-      {/* New arrivals */}
-      <ProductCarousel
+      {/* New arrivals - 2x4 grid */}
+      <ProductGrid
         products={newProducts}
         title="Novidades"
         subtitle="Acabou de chegar na loja"
