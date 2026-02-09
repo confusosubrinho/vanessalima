@@ -158,6 +158,20 @@ function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+// Generate a deterministic hex color from a string (for unknown color names)
+function generateHexFromString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const r = Math.abs((hash >> 0) & 0xFF);
+  const g = Math.abs((hash >> 8) & 0xFF);
+  const b = Math.abs((hash >> 16) & 0xFF);
+  // Ensure colors aren't too dark or too light
+  const clamp = (v: number) => Math.min(220, Math.max(40, v));
+  return `#${clamp(r).toString(16).padStart(2, '0')}${clamp(g).toString(16).padStart(2, '0')}${clamp(b).toString(16).padStart(2, '0')}`;
+}
+
 function normalizeSize(raw: string): string {
   if (!raw) return "Único";
   const trimmed = raw.trim();
@@ -244,13 +258,14 @@ function parseVariationAttributes(nome: string): { size: string; color: string |
     color = extractColorFromName(nome);
   }
   
-  // Resolve color hex
+  // Resolve color hex - generate deterministic hex for unknown colors
   let colorHex: string | null = null;
   if (color) {
     const normalizedColor = color.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    colorHex = COLOR_MAP[normalizedColor] || null;
+    colorHex = COLOR_MAP[normalizedColor] || COLOR_MAP[color.toLowerCase()] || null;
     if (!colorHex) {
-      colorHex = COLOR_MAP[color.toLowerCase()] || null;
+      // Generate a deterministic hex from the color name so it's consistent
+      colorHex = generateHexFromString(normalizedColor);
     }
   }
   
@@ -281,7 +296,7 @@ function extractAttributesFromBlingVariation(
       } else if (attrName === "cor" || attrName === "color" || attrName === "colour") {
         parsed.color = attrValue.charAt(0).toUpperCase() + attrValue.slice(1);
         const normalizedColor = attrValue.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        parsed.colorHex = COLOR_MAP[normalizedColor] || COLOR_MAP[attrValue.toLowerCase()] || null;
+        parsed.colorHex = COLOR_MAP[normalizedColor] || COLOR_MAP[attrValue.toLowerCase()] || generateHexFromString(normalizedColor);
       }
     }
     // If we got at least something from atributos, use it
@@ -319,7 +334,7 @@ function extractAttributesFromBlingVariation(
     if (colorFromName) {
       parsed.color = colorFromName;
       const normalizedColor = colorFromName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      parsed.colorHex = COLOR_MAP[normalizedColor] || COLOR_MAP[colorFromName.toLowerCase()] || null;
+      parsed.colorHex = COLOR_MAP[normalizedColor] || COLOR_MAP[colorFromName.toLowerCase()] || generateHexFromString(normalizedColor);
     }
   }
   
@@ -417,12 +432,17 @@ async function upsertParentWithVariants(
   parentDetail: any,
   parentBlingId: number,
   variationItems: Array<{ blingId: number; name: string; attributes: string }>,
-  getCategoryId: (name: string) => Promise<string | null>
+  getCategoryId: (name: string) => Promise<string | null>,
+  resolveBlingCategory: (blingCatId: number | null) => Promise<string>
 ): Promise<{ imported: boolean; updated: boolean; variantCount: number; error?: string }> {
   const slug = slugify(parentDetail.nome || `produto-${parentBlingId}`);
   const basePrice = parentDetail.preco || 0;
   const salePrice = parentDetail.precoPromocional && parentDetail.precoPromocional < basePrice ? parentDetail.precoPromocional : null;
-  const categoryId = await getCategoryId(parentDetail.categoria?.descricao || "");
+  
+  // Resolve Bling category ID to name, then find/create in our DB
+  const blingCatId = parentDetail.categoria?.id || null;
+  const categoryName = await resolveBlingCategory(blingCatId);
+  const categoryId = await getCategoryId(categoryName);
 
   const { data: existing } = await supabase
     .from("products")
@@ -719,6 +739,26 @@ async function syncProducts(supabase: any, token: string, batchLimit: number = 0
     return id;
   }
 
+  // Bling category ID → name resolver (caches results)
+  const blingCategoryCache = new Map<number, string>();
+  async function resolveBlingCategory(blingCatId: number | null): Promise<string> {
+    if (!blingCatId) return "";
+    if (blingCategoryCache.has(blingCatId)) return blingCategoryCache.get(blingCatId)!;
+    try {
+      await sleep(BLING_RATE_LIMIT_MS);
+      const res = await fetchWithRateLimit(`${BLING_API_URL}/categorias/produtos/${blingCatId}`, { headers });
+      const json = await res.json();
+      const name = json?.data?.descricao || json?.data?.nome || "";
+      blingCategoryCache.set(blingCatId, name);
+      console.log(`Bling category ${blingCatId} → "${name}"`);
+      return name;
+    } catch (e) {
+      console.error(`Error fetching Bling category ${blingCatId}:`, e);
+      blingCategoryCache.set(blingCatId, "");
+      return "";
+    }
+  }
+
   // ─── PHASE 1: Collect all items from Bling listing ───
   interface ListingItem {
     id: number;
@@ -998,7 +1038,7 @@ async function syncProducts(supabase: any, token: string, batchLimit: number = 0
 
       const result = await upsertParentWithVariants(
         supabase, headers, parentDetail, parentDetail.id || parentBlingId,
-        group.variationItems, getCategoryId
+        group.variationItems, getCategoryId, resolveBlingCategory
       );
 
       if (result.error) {
