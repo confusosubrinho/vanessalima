@@ -4,55 +4,27 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCart } from '@/contexts/CartContext';
 import { ShippingOption } from '@/types/database';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ShippingCalculatorProps {
   compact?: boolean;
+  products?: Array<{ weight?: number; width?: number; height?: number; depth?: number; quantity: number }>;
 }
 
-// Simulated shipping options based on CEP
-const getShippingOptions = (cep: string): ShippingOption[] => {
-  const region = cep.substring(0, 2);
-  
-  // Simulate different prices based on region
-  const basePrice = parseInt(region) > 50 ? 25 : 18;
-  
-  return [
-    {
-      name: 'PAC',
-      price: basePrice,
-      deadline: '8 a 12 dias úteis',
-      company: 'Correios'
-    },
-    {
-      name: 'SEDEX',
-      price: basePrice + 15,
-      deadline: '3 a 5 dias úteis',
-      company: 'Correios'
-    },
-    {
-      name: 'Transportadora',
-      price: basePrice + 5,
-      deadline: '5 a 8 dias úteis',
-      company: 'JadLog'
-    }
-  ];
-};
-
-export function ShippingCalculator({ compact = false }: ShippingCalculatorProps) {
-  const { shippingZip, setShippingZip, selectedShipping, setSelectedShipping, subtotal } = useCart();
+export function ShippingCalculator({ compact = false, products }: ShippingCalculatorProps) {
+  const { shippingZip, setShippingZip, selectedShipping, setSelectedShipping, subtotal, items } = useCart();
   const [localCep, setLocalCep] = useState(shippingZip);
   const [isLoading, setIsLoading] = useState(false);
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [hasCalculated, setHasCalculated] = useState(false);
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(399);
 
   // Load shipping options if there's already a saved CEP
   useEffect(() => {
     if (shippingZip && shippingZip.replace(/\D/g, '').length === 8 && !hasCalculated) {
-      const options = getShippingOptions(shippingZip.replace(/\D/g, ''));
-      setShippingOptions(options);
-      setHasCalculated(true);
+      calculateShipping(shippingZip.replace(/\D/g, ''));
     }
-  }, [shippingZip, hasCalculated]);
+  }, [shippingZip]);
 
   const formatCep = (value: string) => {
     const numbers = value.replace(/\D/g, '');
@@ -67,28 +39,73 @@ export function ShippingCalculator({ compact = false }: ShippingCalculatorProps)
     }).format(price);
   };
 
-  const handleCalculate = async () => {
-    const cleanCep = localCep.replace(/\D/g, '');
-    if (cleanCep.length !== 8) return;
-
+  const calculateShipping = async (cleanCep: string) => {
     setIsLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const options = getShippingOptions(cleanCep);
-    setShippingOptions(options);
-    setShippingZip(localCep);
-    setHasCalculated(true);
-    setIsLoading(false);
+    try {
+      // Build products payload from cart items
+      const productsList = items.map(item => ({
+        weight: item.product.weight || 0.3,
+        width: item.product.width || 11,
+        height: item.product.height || 2,
+        depth: item.product.depth || 16,
+        quantity: item.quantity,
+      }));
 
-    // Check for free shipping
-    if (subtotal >= 399) {
-      setSelectedShipping({ ...options[0], price: 0 });
+      const { data, error } = await supabase.functions.invoke('calculate-shipping', {
+        body: {
+          postal_code_to: cleanCep,
+          products: productsList,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        console.error('Shipping API error:', data.error);
+        // Fallback to basic options if API fails
+        setShippingOptions([
+          { name: 'Envio padrão', price: 18, deadline: '8 a 12 dias úteis', company: 'Correios' },
+        ]);
+      } else {
+        const options: ShippingOption[] = (data?.options || []).map((opt: any) => ({
+          name: opt.name,
+          price: opt.price,
+          deadline: opt.deadline,
+          company: opt.company,
+        }));
+        setShippingOptions(options);
+        setFreeShippingThreshold(data?.free_shipping_threshold || 399);
+      }
+
+      setShippingZip(formatCep(cleanCep));
+      setHasCalculated(true);
+
+      // Auto-select free shipping if eligible
+      if (data?.free_shipping_threshold && subtotal >= data.free_shipping_threshold) {
+        const cheapest = (data?.options || []).sort((a: any, b: any) => a.price - b.price)[0];
+        if (cheapest) {
+          setSelectedShipping({ name: cheapest.name, price: 0, deadline: cheapest.deadline, company: cheapest.company });
+        }
+      }
+    } catch (err: any) {
+      console.error('Shipping calculation error:', err);
+      // Fallback
+      setShippingOptions([
+        { name: 'Envio padrão', price: 18, deadline: '8 a 12 dias úteis', company: 'Correios' },
+      ]);
+      setHasCalculated(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const freeShippingEligible = subtotal >= 399;
+  const handleCalculate = async () => {
+    const cleanCep = localCep.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return;
+    await calculateShipping(cleanCep);
+  };
+
+  const freeShippingEligible = subtotal >= freeShippingThreshold && freeShippingThreshold > 0;
 
   // Compact design for cart sidebar
   if (compact) {
@@ -126,7 +143,9 @@ export function ShippingCalculator({ compact = false }: ShippingCalculatorProps)
             )}
             
             {shippingOptions.map((option) => {
-              const finalPrice = freeShippingEligible && option.name === 'PAC' ? 0 : option.price;
+              const finalPrice = freeShippingEligible && option.price > 0
+                ? 0
+                : option.price;
               const isSelected = selectedShipping?.name === option.name;
               
               return (
@@ -163,7 +182,7 @@ export function ShippingCalculator({ compact = false }: ShippingCalculatorProps)
     );
   }
 
-  // Full design for product page - with white input
+  // Full design for product page
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4 p-4 border rounded-lg bg-background">
@@ -205,7 +224,7 @@ export function ShippingCalculator({ compact = false }: ShippingCalculatorProps)
           )}
           
           {shippingOptions.map((option) => {
-            const finalPrice = freeShippingEligible && option.name === 'PAC' ? 0 : option.price;
+            const finalPrice = freeShippingEligible && option.price > 0 ? 0 : option.price;
             const isSelected = selectedShipping?.name === option.name;
             
             return (

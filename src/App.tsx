@@ -50,6 +50,7 @@ import EmailAutomations from "./pages/admin/EmailAutomations";
 import TrafficDashboard from "./pages/admin/TrafficDashboard";
 import MediaGallery from "./pages/admin/MediaGallery";
 import { WhatsAppFloat } from "./components/store/WhatsAppFloat";
+import { CookieConsent } from "./components/store/CookieConsent";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -74,6 +75,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <WhatsAppFloat />
+          <CookieConsent />
           <ScrollToTop />
           <Routes>
             <Route path="/" element={<Index />} />
