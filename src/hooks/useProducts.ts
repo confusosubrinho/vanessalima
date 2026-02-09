@@ -19,16 +19,23 @@ import { logApiError } from '@/lib/errorLogger';
          .order('created_at', { ascending: false });
  
        if (categorySlug) {
-         const { data: category } = await supabase
-           .from('categories')
-           .select('id')
-           .eq('slug', categorySlug)
-           .single();
-         
-         if (category) {
-           query = query.eq('category_id', category.id);
-         }
-       }
+          const { data: category } = await supabase
+            .from('categories')
+            .select('id')
+            .eq('slug', categorySlug)
+            .single();
+          
+          if (category) {
+            // Also find child categories
+            const { data: childCategories } = await supabase
+              .from('categories')
+              .select('id')
+              .eq('parent_category_id', category.id);
+            
+            const categoryIds = [category.id, ...(childCategories?.map(c => c.id) || [])];
+            query = query.in('category_id', categoryIds);
+          }
+        }
  
       const { data, error } = await query;
       if (error) {

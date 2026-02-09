@@ -14,6 +14,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -21,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Category } from '@/types/database';
 
@@ -35,6 +43,7 @@ export default function Categories() {
     description: '',
     image_url: '',
     banner_image_url: '',
+    parent_category_id: null as string | null,
     is_active: true,
     display_order: 0,
     seo_title: '',
@@ -130,6 +139,7 @@ export default function Categories() {
         description: category.description || '',
         image_url: category.image_url || '',
         banner_image_url: (category as any).banner_image_url || '',
+        parent_category_id: (category as any).parent_category_id || null,
         is_active: category.is_active ?? true,
         display_order: category.display_order ?? 0,
         seo_title: (category as any).seo_title || '',
@@ -144,6 +154,7 @@ export default function Categories() {
         description: '',
         image_url: '',
         banner_image_url: '',
+        parent_category_id: null,
         is_active: true,
         display_order: (categories?.length || 0) + 1,
         seo_title: '',
@@ -165,6 +176,7 @@ export default function Categories() {
         description: '',
         image_url: '',
         banner_image_url: '',
+        parent_category_id: null,
         is_active: true,
         display_order: 0,
         seo_title: '',
@@ -210,7 +222,7 @@ export default function Categories() {
         </Button>
       </div>
 
-      <div className="bg-background rounded-lg border">
+      <ScrollArea className="h-[calc(100vh-220px)] rounded-lg border bg-background">
         <Table>
           <TableHeader>
             <TableRow>
@@ -234,7 +246,9 @@ export default function Categories() {
                 </TableCell>
               </TableRow>
             ) : (
-              categories?.map((category) => (
+              categories?.map((category) => {
+                const parentCat = categories?.find(c => c.id === (category as any).parent_category_id);
+                return (
                 <TableRow key={category.id}>
                   <TableCell>
                     <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
@@ -248,6 +262,9 @@ export default function Categories() {
                       />
                       <div>
                         <p className="font-medium">{category.name}</p>
+                        {parentCat && (
+                          <p className="text-xs text-muted-foreground">Pai: {parentCat.name}</p>
+                        )}
                         {category.description && (
                           <p className="text-sm text-muted-foreground line-clamp-1">
                             {category.description}
@@ -283,14 +300,15 @@ export default function Categories() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>
-      </div>
+      </ScrollArea>
 
       <Dialog open={isDialogOpen} onOpenChange={handleCloseDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingCategory ? 'Editar Categoria' : 'Nova Categoria'}
@@ -314,6 +332,24 @@ export default function Categories() {
                 onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Categoria Pai</Label>
+              <Select
+                value={formData.parent_category_id || '_none'}
+                onValueChange={(value) => setFormData({ ...formData, parent_category_id: value === '_none' ? null : value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Nenhuma (raiz)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Nenhuma (raiz)</SelectItem>
+                  {categories?.filter(c => c.id !== editingCategory?.id).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
