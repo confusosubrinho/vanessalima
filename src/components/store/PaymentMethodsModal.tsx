@@ -1,4 +1,4 @@
-import { CreditCard, QrCode, Banknote, X } from 'lucide-react';
+import { CreditCard, QrCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -12,9 +12,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 interface PaymentMethodsModalProps {
   basePrice: number;
   maxInstallments?: number;
+  installmentsWithoutInterest?: number;
+  installmentInterestRate?: number;
+  minInstallmentValue?: number;
+  pixDiscount?: number;
 }
 
-export function PaymentMethodsModal({ basePrice, maxInstallments = 6 }: PaymentMethodsModalProps) {
+export function PaymentMethodsModal({
+  basePrice,
+  maxInstallments = 10,
+  installmentsWithoutInterest = 6,
+  installmentInterestRate = 0,
+  minInstallmentValue = 50,
+  pixDiscount = 5,
+}: PaymentMethodsModalProps) {
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -22,16 +33,16 @@ export function PaymentMethodsModal({ basePrice, maxInstallments = 6 }: PaymentM
     }).format(price);
   };
 
-  // Calculate installments with interest
   const getInstallments = () => {
     const installments = [];
     
-    for (let i = 1; i <= 12; i++) {
-      const isWithoutInterest = i <= maxInstallments;
-      // Simulated interest rate of 1.99% per month after free installments
-      const rate = isWithoutInterest ? 0 : 0.0199;
+    for (let i = 1; i <= maxInstallments; i++) {
+      const isWithoutInterest = i <= installmentsWithoutInterest;
+      const rate = isWithoutInterest ? 0 : (installmentInterestRate || 0.0199) / 100;
       const total = isWithoutInterest ? basePrice : basePrice * Math.pow(1 + rate, i);
       const installmentValue = total / i;
+      
+      if (i > 1 && installmentValue < minInstallmentValue) break;
       
       installments.push({
         quantity: i,
@@ -45,8 +56,8 @@ export function PaymentMethodsModal({ basePrice, maxInstallments = 6 }: PaymentM
   };
 
   const installments = getInstallments();
-  const pixDiscount = basePrice * 0.1; // 10% discount
-  const pixPrice = basePrice - pixDiscount;
+  const pixDiscountAmount = basePrice * (pixDiscount / 100);
+  const pixPrice = basePrice - pixDiscountAmount;
 
   return (
     <Dialog>
@@ -77,10 +88,10 @@ export function PaymentMethodsModal({ basePrice, maxInstallments = 6 }: PaymentM
               <QrCode className="h-12 w-12 mx-auto text-primary mb-4" />
               <p className="text-2xl font-bold text-primary">{formatPrice(pixPrice)}</p>
               <p className="text-sm text-muted-foreground mt-1">
-                10% de desconto no PIX
+                {pixDiscount}% de desconto no PIX
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                (Economia de {formatPrice(pixDiscount)})
+                (Economia de {formatPrice(pixDiscountAmount)})
               </p>
             </div>
             

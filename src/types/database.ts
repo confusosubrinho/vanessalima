@@ -150,21 +150,25 @@ export interface Banner {
    created_at: string;
  }
  
- export interface StoreSettings {
-   id: string;
-   store_name: string;
-   logo_url: string | null;
-   contact_email: string | null;
-   contact_phone: string | null;
-   contact_whatsapp: string | null;
-   address: string | null;
-   instagram_url: string | null;
-   facebook_url: string | null;
-   free_shipping_threshold: number;
-   max_installments: number;
-   created_at: string;
-   updated_at: string;
- }
+  export interface StoreSettings {
+    id: string;
+    store_name: string;
+    logo_url: string | null;
+    contact_email: string | null;
+    contact_phone: string | null;
+    contact_whatsapp: string | null;
+    address: string | null;
+    instagram_url: string | null;
+    facebook_url: string | null;
+    free_shipping_threshold: number;
+    max_installments: number;
+    pix_discount: number | null;
+    installments_without_interest: number | null;
+    installment_interest_rate: number | null;
+    min_installment_value: number | null;
+    created_at: string;
+    updated_at: string;
+  }
  
  export interface CartItem {
    product: Product;

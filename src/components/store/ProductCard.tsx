@@ -2,10 +2,13 @@ import { useRef, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Product } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
-import { ShoppingBag, Heart } from 'lucide-react';
+import { ShoppingBag, Heart, Star } from 'lucide-react';
 import { VariantSelectorModal } from './VariantSelectorModal';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useToast } from '@/hooks/use-toast';
+import { useStoreSettings } from '@/hooks/useProducts';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ProductCardProps {
   product: Product;
@@ -17,6 +20,25 @@ export function ProductCard({ product }: ProductCardProps) {
   const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { data: storeSettings } = useStoreSettings();
+  const pixDiscountPercent = storeSettings?.pix_discount ?? 5;
+
+  // Fetch average rating for this product
+  const { data: reviewStats } = useQuery({
+    queryKey: ['product-review-stats', product.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('product_reviews')
+        .select('rating')
+        .eq('product_id', product.id)
+        .eq('is_approved', true);
+      if (error || !data || data.length === 0) return { avg: 0, count: 0 };
+      const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
+      return { avg, count: data.length };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
   const secondaryImage = product.images?.find(img => !img.is_primary);
   const hasDiscount = product.sale_price && product.sale_price < product.base_price;
@@ -26,7 +48,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const formatPrice = (price: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
   const currentPrice = Number(product.sale_price || product.base_price);
-  const pixPrice = currentPrice * 0.95;
+  const pixPrice = currentPrice * (1 - pixDiscountPercent / 100);
   const hasVariants = (product.variants?.filter(v => v.is_active)?.length || 0) > 0;
   const sizes = product.variants
     ?.filter(v => v.is_active)
@@ -153,6 +175,20 @@ export function ProductCard({ product }: ProductCardProps) {
           <h3 className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-2 text-sm">
             {product.name}
           </h3>
+
+          {reviewStats && reviewStats.count > 0 && (
+            <div className="flex items-center gap-1 mt-1">
+              <div className="flex">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <Star
+                    key={star}
+                    className={`h-3 w-3 ${star <= Math.round(reviewStats.avg) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/30'}`}
+                  />
+                ))}
+              </div>
+              <span className="text-[10px] text-muted-foreground">({reviewStats.count})</span>
+            </div>
+          )}
 
           <div className="mt-2 space-y-0.5">
             {hasDiscount ? (

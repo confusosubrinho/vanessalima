@@ -6,7 +6,7 @@ import { StoreLayout } from '@/components/store/StoreLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useProduct } from '@/hooks/useProducts';
+import { useProduct, useStoreSettings } from '@/hooks/useProducts';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { useFavorites } from '@/hooks/useFavorites';
@@ -39,6 +39,13 @@ export default function ProductDetail() {
 
   const { data: recentProducts } = useRecentProducts(product?.id);
   const { data: relatedProducts } = useRelatedProducts(product?.category_id, product?.id);
+  const { data: storeSettings } = useStoreSettings();
+
+  const pixDiscountPercent = storeSettings?.pix_discount ?? 5;
+  const maxInstallments = storeSettings?.max_installments ?? 10;
+  const installmentsWithoutInterest = storeSettings?.installments_without_interest ?? 6;
+  const installmentInterestRate = storeSettings?.installment_interest_rate ?? 0;
+  const minInstallmentValue = storeSettings?.min_installment_value ?? 50;
 
   // Fetch buy together products configured for this product
   const { data: buyTogetherProducts } = useQuery({
@@ -113,7 +120,8 @@ export default function ProductDetail() {
   };
 
   const currentPrice = Number(product.sale_price || product.base_price);
-  const installmentPrice = (currentPrice / 6).toFixed(2);
+  const bestInstallment = Math.min(installmentsWithoutInterest, Math.floor(currentPrice / minInstallmentValue) || 1);
+  const installmentPrice = bestInstallment > 0 ? (currentPrice / bestInstallment).toFixed(2) : currentPrice.toFixed(2);
 
   const selectedVariant = selectedColor && selectedSize
     ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
@@ -253,17 +261,17 @@ export default function ProductDetail() {
           <div className="space-y-4">
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium text-primary mb-2">PIX</h4>
-              <p className="text-2xl font-bold">{formatPrice(currentPrice * 0.95)}</p>
-              <p className="text-sm text-muted-foreground">À vista com 5% de desconto</p>
+              <p className="text-2xl font-bold">{formatPrice(currentPrice * (1 - pixDiscountPercent / 100))}</p>
+              <p className="text-sm text-muted-foreground">À vista com {pixDiscountPercent}% de desconto</p>
             </div>
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium mb-2">Cartão de Crédito</h4>
-              <p className="text-lg font-bold">até 6x de R$ {installmentPrice}</p>
+              <p className="text-lg font-bold">até {bestInstallment}x de R$ {installmentPrice}</p>
               <p className="text-sm text-muted-foreground">Sem juros no cartão</p>
               <div className="mt-3 pt-3 border-t">
                 <p className="text-sm text-muted-foreground mb-2">Parcelas disponíveis:</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  {[1,2,3,4,5,6].map(n => (
+                  {Array.from({ length: bestInstallment }, (_, i) => i + 1).map(n => (
                     <span key={n}>{n}x de {formatPrice(currentPrice / n)}</span>
                   ))}
                 </div>
@@ -359,8 +367,15 @@ export default function ProductDetail() {
                 <p className="text-muted-foreground line-through text-lg">{formatPrice(Number(product.base_price))}</p>
               )}
               <p className="text-2xl sm:text-3xl font-bold text-foreground">{formatPrice(currentPrice)}</p>
-              <p className="text-muted-foreground">ou 6x de R$ {installmentPrice} sem juros</p>
-              <PaymentMethodsModal basePrice={currentPrice} maxInstallments={6} />
+              <p className="text-muted-foreground">ou {bestInstallment}x de R$ {installmentPrice} sem juros</p>
+              <PaymentMethodsModal
+                basePrice={currentPrice}
+                maxInstallments={maxInstallments}
+                installmentsWithoutInterest={installmentsWithoutInterest}
+                installmentInterestRate={installmentInterestRate}
+                minInstallmentValue={minInstallmentValue}
+                pixDiscount={pixDiscountPercent}
+              />
             </div>
 
             {/* Color Selector */}
