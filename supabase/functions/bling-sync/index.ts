@@ -135,7 +135,10 @@ async function getValidToken(supabase: any): Promise<string> {
       body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: settings.bling_refresh_token }),
     });
     const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokenData.access_token) throw new Error("Falha ao renovar token do Bling.");
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      console.error("Token refresh failed:", JSON.stringify(tokenData));
+      throw new Error("Token do Bling expirado. Reconecte o Bling nas Integrações (passo 3 - Autorizar Conexão).");
+    }
 
     await supabase.from("store_settings").update({
       bling_access_token: tokenData.access_token,
