@@ -388,11 +388,11 @@ export default function ProductDetail() {
             </div>
 
             <div className="flex gap-4">
-              <Button size="lg" className="flex-1" onClick={handleAddToCart} disabled={!isInStock}>
+              <Button size="lg" className="flex-1 rounded-full" onClick={handleAddToCart} disabled={!isInStock}>
                 <ShoppingBag className="h-5 w-5 mr-2" />
                 {isInStock ? 'Adicionar ao Carrinho' : 'Esgotado'}
               </Button>
-              <Button size="lg" variant="outline">
+              <Button size="lg" variant="outline" className="rounded-full">
                 <Heart className="h-5 w-5" />
               </Button>
             </div>

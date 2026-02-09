@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
+import { ScrollToTop } from "@/components/store/ScrollToTop";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ProductDetail from "./pages/ProductDetail";
@@ -13,6 +14,14 @@ import BijuteriasPage from "./pages/BijuteriasPage";
 import Auth from "./pages/Auth";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
+import MyAccount from "./pages/MyAccount";
+import FAQPage from "./pages/FAQPage";
+import SobrePage from "./pages/SobrePage";
+import PoliticaPrivacidadePage from "./pages/PoliticaPrivacidadePage";
+import TermosPage from "./pages/TermosPage";
+import TrocasPage from "./pages/TrocasPage";
+import ComoComprarPage from "./pages/ComoComprarPage";
+import FormasPagamentoPage from "./pages/FormasPagamentoPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminLogin from "./pages/admin/AdminLogin";
 import Dashboard from "./pages/admin/Dashboard";
@@ -36,16 +45,24 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/produto/:slug" element={<ProductDetail />} />
             <Route path="/categoria/:slug" element={<CategoryPage />} />
-            <Route path="/conta" element={<Auth />} />
+            <Route path="/conta" element={<MyAccount />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/carrinho" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/tamanho/:size" element={<SizePage />} />
             <Route path="/bijuterias" element={<BijuteriasPage />} />
+            <Route path="/faq" element={<FAQPage />} />
+            <Route path="/sobre" element={<SobrePage />} />
+            <Route path="/politica-privacidade" element={<PoliticaPrivacidadePage />} />
+            <Route path="/termos" element={<TermosPage />} />
+            <Route path="/trocas" element={<TrocasPage />} />
+            <Route path="/como-comprar" element={<ComoComprarPage />} />
+            <Route path="/formas-pagamento" element={<FormasPagamentoPage />} />
             
             {/* Admin routes */}
             <Route path="/admin/login" element={<AdminLogin />} />

@@ -209,7 +209,7 @@
                         return sizes.length > 0 ? (
                           <div>
                             <p className="text-xs text-muted-foreground mb-1.5 font-medium">Tamanho</p>
-                            <div className="flex gap-1 justify-center overflow-x-auto touch-pan-x" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                            <div className="flex gap-1 justify-center overflow-x-auto touch-pan-x cursor-grab active:cursor-grabbing" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
                               {sizes.map(({ size, inStock }) => (
                                 <span
                                   key={size}
@@ -229,14 +229,14 @@
 
                       <div className="space-y-2">
                         <Button
-                          className="w-full"
+                          className="w-full rounded-full"
                           onClick={(e) => handleQuickBuy(product, e)}
                         >
                           Comprar
                         </Button>
                         <Button
                           variant="outline"
-                          className="w-full text-primary border-primary hover:bg-primary/5"
+                          className="w-full rounded-full text-primary border-primary hover:bg-primary/5"
                           asChild
                         >
                           <a
