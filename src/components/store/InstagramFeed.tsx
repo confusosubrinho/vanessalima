@@ -53,11 +53,20 @@ export function InstagramFeed() {
     });
   }, [activeIndex, videos]);
 
+  // Auto-advance every 5 seconds (infinite loop)
+  useEffect(() => {
+    if (!videos || videos.length <= 1) return;
+    const timer = setInterval(() => {
+      setActiveIndex(prev => (prev >= videos.length - 1 ? 0 : prev + 1));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [videos]);
+
   const goTo = (direction: 'prev' | 'next') => {
     if (!videos) return;
     setActiveIndex(prev => {
-      if (direction === 'prev') return Math.max(0, prev - 1);
-      return Math.min(videos.length - 1, prev + 1);
+      if (direction === 'prev') return prev <= 0 ? videos.length - 1 : prev - 1;
+      return prev >= videos.length - 1 ? 0 : prev + 1;
     });
   };
 
@@ -100,7 +109,6 @@ export function InstagramFeed() {
           variant="ghost"
           size="icon"
           onClick={() => goTo('prev')}
-          disabled={activeIndex === 0}
           className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background rounded-full shadow-lg"
         >
           <ChevronLeft className="h-6 w-6" />
@@ -109,7 +117,6 @@ export function InstagramFeed() {
           variant="ghost"
           size="icon"
           onClick={() => goTo('next')}
-          disabled={activeIndex === videos.length - 1}
           className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background rounded-full shadow-lg"
         >
           <ChevronRight className="h-6 w-6" />

@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +8,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const sizeScrollRef = useRef<HTMLDivElement>(null);
   const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
   const secondaryImage = product.images?.find(img => !img.is_primary);
   const hasDiscount = product.sale_price && product.sale_price < product.base_price;
@@ -36,6 +38,20 @@ export function ProductCard({ product }: ProductCardProps) {
       if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
       return a.size.localeCompare(b.size);
     }) || [];
+
+  // Mouse drag scroll for desktop
+  useEffect(() => {
+    const el = sizeScrollRef.current;
+    if (!el) return;
+    let isDown = false, startX = 0, sl = 0;
+    const onDown = (e: MouseEvent) => { isDown = true; startX = e.pageX - el.offsetLeft; sl = el.scrollLeft; e.preventDefault(); e.stopPropagation(); };
+    const onUp = () => { isDown = false; };
+    const onMove = (e: MouseEvent) => { if (!isDown) return; e.preventDefault(); el.scrollLeft = sl - (e.pageX - el.offsetLeft - startX) * 1.5; };
+    el.addEventListener('mousedown', onDown);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('mousemove', onMove);
+    return () => { el.removeEventListener('mousedown', onDown); document.removeEventListener('mouseup', onUp); document.removeEventListener('mousemove', onMove); };
+  }, []);
 
   return (
     <Link
@@ -92,7 +108,7 @@ export function ProductCard({ product }: ProductCardProps) {
         {sizes.length > 0 && (
           <div className="mt-3">
             <p className="text-xs text-muted-foreground mb-1.5 font-medium">Tamanho</p>
-            <div className="flex gap-1 overflow-x-auto touch-pan-x cursor-grab active:cursor-grabbing" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+            <div ref={sizeScrollRef} className="flex gap-1 overflow-x-auto touch-pan-x cursor-grab active:cursor-grabbing select-none" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
               {sizes.map(({ size, inStock }) => (
                 <span
                   key={size}

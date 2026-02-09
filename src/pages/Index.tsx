@@ -6,6 +6,8 @@ import { ProductCarousel } from '@/components/store/ProductCarousel';
 import { HighlightBanners } from '@/components/store/HighlightBanners';
 import { InstagramFeed } from '@/components/store/InstagramFeed';
 import { ShopBySize } from '@/components/store/ShopBySize';
+import { Newsletter } from '@/components/store/Newsletter';
+import { ContactForm } from '@/components/store/ContactForm';
 import { useFeaturedProducts, useProducts } from '@/hooks/useProducts';
 
 const Index = () => {
@@ -63,6 +65,12 @@ const Index = () => {
 
       {/* Instagram Feed Section */}
       <InstagramFeed />
+
+      {/* Newsletter */}
+      <Newsletter />
+
+      {/* Contact Form */}
+      <ContactForm />
     </StoreLayout>
   );
 };

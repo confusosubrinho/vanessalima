@@ -63,7 +63,7 @@ export function Header() {
     <header className="sticky top-0 z-50 bg-background shadow-sm">
       {/* Top bar - Promo */}
       <div className="bg-primary text-primary-foreground text-sm py-2">
-        <div className="container-custom flex items-center justify-end">
+        <div className="container-custom flex items-center justify-center">
           <span className="font-medium">Frete grátis para as compras acima de R$ 399*</span>
         </div>
       </div>
@@ -94,9 +94,7 @@ export function Header() {
           {/* Actions */}
           <div className="flex items-center gap-4">
             <a 
-              href="https://wa.me/5542991120205" 
-              target="_blank" 
-              rel="noopener noreferrer"
+              href="/#atendimento"
               className="hidden md:flex items-center gap-2 text-sm hover:text-primary transition-colors"
             >
               <HelpCircle className="h-5 w-5" />
@@ -106,7 +104,7 @@ export function Header() {
               </div>
             </a>
             
-            <Link to="/auth" className="hidden md:flex items-center gap-2 text-sm hover:text-primary transition-colors">
+            <Link to="/conta" className="hidden md:flex items-center gap-2 text-sm hover:text-primary transition-colors">
               <User className="h-5 w-5" />
               <div className="text-left">
                 <span className="text-xs text-muted-foreground block">Minha Conta</span>
@@ -300,22 +298,19 @@ export function Header() {
                   <ChevronDown className="h-3 w-3" />
                 </button>
                 
-                {activeMegaMenu === 'all' && (
-                  <div className="absolute top-full left-0 w-[600px] bg-background border rounded-lg shadow-xl z-50 p-6 grid grid-cols-3 gap-6 animate-fade-in">
+              {activeMegaMenu === 'all' && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-[min(1200px,90vw)] bg-background border rounded-lg shadow-xl z-50 p-6 grid grid-cols-4 gap-6 animate-fade-in">
                     {categories?.map((category) => (
-                      <Link
-                        key={category.id}
-                        to={`/categoria/${category.slug}`}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
-                        onClick={() => setActiveMegaMenu(null)}
-                      >
-                        <img
-                          src={category.image_url || '/placeholder.svg'}
-                          alt={category.name}
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                        <span className="font-medium group-hover:text-primary transition-colors">{category.name}</span>
-                      </Link>
+                      <div key={category.id}>
+                        <Link
+                          to={`/categoria/${category.slug}`}
+                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors group font-semibold"
+                          onClick={() => setActiveMegaMenu(null)}
+                        >
+                          <span className="group-hover:text-primary transition-colors">{category.name}</span>
+                        </Link>
+                        {/* Subcategories would appear here */}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -340,7 +335,7 @@ export function Header() {
                     </Link>
                     
                     {activeMegaMenu === category.slug && (
-                      <div className="absolute top-full left-0 w-[600px] bg-background border rounded-lg shadow-xl z-50 p-6 animate-fade-in">
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 w-[min(900px,80vw)] bg-background border rounded-lg shadow-xl z-50 p-6 animate-fade-in">
                         <div className="flex gap-6">
                           <div className="w-1/3">
                             <h3 className="font-bold text-lg mb-3">{category.name}</h3>

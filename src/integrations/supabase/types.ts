@@ -110,6 +110,7 @@ export type Database = {
           image_url: string | null
           is_active: boolean | null
           name: string
+          parent_category_id: string | null
           seo_description: string | null
           seo_keywords: string | null
           seo_title: string | null
@@ -124,6 +125,7 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean | null
           name: string
+          parent_category_id?: string | null
           seo_description?: string | null
           seo_keywords?: string | null
           seo_title?: string | null
@@ -138,13 +140,22 @@ export type Database = {
           image_url?: string | null
           is_active?: boolean | null
           name?: string
+          parent_category_id?: string | null
           seo_description?: string | null
           seo_keywords?: string | null
           seo_title?: string | null
           slug?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "categories_parent_category_id_fkey"
+            columns: ["parent_category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       coupons: {
         Row: {
@@ -728,6 +739,7 @@ export type Database = {
           address: string | null
           body_code: string | null
           cash_discount: number | null
+          cnpj: string | null
           contact_email: string | null
           contact_phone: string | null
           contact_whatsapp: string | null
@@ -735,6 +747,7 @@ export type Database = {
           facebook_pixel_id: string | null
           facebook_url: string | null
           free_shipping_threshold: number | null
+          full_address: string | null
           google_analytics_id: string | null
           head_code: string | null
           id: string
@@ -758,6 +771,7 @@ export type Database = {
           address?: string | null
           body_code?: string | null
           cash_discount?: number | null
+          cnpj?: string | null
           contact_email?: string | null
           contact_phone?: string | null
           contact_whatsapp?: string | null
@@ -765,6 +779,7 @@ export type Database = {
           facebook_pixel_id?: string | null
           facebook_url?: string | null
           free_shipping_threshold?: number | null
+          full_address?: string | null
           google_analytics_id?: string | null
           head_code?: string | null
           id?: string
@@ -788,6 +803,7 @@ export type Database = {
           address?: string | null
           body_code?: string | null
           cash_discount?: number | null
+          cnpj?: string | null
           contact_email?: string | null
           contact_phone?: string | null
           contact_whatsapp?: string | null
@@ -795,6 +811,7 @@ export type Database = {
           facebook_pixel_id?: string | null
           facebook_url?: string | null
           free_shipping_threshold?: number | null
+          full_address?: string | null
           google_analytics_id?: string | null
           head_code?: string | null
           id?: string
