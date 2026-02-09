@@ -692,7 +692,7 @@ async function upsertParentWithVariants(
 }
 
 // ─── Main Sync Products ───
-async function syncProducts(supabase: any, token: string, batchLimit: number = 0, batchOffset: number = 0) {
+async function syncProducts(supabase: any, token: string, batchLimit: number = 0, batchOffset: number = 0, newOnly: boolean = false) {
   const headers = blingHeaders(token);
   let page = 1;
   let totalImported = 0;
@@ -929,16 +929,27 @@ async function syncProducts(supabase: any, token: string, batchLimit: number = 0
     if (processedParentIds.has(parentBlingId)) continue;
     processedParentIds.add(parentBlingId);
 
-    // OPTIMIZATION: Skip simple products that already exist in our DB
-    // They will get stock updates via the separate stock sync
-    if (group.isSimple && existingBlingIds.has(parentBlingId)) {
-      totalSkipped++;
-      continue;
+    // Skip products that already exist in our DB
+    // In new_only mode: skip ALL existing. In normal mode: skip only simple (variations still update).
+    if (existingBlingIds.has(parentBlingId)) {
+      if (newOnly || group.isSimple) {
+        totalSkipped++;
+        syncLog.push({ bling_id: parentBlingId, name: group.parentListItem?.nome || `ID ${parentBlingId}`, status: 'skipped', message: 'Produto já existe no banco', variants: 0 });
+        continue;
+      }
     }
 
     try {
       await sleep(BLING_RATE_LIMIT_MS);
       const detailRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${parentBlingId}`, { headers });
+      
+      if (!detailRes.ok) {
+        const errBody = await detailRes.text();
+        syncLog.push({ bling_id: parentBlingId, name: group.parentListItem?.nome || `ID ${parentBlingId}`, status: 'error', message: `API retornou ${detailRes.status}: ${errBody.substring(0, 200)}`, variants: 0 });
+        totalErrors++;
+        continue;
+      }
+      
       const detailJson = await detailRes.json();
       let parentDetail = detailJson?.data;
 
@@ -1288,7 +1299,7 @@ serve(async (req) => {
       }
 
       case "sync_products":
-        result = await syncProducts(supabase, token, payload.limit || 0, payload.offset || 0);
+        result = await syncProducts(supabase, token, payload.limit || 0, payload.offset || 0, payload.new_only === true);
         break;
 
       case "debug_product": {

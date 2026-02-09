@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter } from 'lucide-react';
@@ -484,6 +484,7 @@ function BlingPanel() {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<any>(null);
   const [syncLogFilter, setSyncLogFilter] = useState<string>('all');
+  const [expandedLogRow, setExpandedLogRow] = useState<number | null>(null);
   const [blingStores, setBlingStores] = useState<{id: string; name: string; type: string}[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
 
@@ -512,7 +513,7 @@ function BlingPanel() {
   }, [isConnected, fetchStores]);
   const callbackUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bling-oauth`;
 
-  const handleSync = async (action: string, label: string) => {
+  const handleSync = async (action: string, label: string, extraBody?: Record<string, any>) => {
     setSyncing(action);
     setSyncResult(null);
     try {
@@ -533,7 +534,7 @@ function BlingPanel() {
         while (hasMore) {
           toast({ title: `Sincronizando...`, description: `Processando lote a partir do item ${offset}...` });
           const { data, error } = await supabase.functions.invoke('bling-sync', {
-            body: { action: 'sync_products', limit: BATCH_SIZE, offset },
+            body: { action: 'sync_products', limit: BATCH_SIZE, offset, ...extraBody },
           });
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
@@ -565,7 +566,7 @@ function BlingPanel() {
         toast({ title: `${label} concluída!`, description: `${totalImported} importados, ${totalUpdated} atualizados, ${totalVariants} variantes, ${totalErrors} erros` });
       } else {
         const { data, error } = await supabase.functions.invoke('bling-sync', {
-          body: { action },
+          body: { action, ...extraBody },
         });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
@@ -690,10 +691,10 @@ function BlingPanel() {
           {/* Sync Actions */}
           <div className="space-y-4">
             <h4 className="font-medium text-sm">🔄 Sincronização</h4>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Button
                 variant="outline"
-                onClick={() => handleSync('sync_products', 'Importação de produtos')}
+                onClick={() => handleSync('sync_products', 'Importação completa de produtos')}
                 disabled={!!syncing}
                 className="h-auto py-3 flex flex-col items-center gap-1"
               >
@@ -702,8 +703,22 @@ function BlingPanel() {
                 ) : (
                   <Package className="h-5 w-5" />
                 )}
-                <span className="text-xs font-medium">Importar Produtos</span>
-                <span className="text-[10px] text-muted-foreground">Bling → Loja</span>
+                <span className="text-xs font-medium">Importar Todos</span>
+                <span className="text-[10px] text-muted-foreground">Atualiza existentes</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleSync('sync_products', 'Importação de novos produtos', { new_only: true })}
+                disabled={!!syncing}
+                className="h-auto py-3 flex flex-col items-center gap-1 border-primary/30"
+              >
+                {syncing === 'sync_products' ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Plus className="h-5 w-5" />
+                )}
+                <span className="text-xs font-medium">Apenas Novos</span>
+                <span className="text-[10px] text-muted-foreground">Ignora existentes</span>
               </Button>
               <Button
                 variant="outline"
@@ -806,17 +821,34 @@ function BlingPanel() {
                           {syncResult.log
                             .filter((entry: any) => syncLogFilter === 'all' || entry.status === syncLogFilter)
                             .map((entry: any, idx: number) => (
-                            <tr key={idx} className={`border-t ${entry.status === 'error' ? 'bg-destructive/10' : entry.status === 'imported' ? 'bg-primary/5' : entry.status === 'updated' ? 'bg-accent/30' : ''}`}>
-                              <td className="p-1.5 font-mono">{entry.bling_id}</td>
-                              <td className="p-1.5 max-w-[200px] truncate">{entry.name}</td>
-                              <td className="p-1.5">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${entry.status === 'imported' ? 'bg-primary/20 text-primary' : entry.status === 'updated' ? 'bg-accent text-accent-foreground' : entry.status === 'grouped' ? 'bg-secondary text-secondary-foreground' : entry.status === 'error' ? 'bg-destructive/20 text-destructive' : 'bg-muted text-muted-foreground'}`}>
-                                  {entry.status === 'imported' ? '✅ Novo' : entry.status === 'updated' ? '🔄 Atualizado' : entry.status === 'grouped' ? '🔗 Agrupado' : entry.status === 'error' ? '❌ Erro' : '⏭ Ignorado'}
-                                </span>
-                              </td>
-                              <td className="p-1.5 text-center">{entry.variants || '-'}</td>
-                              <td className="p-1.5 max-w-[250px] truncate text-muted-foreground">{entry.message}</td>
-                            </tr>
+                            <React.Fragment key={idx}>
+                              <tr 
+                                className={`border-t cursor-pointer hover:bg-muted/50 ${entry.status === 'error' ? 'bg-destructive/10' : entry.status === 'imported' ? 'bg-primary/5' : entry.status === 'updated' ? 'bg-accent/30' : ''}`}
+                                onClick={() => setExpandedLogRow(expandedLogRow === idx ? null : idx)}
+                              >
+                                <td className="p-1.5 font-mono">{entry.bling_id}</td>
+                                <td className="p-1.5 max-w-[200px] truncate">{entry.name}</td>
+                                <td className="p-1.5">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${entry.status === 'imported' ? 'bg-primary/20 text-primary' : entry.status === 'updated' ? 'bg-accent text-accent-foreground' : entry.status === 'grouped' ? 'bg-secondary text-secondary-foreground' : entry.status === 'error' ? 'bg-destructive/20 text-destructive' : 'bg-muted text-muted-foreground'}`}>
+                                    {entry.status === 'imported' ? '✅ Novo' : entry.status === 'updated' ? '🔄 Atualizado' : entry.status === 'grouped' ? '🔗 Agrupado' : entry.status === 'error' ? '❌ Erro' : '⏭ Ignorado'}
+                                  </span>
+                                </td>
+                                <td className="p-1.5 text-center">{entry.variants || '-'}</td>
+                                <td className="p-1.5 max-w-[250px] truncate text-muted-foreground">{entry.message}</td>
+                              </tr>
+                              {expandedLogRow === idx && (
+                                <tr className="border-t bg-muted/30">
+                                  <td colSpan={5} className="p-3">
+                                    <div className="text-xs space-y-1">
+                                      <p><strong>Bling ID:</strong> {entry.bling_id}</p>
+                                      <p><strong>Produto:</strong> {entry.name}</p>
+                                      <p><strong>Mensagem completa:</strong></p>
+                                      <pre className="bg-background border rounded p-2 text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto">{entry.message}</pre>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           ))}
                         </tbody>
                       </table>
