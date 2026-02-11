@@ -453,14 +453,13 @@ async function upsertParentWithVariants(
     .eq("bling_product_id", parentBlingId)
     .maybeSingle();
 
-  const productData: any = {
-    name: parentDetail.nome,
+  // Fields that always sync (prices, stock-related, category, etc.)
+  const updateData: any = {
     base_price: basePrice,
     sale_price: salePrice,
     sku: parentDetail.codigo || null,
     gtin: parentDetail.gtin || null,
     mpn: parentDetail.codigo || null,
-    description: parentDetail.descricaoCurta || parentDetail.descricaoComplementar || parentDetail.observacoes || null,
     weight: parentDetail.pesoBruto || parentDetail.pesoLiquido || null,
     width: parentDetail.larguraProduto || null,
     height: parentDetail.alturaProduto || null,
@@ -474,20 +473,28 @@ async function upsertParentWithVariants(
     bling_product_id: parentBlingId,
   };
 
+  // Fields only set on initial import (name, slug, description are editable in the dashboard)
+  const insertData: any = {
+    ...updateData,
+    name: parentDetail.nome,
+    description: parentDetail.descricaoCurta || parentDetail.descricaoComplementar || parentDetail.observacoes || null,
+  };
+
   let productId: string;
   let imported = false;
   let updated = false;
 
   if (existing) {
-    await supabase.from("products").update(productData).eq("id", existing.id);
+    // Do NOT overwrite name, slug or description — they are editable in the dashboard
+    await supabase.from("products").update(updateData).eq("id", existing.id);
     productId = existing.id;
     updated = true;
   } else {
     const { data: slugExists } = await supabase.from("products").select("id").eq("slug", slug).maybeSingle();
-    productData.slug = slugExists ? `${slug}-${parentBlingId}` : slug;
+    insertData.slug = slugExists ? `${slug}-${parentBlingId}` : slug;
     const { data: newProd, error: insertErr } = await supabase
       .from("products")
-      .insert(productData)
+      .insert(insertData)
       .select("id")
       .single();
     if (insertErr) {
@@ -689,6 +696,19 @@ async function upsertParentWithVariants(
     if (!syncedVariantIds.has(v.id)) {
       await supabase.from("product_variants").delete().eq("id", v.id);
     }
+  }
+
+  // Auto-activate product if any active variant has stock > 0
+  const { data: stockedVariants } = await supabase
+    .from("product_variants")
+    .select("id")
+    .eq("product_id", productId)
+    .eq("is_active", true)
+    .gt("stock_quantity", 0)
+    .limit(1);
+
+  if (stockedVariants && stockedVariants.length > 0) {
+    await supabase.from("products").update({ is_active: true }).eq("id", productId);
   }
 
   return { imported, updated, variantCount };

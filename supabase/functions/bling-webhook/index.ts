@@ -147,12 +147,11 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
     const basePrice = detail.preco || 0;
     const salePrice = detail.precoPromocional && detail.precoPromocional < basePrice ? detail.precoPromocional : null;
     
+    // Do NOT overwrite name, slug or description — they are editable in the dashboard
     await supabase.from("products").update({
-      name: detail.nome,
       base_price: basePrice,
       sale_price: salePrice,
       is_active: detail.situacao === "A",
-      description: detail.descricaoCurta || detail.descricaoComplementar || undefined,
       weight: detail.pesoBruto || detail.pesoLiquido || undefined,
     }).eq("id", existing.id);
 
@@ -186,6 +185,19 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
       const stockJson = await stockRes.json();
       const qty = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
       await supabase.from("product_variants").update({ stock_quantity: qty }).eq("product_id", existing.id);
+    }
+
+    // Auto-activate product if any active variant has stock > 0
+    const { data: stockedVariants } = await supabase
+      .from("product_variants")
+      .select("id")
+      .eq("product_id", existing.id)
+      .eq("is_active", true)
+      .gt("stock_quantity", 0)
+      .limit(1);
+
+    if (stockedVariants && stockedVariants.length > 0) {
+      await supabase.from("products").update({ is_active: true }).eq("id", existing.id);
     }
 
     console.log(`[webhook] Product ${targetBlingId} synced successfully`);
