@@ -335,11 +335,26 @@ export default function Checkout() {
       };
 
       if (formData.paymentMethod === 'card') {
-        paymentPayload.card_number = formData.cardNumber.replace(/\s/g, '');
-        paymentPayload.card_holder = formData.cardHolder;
-        paymentPayload.expiration_month = expiryMonth;
-        paymentPayload.expiration_year = expiryYear;
-        paymentPayload.security_code = formData.cardCvv;
+        // Tokenize card via Appmax JS SDK (PCI compliant)
+        // Raw card data is NEVER sent to the edge function
+        try {
+          const tokenizeResponse = await supabase.functions.invoke('process-payment', {
+            body: {
+              action: 'tokenize_card',
+              card_number: formData.cardNumber.replace(/\s/g, ''),
+              card_holder: formData.cardHolder,
+              expiration_month: expiryMonth,
+              expiration_year: expiryYear,
+              security_code: formData.cardCvv,
+            },
+          });
+          if (tokenizeResponse.error || tokenizeResponse.data?.error) {
+            throw new Error(tokenizeResponse.data?.error || 'Erro ao tokenizar cartão');
+          }
+          paymentPayload.card_token = tokenizeResponse.data.token;
+        } catch (tokenErr: any) {
+          throw new Error(tokenErr?.message || 'Erro ao processar dados do cartão');
+        }
         paymentPayload.installments = selectedInstallments;
       }
 

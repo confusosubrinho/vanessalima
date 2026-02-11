@@ -44,11 +44,15 @@ serve(async (req) => {
     const url = new URL(req.url);
     const webhookSecret = Deno.env.get("APPMAX_WEBHOOK_SECRET");
 
-    if (webhookSecret) {
-      const urlToken = url.searchParams.get("token");
-      if (urlToken !== webhookSecret) {
-        return new Response("Unauthorized", { status: 401 });
-      }
+    // #5: Webhook secret is MANDATORY
+    if (!webhookSecret) {
+      console.error("[webhook] APPMAX_WEBHOOK_SECRET not configured - rejecting request");
+      return new Response("Webhook secret not configured", { status: 500 });
+    }
+    const urlToken = url.searchParams.get("token");
+    if (urlToken !== webhookSecret) {
+      console.warn("[webhook] Invalid token received");
+      return new Response("Unauthorized", { status: 401 });
     }
 
     const payload = await req.json();

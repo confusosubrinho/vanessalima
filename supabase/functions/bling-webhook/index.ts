@@ -304,6 +304,17 @@ serve(async (req) => {
     
     // Check if this is a cron-triggered stock sync (via query param or body)
     const url = new URL(req.url);
+    
+    // #4: Validate Bling webhook secret
+    const blingWebhookSecret = Deno.env.get("BLING_WEBHOOK_SECRET");
+    if (blingWebhookSecret) {
+      const urlToken = url.searchParams.get("token");
+      if (urlToken !== blingWebhookSecret) {
+        console.warn("[webhook] Invalid Bling webhook token received");
+        return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+      }
+    }
+    
     const isCronViaParam = url.searchParams.get("action") === "cron_stock_sync";
     
     // Clone request to read body (since body can only be read once)

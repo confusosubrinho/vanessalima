@@ -160,6 +160,35 @@ serve(async (req) => {
     const token = await getAppmaxToken(supabase, appmaxEnv);
     const baseApiUrl = apiUrl(appmaxEnv);
 
+    // ─── Action: tokenize_card (server-side tokenization) ───
+    if (action === "tokenize_card") {
+      const { card_number, card_holder, expiration_month, expiration_year, security_code } = payload;
+      if (!card_number || !card_holder || !expiration_month || !expiration_year || !security_code) {
+        return new Response(
+          JSON.stringify({ error: "Dados do cartão incompletos" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const tokenizeResp = await appmaxFetch(baseApiUrl, token, "payments/tokenize", {
+        number: card_number.replace(/\s/g, ""),
+        cvv: security_code,
+        month: parseInt(expiration_month) || 1,
+        year: parseInt(expiration_year) || 2025,
+        name: card_holder,
+      });
+      const cardToken = tokenizeResp?.data?.token || tokenizeResp?.token;
+      if (!cardToken) {
+        return new Response(
+          JSON.stringify({ error: "Falha ao tokenizar cartão" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(
+        JSON.stringify({ token: cardToken }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ─── Action: create_transaction ───
     if (action === "create_transaction") {
       const {
@@ -182,14 +211,8 @@ serve(async (req) => {
         products = [],
         coupon_code,
         discount_amount = 0,
-        // Card tokenized data (from Appmax JS)
+        // Card token (from tokenize_card action - PCI compliant)
         card_token,
-        // Or raw card data (fallback)
-        card_number,
-        card_holder,
-        expiration_month,
-        expiration_year,
-        security_code,
       } = payload;
 
       // ── Server-side coupon validation ──
@@ -339,38 +362,17 @@ serve(async (req) => {
       } else if (payment_method === "credit-card" || payment_method === "card") {
         paymentEndpoint = "payments/credit-card";
 
-        if (card_token) {
-          // Appmax JS tokenized card (PCI compliant)
-          paymentPayload.payment_data = {
-            credit_card: {
-              token: card_token,
-              document_number: (customer_cpf || "").replace(/\D/g, ""),
-              installments: installments,
-              soft_descriptor: "VANESSALIMA",
-            },
-          };
-        } else {
-          // Fallback: raw card data (tokenize first)
-          const tokenizeResp = await appmaxFetch(baseApiUrl, token, "payments/tokenize", {
-            number: (card_number || "").replace(/\s/g, ""),
-            cvv: security_code || "",
-            month: parseInt(expiration_month) || 1,
-            year: parseInt(expiration_year) || 2025,
-            name: card_holder || customer_name || "",
-          });
-
-          const cardToken = tokenizeResp?.data?.token || tokenizeResp?.token;
-          if (!cardToken) throw new Error("Falha ao tokenizar cartão");
-
-          paymentPayload.payment_data = {
-            credit_card: {
-              token: cardToken,
-              document_number: (customer_cpf || "").replace(/\D/g, ""),
-              installments: installments,
-              soft_descriptor: "VANESSALIMA",
-            },
-          };
+        if (!card_token) {
+          throw new Error("Token do cartão obrigatório. Dados brutos não são aceitos.");
         }
+        paymentPayload.payment_data = {
+          credit_card: {
+            token: card_token,
+            document_number: (customer_cpf || "").replace(/\D/g, ""),
+            installments: installments,
+            soft_descriptor: "VANESSALIMA",
+          },
+        };
       } else {
         throw new Error(`Método de pagamento não suportado: ${payment_method}`);
       }

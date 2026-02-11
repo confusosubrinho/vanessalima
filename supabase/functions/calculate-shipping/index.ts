@@ -33,10 +33,14 @@ serve(async (req) => {
       });
     }
 
-    const { postal_code_to, products } = await req.json();
+    const body_input = await req.json();
+    const postal_code_to = typeof body_input?.postal_code_to === "string" 
+      ? body_input.postal_code_to.replace(/\D/g, "").slice(0, 8) 
+      : null;
+    const products = Array.isArray(body_input?.products) ? body_input.products : [];
 
-    if (!postal_code_to) {
-      return new Response(JSON.stringify({ error: "CEP de destino obrigatório" }), {
+    if (!postal_code_to || postal_code_to.length !== 8) {
+      return new Response(JSON.stringify({ error: "CEP de destino inválido (8 dígitos)" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -70,8 +74,18 @@ serve(async (req) => {
       ? "https://sandbox.melhorenvio.com.br"
       : "https://melhorenvio.com.br";
 
+    // #10: Dynamic origin CEP from store_settings
+    const { data: fullSettings } = await supabase
+      .from("store_settings")
+      .select("full_address")
+      .limit(1)
+      .maybeSingle();
+    
+    // Extract CEP from full_address or fallback to store default
+    const originCep = fullSettings?.full_address?.match(/\d{5}-?\d{3}/)?.[0]?.replace(/\D/g, "") || "85010020";
+
     const body = {
-      from: { postal_code: "85010020" }, // Store origin CEP - Guarapuava PR area
+      from: { postal_code: originCep },
       to: { postal_code: postal_code_to.replace(/\D/g, "") },
       package: {
         weight: totalWeight,

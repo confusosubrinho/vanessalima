@@ -217,12 +217,31 @@ function AdminSidebar() {
   );
 }
 
+const ADMIN_SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
+
 export default function AdminLayout() {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     checkAdmin();
+
+    // #8: Admin session timeout - auto-logout after inactivity
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        await supabase.auth.signOut();
+        navigate('/admin/login');
+      }, ADMIN_SESSION_TIMEOUT_MS);
+    };
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(e => window.addEventListener(e, resetTimer));
+    resetTimer();
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+    };
   }, []);
 
   const checkAdmin = async () => {
