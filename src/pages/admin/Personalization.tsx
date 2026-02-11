@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 const HighlightBannersAdmin = lazy(() => import('./HighlightBanners'));
 import { HomeSectionsManager } from '@/components/admin/HomeSectionsManager';
-import { LayoutGrid } from 'lucide-react';
+import { LayoutGrid, Tag } from 'lucide-react';
+import { useDragReorder } from '@/hooks/useDragReorder';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -512,6 +513,137 @@ function InstagramVideosSection() {
   );
 }
 
+// ─── Categories Order Section ───
+
+function CategoriesOrderSection() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: categories, isLoading } = useQuery({
+    queryKey: ['admin-categories-order'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, slug, image_url, is_active, display_order, parent_category_id')
+        .order('display_order', { ascending: true });
+      if (error) throw error;
+      return (data || []) as Array<{
+        id: string; name: string; slug: string; image_url: string | null;
+        is_active: boolean; display_order: number; parent_category_id: string | null;
+      }>;
+    },
+  });
+
+  // Only show root categories (no parent) for home ordering
+  const rootCategories = categories?.filter(c => !c.parent_category_id) || [];
+
+  const reorderMutation = useMutation({
+    mutationFn: async (reordered: typeof rootCategories) => {
+      const updates = reordered.map((c, i) =>
+        supabase.from('categories').update({ display_order: i }).eq('id', c.id)
+      );
+      await Promise.all(updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-categories-order'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      toast({ title: 'Ordem salva!' });
+    },
+    onError: (error: any) => toast({ title: 'Erro', description: error.message, variant: 'destructive' }),
+  });
+
+  const { getDragProps } = useDragReorder({
+    items: rootCategories,
+    onReorder: (reordered) => {
+      // Update cache optimistically
+      queryClient.setQueryData(['admin-categories-order'], (old: any) => {
+        if (!old) return reordered;
+        const childCategories = old.filter((c: any) => c.parent_category_id);
+        return [...reordered, ...childCategories];
+      });
+      reorderMutation.mutate(reordered);
+    },
+  });
+
+  const toggleVisibility = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase.from('categories').update({ is_active }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-categories-order'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+    },
+    onError: (error: any) => toast({ title: 'Erro', description: error.message, variant: 'destructive' }),
+  });
+
+  if (isLoading) return <p className="text-sm text-muted-foreground py-4">Carregando...</p>;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold">Categorias da Home</h3>
+        <p className="text-sm text-muted-foreground">Arraste para reordenar. Desative categorias que não quer exibir na home.</p>
+      </div>
+
+      {rootCategories.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            <p>Nenhuma categoria cadastrada.</p>
+            <p className="text-xs mt-1">Crie categorias na página de Categorias primeiro.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-2">
+          {rootCategories.map((cat, index) => {
+            const childCount = categories?.filter(c => c.parent_category_id === cat.id).length || 0;
+            return (
+              <Card
+                key={cat.id}
+                className={`transition-opacity ${!cat.is_active ? 'opacity-40' : ''}`}
+                {...getDragProps(index)}
+              >
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-3">
+                    <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab flex-shrink-0" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-muted flex-shrink-0">
+                      <img
+                        src={cat.image_url || '/placeholder.svg'}
+                        alt={cat.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{cat.name}</p>
+                      <p className="text-xs text-muted-foreground">/{cat.slug}{childCount > 0 ? ` · ${childCount} sub` : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <Switch
+                          checked={cat.is_active}
+                          onCheckedChange={(checked) => toggleVisibility.mutate({ id: cat.id, is_active: checked })}
+                          className="scale-90"
+                        />
+                        <span className="text-xs text-muted-foreground hidden sm:inline">
+                          {cat.is_active ? 'Visível' : 'Oculta'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        💡 Apenas categorias raiz são exibidas na home. Subcategorias aparecem dentro das páginas de categoria.
+      </p>
+    </div>
+  );
+}
+
 // ─── Main Page ───
 
 export default function Personalization() {
@@ -519,17 +651,19 @@ export default function Personalization() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl sm:text-3xl font-bold">Personalização</h1>
-        <p className="text-sm text-muted-foreground">Gerencie banners, destaques e vídeos da página inicial</p>
+        <p className="text-sm text-muted-foreground">Gerencie banners, destaques, categorias e vídeos da página inicial</p>
       </div>
 
       <Tabs defaultValue="secoes" className="space-y-4">
         <TabsList className="flex-wrap">
           <TabsTrigger value="secoes" className="flex items-center gap-2"><LayoutGrid className="h-4 w-4" />Seções</TabsTrigger>
+          <TabsTrigger value="categorias" className="flex items-center gap-2"><Tag className="h-4 w-4" />Categorias</TabsTrigger>
           <TabsTrigger value="banners" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Banners</TabsTrigger>
           <TabsTrigger value="destaques" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Destaques</TabsTrigger>
           <TabsTrigger value="videos" className="flex items-center gap-2"><Video className="h-4 w-4" />Inspire-se</TabsTrigger>
         </TabsList>
         <TabsContent value="secoes"><HomeSectionsManager /></TabsContent>
+        <TabsContent value="categorias"><CategoriesOrderSection /></TabsContent>
         <TabsContent value="banners"><BannersSection /></TabsContent>
         <TabsContent value="destaques">
           <Suspense fallback={<p className="text-sm text-muted-foreground py-4">Carregando...</p>}>
