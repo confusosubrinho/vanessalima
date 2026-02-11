@@ -51,6 +51,7 @@ export default function Checkout() {
   const [cpfError, setCpfError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [selectedInstallments, setSelectedInstallments] = useState(1);
+  const [customerIp, setCustomerIp] = useState('0.0.0.0');
 
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>({
     max_installments: 6,
@@ -90,6 +91,24 @@ export default function Checkout() {
         setPaymentConfig(data);
       }
     }).catch(() => {});
+
+    // Collect customer IP via Appmax JS or fallback
+    try {
+      if ((window as any).AppmaxScripts) {
+        (window as any).AppmaxScripts.init(
+          (data: any) => { if (data?.ip) setCustomerIp(data.ip); },
+          () => {}
+        );
+      } else {
+        // Fallback: fetch IP from public API
+        fetch('https://api.ipify.org?format=json')
+          .then(r => r.json())
+          .then(d => { if (d?.ip) setCustomerIp(d.ip); })
+          .catch(() => {});
+      }
+    } catch {
+      // Silent fail
+    }
   }, []);
 
   const formatPrice = (price: number) => {
@@ -302,6 +321,7 @@ export default function Checkout() {
         customer_email: formData.email,
         customer_phone: formData.phone,
         customer_cpf: formData.cpf,
+        customer_ip: customerIp,
         shipping_zip: formData.cep,
         shipping_address: formData.address,
         shipping_number: formData.number,
@@ -356,12 +376,11 @@ export default function Checkout() {
       clearCart();
       navigate('/pedido-confirmado', {
         state: {
+          orderId: order.id,
           orderNumber: order.order_number,
           paymentMethod: formData.paymentMethod,
           pixQrcode: paymentResult?.pix_qrcode,
           pixEmv: paymentResult?.pix_emv,
-          boletoUrl: paymentResult?.boleto_url,
-          boletoDigitableLine: paymentResult?.boleto_digitable_line,
         },
       });
     } catch (err: any) {
@@ -672,16 +691,6 @@ export default function Checkout() {
                             Em até {paymentConfig.installments_without_interest}x sem juros
                             {paymentConfig.max_installments > paymentConfig.installments_without_interest && ` ou até ${paymentConfig.max_installments}x`}
                           </p>
-                        </Label>
-                        <span className="font-medium">{formatPrice(total)}</span>
-                      </div>
-                    </div>
-                    <div className={`p-4 border rounded-lg cursor-pointer transition-colors ${formData.paymentMethod === 'boleto' ? 'border-primary bg-primary/5' : 'hover:border-primary'}`}>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="boleto" id="payment-boleto" />
-                        <Label htmlFor="payment-boleto" className="cursor-pointer flex-1">
-                          <span className="font-medium">Boleto Bancário</span>
-                          <p className="text-sm text-muted-foreground">Vencimento em 3 dias úteis</p>
                         </Label>
                         <span className="font-medium">{formatPrice(total)}</span>
                       </div>

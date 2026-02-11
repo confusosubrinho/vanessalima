@@ -1,18 +1,92 @@
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { CheckCircle, Package, ArrowRight, Copy } from 'lucide-react';
+import { CheckCircle, Package, ArrowRight, Copy, Clock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import logo from '@/assets/logo.png';
+
+const statusLabels: Record<string, { label: string; description: string; color: string }> = {
+  pending: {
+    label: 'Aguardando Pagamento',
+    description: 'Estamos aguardando a confirmação do seu pagamento.',
+    color: 'text-yellow-600',
+  },
+  processing: {
+    label: 'Pagamento Confirmado',
+    description: 'Seu pagamento foi aprovado! O pedido está sendo preparado.',
+    color: 'text-primary',
+  },
+  shipped: {
+    label: 'Enviado',
+    description: 'Seu pedido está a caminho!',
+    color: 'text-blue-600',
+  },
+  delivered: {
+    label: 'Entregue',
+    description: 'Seu pedido foi entregue com sucesso.',
+    color: 'text-green-600',
+  },
+  cancelled: {
+    label: 'Cancelado',
+    description: 'Este pedido foi cancelado.',
+    color: 'text-destructive',
+  },
+};
 
 export default function OrderConfirmation() {
   const location = useLocation();
   const { toast } = useToast();
   const orderNumber = location.state?.orderNumber || 'N/A';
+  const orderId = location.state?.orderId;
   const paymentMethod = location.state?.paymentMethod || 'pix';
   const pixQrcode = location.state?.pixQrcode;
   const pixEmv = location.state?.pixEmv;
-  const boletoUrl = location.state?.boletoUrl;
-  const boletoDigitableLine = location.state?.boletoDigitableLine;
+
+  const [orderStatus, setOrderStatus] = useState('pending');
+
+  // Subscribe to Realtime order status updates
+  useEffect(() => {
+    if (!orderId) return;
+
+    // Fetch initial status
+    supabase
+      .from('orders')
+      .select('status')
+      .eq('id', orderId)
+      .single()
+      .then(({ data }) => {
+        if (data?.status) setOrderStatus(data.status);
+      });
+
+    // Listen for real-time changes
+    const channel = supabase
+      .channel(`order-${orderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${orderId}`,
+        },
+        (payload) => {
+          const newStatus = payload.new?.status;
+          if (newStatus && newStatus !== orderStatus) {
+            setOrderStatus(newStatus);
+            const info = statusLabels[newStatus];
+            if (info) {
+              toast({ title: info.label, description: info.description });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [orderId]);
 
   const paymentInfo: Record<string, { title: string; description: string }> = {
     pix: {
@@ -25,15 +99,10 @@ export default function OrderConfirmation() {
       title: 'Cartão de Crédito',
       description: 'Seu pagamento foi processado com sucesso. O pedido será preparado em breve.',
     },
-    boleto: {
-      title: 'Boleto Bancário',
-      description: boletoUrl
-        ? 'Clique no botão abaixo para visualizar o boleto. O pedido será confirmado após a compensação (até 3 dias úteis).'
-        : 'O boleto foi gerado e enviado para o seu email. O pedido será confirmado após a compensação (até 3 dias úteis).',
-    },
   };
 
   const info = paymentInfo[paymentMethod] || paymentInfo.pix;
+  const currentStatusInfo = statusLabels[orderStatus] || statusLabels.pending;
 
   const copyPixCode = () => {
     if (pixEmv) {
@@ -55,14 +124,32 @@ export default function OrderConfirmation() {
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="bg-background rounded-xl shadow-sm p-8 md:p-12 max-w-lg w-full text-center space-y-6">
           <div className="flex justify-center">
-            <CheckCircle className="h-16 w-16 text-primary" />
+            {orderStatus === 'pending' ? (
+              <Clock className="h-16 w-16 text-yellow-500" />
+            ) : orderStatus === 'cancelled' ? (
+              <Package className="h-16 w-16 text-destructive" />
+            ) : (
+              <CheckCircle className="h-16 w-16 text-primary" />
+            )}
           </div>
 
           <div>
-            <h1 className="text-2xl font-bold mb-2">Pedido Realizado!</h1>
+            <h1 className="text-2xl font-bold mb-2">
+              {orderStatus === 'pending' ? 'Aguardando Pagamento' : 'Pedido Realizado!'}
+            </h1>
             <p className="text-muted-foreground">
               Seu pedido <strong className="text-foreground">{orderNumber}</strong> foi registrado com sucesso.
             </p>
+          </div>
+
+          {/* Real-time status indicator */}
+          <div className={`bg-muted/50 rounded-lg p-4 space-y-2 ${currentStatusInfo.color}`}>
+            <div className="flex items-center justify-center gap-2 font-medium">
+              {orderStatus === 'pending' && <Loader2 className="h-4 w-4 animate-spin" />}
+              <Package className="h-4 w-4" />
+              <span>{currentStatusInfo.label}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">{currentStatusInfo.description}</p>
           </div>
 
           <div className="bg-muted/50 rounded-lg p-4 text-left space-y-1">
@@ -74,7 +161,7 @@ export default function OrderConfirmation() {
           </div>
 
           {/* PIX QR Code */}
-          {paymentMethod === 'pix' && pixQrcode && (
+          {paymentMethod === 'pix' && pixQrcode && orderStatus === 'pending' && (
             <div className="space-y-3">
               <img src={pixQrcode} alt="QR Code PIX" className="mx-auto w-48 h-48" />
               {pixEmv && (
@@ -91,33 +178,11 @@ export default function OrderConfirmation() {
             </div>
           )}
 
-          {/* Boleto */}
-          {paymentMethod === 'boleto' && boletoUrl && (
-            <div className="space-y-3">
-              {boletoDigitableLine && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground break-all bg-muted/50 p-2 rounded text-left font-mono">
-                    {boletoDigitableLine}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(boletoDigitableLine);
-                      toast({ title: 'Linha digitável copiada!' });
-                    }}
-                    className="gap-2"
-                  >
-                    <Copy className="h-3 w-3" />
-                    Copiar linha digitável
-                  </Button>
-                </div>
-              )}
-              <Button asChild variant="default" size="sm">
-                <a href={boletoUrl} target="_blank" rel="noopener noreferrer">
-                  Visualizar Boleto
-                </a>
-              </Button>
+          {/* Payment confirmed message for PIX */}
+          {paymentMethod === 'pix' && orderStatus !== 'pending' && orderStatus !== 'cancelled' && (
+            <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 text-sm">
+              <p className="text-primary font-medium">✓ Pagamento PIX confirmado!</p>
+              <p className="text-muted-foreground mt-1">Seu pedido está sendo preparado.</p>
             </div>
           )}
 

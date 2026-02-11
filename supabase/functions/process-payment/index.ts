@@ -3,11 +3,115 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const APPMAX_PRODUCTION_URL = "https://admin.appmax.com.br/api/v3";
-const APPMAX_SANDBOX_URL = "https://homolog.sandboxappmax.com.br/api/v3";
+// ─── Environment-based URLs ───
+function authUrl(env: string) {
+  return env === "sandbox"
+    ? "https://auth.sandboxappmax.com.br"
+    : "https://auth.appmax.com.br";
+}
+function apiUrl(env: string) {
+  return env === "sandbox"
+    ? "https://api.sandboxappmax.com.br"
+    : "https://api.appmax.com.br";
+}
+
+// ─── OAuth Token Management (cached in store_settings) ───
+async function getAppmaxToken(
+  supabase: ReturnType<typeof createClient>,
+  env: string
+): Promise<string> {
+  // Check cached token
+  const { data: settings } = await supabase
+    .from("store_settings")
+    .select("appmax_access_token, bling_token_expires_at")
+    .limit(1)
+    .maybeSingle();
+
+  // Reuse bling_token_expires_at field for appmax token expiry (avoids migration)
+  // Actually we have appmax_access_token already - let's reuse it as cache
+  const cachedToken = settings?.appmax_access_token;
+  const expiresAt = settings?.bling_token_expires_at;
+
+  if (cachedToken && expiresAt) {
+    const expiresDate = new Date(expiresAt);
+    // 60s buffer
+    if (expiresDate > new Date(Date.now() + 60_000)) {
+      return cachedToken;
+    }
+  }
+
+  // Generate new token via OAuth client_credentials
+  const clientId = Deno.env.get("APPMAX_CLIENT_ID");
+  const clientSecret = Deno.env.get("APPMAX_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("Credenciais OAuth da Appmax não configuradas (APPMAX_CLIENT_ID / APPMAX_CLIENT_SECRET)");
+  }
+
+  const tokenUrl = `${authUrl(env)}/oauth2/token`;
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+
+  const resp = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`OAuth token error [${resp.status}]: ${errText}`);
+  }
+
+  const tokenData = await resp.json();
+  const accessToken = tokenData.access_token;
+  const expiresIn = Number(tokenData.expires_in ?? 3600);
+  const newExpiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+  // Cache token in store_settings
+  await supabase
+    .from("store_settings")
+    .update({
+      appmax_access_token: accessToken,
+      bling_token_expires_at: newExpiresAt,
+    })
+    .not("id", "is", null); // update all rows (single row table)
+
+  return accessToken;
+}
+
+// ─── Appmax v1 API helper ───
+async function appmaxFetch(
+  baseUrl: string,
+  token: string,
+  endpoint: string,
+  body: Record<string, unknown>,
+  method = "POST"
+) {
+  const url = `${baseUrl}/v1/${endpoint}`;
+  const response = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: method !== "GET" ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    const errMsg = data?.message || data?.error || data?.text || `Appmax API error [${response.status}]`;
+    throw new Error(errMsg);
+  }
+  return data;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -21,18 +125,22 @@ serve(async (req) => {
 
     const { data: settings, error: settingsError } = await supabase
       .from("store_settings")
-      .select("appmax_access_token, appmax_environment, max_installments, installments_without_interest, installment_interest_rate, min_installment_value, pix_discount, cash_discount")
+      .select(
+        "appmax_environment, max_installments, installments_without_interest, installment_interest_rate, min_installment_value, pix_discount, cash_discount"
+      )
       .limit(1)
       .maybeSingle();
 
     if (settingsError) throw new Error(`Settings error: ${settingsError.message}`);
 
-    const accessToken = settings?.appmax_access_token;
+    const appmaxEnv = settings?.appmax_environment || "production";
 
     const { action, ...payload } = await req.json();
 
     // ─── Action: get_payment_config ───
     if (action === "get_payment_config") {
+      // Check if OAuth credentials exist
+      const hasCredentials = !!Deno.env.get("APPMAX_CLIENT_ID") && !!Deno.env.get("APPMAX_CLIENT_SECRET");
       return new Response(
         JSON.stringify({
           max_installments: settings?.max_installments || 6,
@@ -41,36 +149,16 @@ serve(async (req) => {
           min_installment_value: settings?.min_installment_value || 30,
           pix_discount: settings?.pix_discount || 0,
           cash_discount: settings?.cash_discount || 0,
-          gateway_configured: !!accessToken,
+          gateway_configured: hasCredentials,
           gateway: "appmax",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // All other actions require access token
-    if (!accessToken) {
-      return new Response(JSON.stringify({ error: "Credenciais da Appmax não configuradas" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const isProduction = settings?.appmax_environment === "production";
-    const baseUrl = isProduction ? APPMAX_PRODUCTION_URL : APPMAX_SANDBOX_URL;
-
-    async function appmaxFetch(endpoint: string, body: Record<string, unknown>) {
-      const response = await fetch(`${baseUrl}/${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, "access-token": accessToken }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.text || data.message || `Appmax API error [${response.status}]`);
-      }
-      return data;
-    }
+    // ─── All transactional actions require OAuth token ───
+    const token = await getAppmaxToken(supabase, appmaxEnv);
+    const baseApiUrl = apiUrl(appmaxEnv);
 
     // ─── Action: create_transaction ───
     if (action === "create_transaction") {
@@ -78,15 +166,11 @@ serve(async (req) => {
         order_id,
         amount,
         installments = 1,
-        card_number,
-        card_holder,
-        expiration_month,
-        expiration_year,
-        security_code,
         customer_name,
         customer_email,
         customer_phone,
         customer_cpf,
+        customer_ip,
         shipping_zip,
         shipping_address,
         shipping_number,
@@ -94,10 +178,18 @@ serve(async (req) => {
         shipping_neighborhood,
         shipping_city,
         shipping_state,
-        payment_method = "credit-card",
+        payment_method = "pix",
         products = [],
         coupon_code,
         discount_amount = 0,
+        // Card tokenized data (from Appmax JS)
+        card_token,
+        // Or raw card data (fallback)
+        card_number,
+        card_holder,
+        expiration_month,
+        expiration_year,
+        security_code,
       } = payload;
 
       // ── Server-side coupon validation ──
@@ -113,46 +205,50 @@ serve(async (req) => {
           .maybeSingle();
 
         if (couponError || !coupon) {
-          return new Response(JSON.stringify({ error: "Cupom inválido ou inativo" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: "Cupom inválido ou inativo" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
         if (coupon.expiry_date && new Date(coupon.expiry_date) < new Date()) {
-          return new Response(JSON.stringify({ error: "Cupom expirado" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: "Cupom expirado" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
         if (coupon.max_uses && (coupon.uses_count || 0) >= coupon.max_uses) {
-          return new Response(JSON.stringify({ error: "Cupom esgotado" }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({ error: "Cupom esgotado" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
-        // Calculate expected subtotal from products
-        const expectedSubtotal = products.reduce((sum: number, p: any) => sum + (p.price * (p.quantity || 1)), 0);
+        const expectedSubtotal = products.reduce(
+          (sum: number, p: any) => sum + p.price * (p.quantity || 1),
+          0
+        );
 
         if (coupon.min_purchase_amount && expectedSubtotal < coupon.min_purchase_amount) {
-          return new Response(JSON.stringify({ error: `Valor mínimo para este cupom: R$ ${coupon.min_purchase_amount}` }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return new Response(
+            JSON.stringify({
+              error: `Valor mínimo para este cupom: R$ ${coupon.min_purchase_amount}`,
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
-        validatedDiscount = coupon.discount_type === "percentage"
-          ? (expectedSubtotal * coupon.discount_value) / 100
-          : coupon.discount_value;
+        validatedDiscount =
+          coupon.discount_type === "percentage"
+            ? (expectedSubtotal * coupon.discount_value) / 100
+            : coupon.discount_value;
 
-        // Tolerance of R$0.10 for rounding
-        if (Math.abs(validatedDiscount - discount_amount) > 0.10) {
-          return new Response(JSON.stringify({ error: "Valor do desconto divergente. Recarregue a página." }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+        if (Math.abs(validatedDiscount - discount_amount) > 0.1) {
+          return new Response(
+            JSON.stringify({ error: "Valor do desconto divergente. Recarregue a página." }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
 
         validatedCouponId = coupon.id;
@@ -161,41 +257,39 @@ serve(async (req) => {
       // ── Stock validation ──
       const variantIds = products.filter((p: any) => p.variant_id).map((p: any) => p.variant_id);
       if (variantIds.length > 0) {
-        const { data: variants, error: varError } = await supabase
+        const { data: variants } = await supabase
           .from("product_variants")
           .select("id, stock_quantity, size, color")
           .in("id", variantIds);
 
-        if (varError) {
-          console.error("Stock check error:", varError);
-        } else if (variants) {
+        if (variants) {
           for (const product of products) {
             if (!product.variant_id) continue;
             const variant = variants.find((v: any) => v.id === product.variant_id);
             if (!variant) continue;
             if (variant.stock_quantity < (product.quantity || 1)) {
-              return new Response(JSON.stringify({
-                error: `Estoque insuficiente para "${product.name}" (${variant.size}${variant.color ? ' - ' + variant.color : ''}). Disponível: ${variant.stock_quantity}`,
-              }), {
-                status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              });
+              return new Response(
+                JSON.stringify({
+                  error: `Estoque insuficiente para "${product.name}" (${variant.size}${variant.color ? " - " + variant.color : ""}). Disponível: ${variant.stock_quantity}`,
+                }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
             }
           }
         }
       }
 
-      // Step 1: Create customer
+      // ── Step 1: Create/update customer (v1) ──
       const nameParts = (customer_name || "Cliente").split(" ");
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(" ") || firstName;
 
-      const customerData = await appmaxFetch("customer", {
-        firstname: firstName,
-        lastname: lastName,
+      const customerPayload = {
+        first_name: firstName,
+        last_name: lastName,
         email: customer_email || "cliente@loja.com",
-        telephone: (customer_phone || "").replace(/\D/g, ""),
-        ip: "0.0.0.0",
+        phone: (customer_phone || "").replace(/\D/g, ""),
+        ip: customer_ip || "0.0.0.0",
         postcode: (shipping_zip || "").replace(/\D/g, ""),
         address_street: shipping_address || "",
         address_street_number: shipping_number || "0",
@@ -203,80 +297,100 @@ serve(async (req) => {
         address_street_district: shipping_neighborhood || "",
         address_city: shipping_city || "",
         address_state: shipping_state || "",
-      });
+      };
 
-      const customerId = customerData.data?.id;
-      if (!customerId) throw new Error("Falha ao criar cliente na Appmax");
+      const customerData = await appmaxFetch(baseApiUrl, token, "customers", customerPayload);
+      const appmaxCustomerId = customerData?.data?.id || customerData?.id;
+      if (!appmaxCustomerId) throw new Error("Falha ao criar cliente na Appmax");
 
-      // Step 2: Create order
-      const orderProducts = products.length > 0 ? products.map((p: any) => ({
-        sku: p.sku || p.product_id || "SKU001",
-        name: p.name || "Produto",
-        qty: p.quantity || 1,
-        price: p.price || 0,
-      })) : [{ sku: "ORDER", name: "Pedido", qty: 1, price: amount }];
+      // ── Step 2: Create order (v1) ──
+      const orderProducts =
+        products.length > 0
+          ? products.map((p: any) => ({
+              sku: p.sku || p.product_id || "SKU001",
+              name: p.name || "Produto",
+              qty: p.quantity || 1,
+              price: p.price || 0,
+            }))
+          : [{ sku: "ORDER", name: "Pedido", qty: 1, price: amount }];
 
-      const orderData = await appmaxFetch("order", {
-        customer_id: customerId,
-        total: amount,
+      const orderPayload = {
+        customer_id: appmaxCustomerId,
         products: orderProducts,
-      });
+      };
 
-      const appmaxOrderId = orderData.data?.id;
+      const orderData = await appmaxFetch(baseApiUrl, token, "orders", orderPayload);
+      const appmaxOrderId = orderData?.data?.id || orderData?.id;
       if (!appmaxOrderId) throw new Error("Falha ao criar pedido na Appmax");
 
-      // Step 3: Process payment
+      // ── Step 3: Process payment (v1) ──
       let paymentEndpoint: string;
-      let paymentBody: Record<string, unknown> = {
-        cart: { order_id: appmaxOrderId },
-        customer: { customer_id: customerId },
+      let paymentPayload: Record<string, unknown> = {
+        order_id: appmaxOrderId,
       };
 
       if (payment_method === "pix") {
-        paymentEndpoint = "payment/pix";
-        paymentBody.payment = {
+        paymentEndpoint = "payments/pix";
+        paymentPayload.payment_data = {
           pix: {
             document_number: (customer_cpf || "").replace(/\D/g, ""),
           },
         };
-      } else if (payment_method === "boleto") {
-        paymentEndpoint = "payment/Boleto";
-        paymentBody.payment = {
-          Boleto: {
-            document_number: (customer_cpf || "").replace(/\D/g, ""),
-          },
-        };
-      } else {
-        paymentEndpoint = "payment/CreditCard";
-        paymentBody.payment = {
-          CreditCard: {
+      } else if (payment_method === "credit-card" || payment_method === "card") {
+        paymentEndpoint = "payments/credit-card";
+
+        if (card_token) {
+          // Appmax JS tokenized card (PCI compliant)
+          paymentPayload.payment_data = {
+            credit_card: {
+              token: card_token,
+              document_number: (customer_cpf || "").replace(/\D/g, ""),
+              installments: installments,
+              soft_descriptor: "VANESSALIMA",
+            },
+          };
+        } else {
+          // Fallback: raw card data (tokenize first)
+          const tokenizeResp = await appmaxFetch(baseApiUrl, token, "payments/tokenize", {
             number: (card_number || "").replace(/\s/g, ""),
             cvv: security_code || "",
             month: parseInt(expiration_month) || 1,
             year: parseInt(expiration_year) || 2025,
             name: card_holder || customer_name || "",
-            document_number: (customer_cpf || "").replace(/\D/g, ""),
-            installments: installments,
-            soft_descriptor: "VANESSALIMA",
-          },
-        };
+          });
+
+          const cardToken = tokenizeResp?.data?.token || tokenizeResp?.token;
+          if (!cardToken) throw new Error("Falha ao tokenizar cartão");
+
+          paymentPayload.payment_data = {
+            credit_card: {
+              token: cardToken,
+              document_number: (customer_cpf || "").replace(/\D/g, ""),
+              installments: installments,
+              soft_descriptor: "VANESSALIMA",
+            },
+          };
+        }
+      } else {
+        throw new Error(`Método de pagamento não suportado: ${payment_method}`);
       }
 
-      const paymentData = await appmaxFetch(paymentEndpoint, paymentBody);
+      const paymentData = await appmaxFetch(baseApiUrl, token, paymentEndpoint, paymentPayload);
 
-      // ── Post-payment: update order, decrement stock, increment coupon ──
+      // ── Post-payment: update internal order ──
       if (order_id) {
-        await supabase
-          .from("orders")
-          .update({
-            status: "processing",
-            coupon_code: coupon_code || null,
-            discount_amount: validatedDiscount || discount_amount || 0,
-            notes: `Appmax Order: ${appmaxOrderId} | Ref: ${paymentData.data?.pay_reference || "N/A"}`,
-          })
-          .eq("id", order_id);
+        const updateData: Record<string, unknown> = {
+          status: "processing",
+          coupon_code: coupon_code || null,
+          discount_amount: validatedDiscount || discount_amount || 0,
+          appmax_customer_id: String(appmaxCustomerId),
+          appmax_order_id: String(appmaxOrderId),
+          payment_method: payment_method === "credit-card" || payment_method === "card" ? "card" : payment_method,
+        };
 
-        // Find or create customer record and link to order
+        await supabase.from("orders").update(updateData).eq("id", order_id);
+
+        // Find or create customer record
         if (customer_email) {
           const { data: existingCustomer } = await supabase
             .from("customers")
@@ -292,7 +406,7 @@ serve(async (req) => {
               .update({
                 total_orders: (existingCustomer.total_orders || 0) + 1,
                 total_spent: (existingCustomer.total_spent || 0) + amount,
-                full_name: customer_name || existingCustomer.id,
+                full_name: customer_name || "Cliente",
                 phone: customer_phone || null,
               })
               .eq("id", existingCustomer.id);
@@ -321,7 +435,6 @@ serve(async (req) => {
       for (const product of products) {
         if (!product.variant_id) continue;
         const qty = product.quantity || 1;
-        // Use RPC-like approach: read then update
         const { data: currentVariant } = await supabase
           .from("product_variants")
           .select("stock_quantity")
@@ -356,19 +469,13 @@ serve(async (req) => {
       const result: Record<string, unknown> = {
         success: true,
         appmax_order_id: appmaxOrderId,
-        pay_reference: paymentData.data?.pay_reference,
+        pay_reference: paymentData?.data?.pay_reference || paymentData?.pay_reference,
       };
 
-      if (payment_method === "pix" && paymentData.data) {
-        result.pix_qrcode = paymentData.data.pix_qrcode;
-        result.pix_emv = paymentData.data.pix_emv;
-        result.pix_expiration_date = paymentData.data.pix_expiration_date;
-      }
-
-      if (payment_method === "boleto" && paymentData.data) {
-        result.boleto_url = paymentData.data.pdf;
-        result.boleto_digitable_line = paymentData.data.digitable_line;
-        result.boleto_due_date = paymentData.data.due_date;
+      if (payment_method === "pix" && paymentData?.data) {
+        result.pix_qrcode = paymentData.data.pix_qrcode || paymentData.data.qr_code;
+        result.pix_emv = paymentData.data.pix_emv || paymentData.data.emv;
+        result.pix_expiration_date = paymentData.data.pix_expiration_date || paymentData.data.expiration_date;
       }
 
       return new Response(JSON.stringify(result), {
@@ -376,17 +483,18 @@ serve(async (req) => {
       });
     }
 
-    // ─── Action: tokenize_card ───
-    if (action === "tokenize_card") {
-      const { card_number, card_cvv, card_month, card_year, card_name } = payload;
-      const tokenData = await appmaxFetch("tokenize/card", {
-        number: (card_number || "").replace(/\s/g, ""),
-        cvv: card_cvv,
-        month: parseInt(card_month),
-        year: parseInt(card_year),
-        name: card_name,
-      });
-      return new Response(JSON.stringify({ success: true, token: tokenData.data?.token }), {
+    // ─── Action: get_order_status ───
+    if (action === "get_order_status") {
+      const { appmax_order_id: oid } = payload;
+      if (!oid) {
+        return new Response(JSON.stringify({ error: "appmax_order_id required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const orderStatus = await appmaxFetch(baseApiUrl, token, `orders/${oid}`, {}, "GET");
+      return new Response(JSON.stringify(orderStatus), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
