@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const BLING_API_URL = "https://bling.com.br/Api/v3";
 const BLING_TOKEN_URL = "https://bling.com.br/Api/v3/oauth/token";
-const BLING_RATE_LIMIT_MS = 400; // 400ms between requests = ~2.5 req/s (limit is 3/s)
+const BLING_RATE_LIMIT_MS = 340; // ~3 req/s (Bling limit is 3/s, small margin)
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -1099,25 +1099,37 @@ async function syncProducts(supabase: any, token: string, batchLimit: number = 0
   return summary;
 }
 
-// ─── Sync Stock from Bling ───
+// ─── Sync Stock from Bling (optimized: handles both products and individual variants) ───
 async function syncStock(supabase: any, token: string) {
   const headers = blingHeaders(token);
 
+  // Get all products with bling IDs
   const { data: products } = await supabase
     .from("products")
     .select("id, bling_product_id")
     .not("bling_product_id", "is", null);
 
-  if (!products?.length) return { updated: 0 };
+  // Get all variants with individual bling_variant_id
+  const { data: variants } = await supabase
+    .from("product_variants")
+    .select("id, bling_variant_id, product_id")
+    .not("bling_variant_id", "is", null);
+
+  if (!products?.length && !variants?.length) return { updated: 0 };
+
+  // Collect ALL unique bling IDs
+  const productBlingIds = (products || []).map((p: any) => p.bling_product_id);
+  const variantBlingIds = (variants || []).map((v: any) => v.bling_variant_id);
+  const allBlingIds = [...new Set([...productBlingIds, ...variantBlingIds])];
 
   let updated = 0;
 
-  for (let i = 0; i < products.length; i += 50) {
-    const batch = products.slice(i, i + 50);
-    const ids = batch.map((p: any) => p.bling_product_id);
-    const idsParam = ids.map((id: number) => `idsProdutos[]=${id}`).join("&");
+  // Fetch stock in batches of 50
+  for (let i = 0; i < allBlingIds.length; i += 50) {
+    const batch = allBlingIds.slice(i, i + 50);
+    const idsParam = batch.map(id => `idsProdutos[]=${id}`).join("&");
 
-    await sleep(BLING_RATE_LIMIT_MS);
+    if (i > 0) await sleep(BLING_RATE_LIMIT_MS);
     const res = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
     const json = await res.json();
 
@@ -1128,20 +1140,35 @@ async function syncStock(supabase: any, token: string) {
 
     const stockData = json?.data || [];
     for (const stock of stockData) {
-      const product = batch.find((p: any) => p.bling_product_id === stock.produto?.id);
-      if (!product) continue;
-
+      const blingId = stock.produto?.id;
       const qty = stock.saldoVirtualTotal ?? 0;
-      await supabase
-        .from("product_variants")
-        .update({ stock_quantity: qty })
-        .eq("product_id", product.id);
+      if (!blingId) continue;
 
-      updated++;
+      // Update as product (only variants WITHOUT their own bling_variant_id)
+      const product = (products || []).find((p: any) => p.bling_product_id === blingId);
+      if (product) {
+        await supabase
+          .from("product_variants")
+          .update({ stock_quantity: qty })
+          .eq("product_id", product.id)
+          .is("bling_variant_id", null);
+        updated++;
+      }
+
+      // Update as specific variant
+      const variant = (variants || []).find((v: any) => v.bling_variant_id === blingId);
+      if (variant) {
+        await supabase
+          .from("product_variants")
+          .update({ stock_quantity: qty })
+          .eq("id", variant.id);
+        updated++;
+      }
     }
   }
 
-  return { updated };
+  console.log(`Stock sync complete: ${updated} updates from ${allBlingIds.length} Bling IDs`);
+  return { updated, totalChecked: allBlingIds.length };
 }
 
 // ─── Create Order in Bling ───

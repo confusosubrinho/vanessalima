@@ -873,8 +873,15 @@ function BlingPanel() {
 
           {/* Webhook URL */}
           <div className="space-y-3">
-            <h4 className="font-medium text-sm">🔗 Webhook (Atualização automática)</h4>
-            <p className="text-xs text-muted-foreground">Configure este URL como callback no Bling para receber atualizações de estoque em tempo real.</p>
+            <h4 className="font-medium text-sm">🔗 Webhook (Sincronização em Tempo Real)</h4>
+            <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+              <Check className="h-5 w-5 text-green-600" />
+              <div>
+                <span className="text-sm font-medium text-green-700 dark:text-green-400">Sincronização automática ativa</span>
+                <p className="text-xs text-green-600 dark:text-green-500">Estoque atualiza a cada 5 minutos automaticamente + webhook para tempo real</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Configure o URL abaixo como callback no Bling para atualizações instantâneas de estoque e produtos.</p>
             <div className="space-y-2">
               <div>
                 <Label className="text-xs">URL do Webhook</Label>
@@ -888,12 +895,17 @@ function BlingPanel() {
               <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
                 <p className="font-medium">Como configurar no Bling:</p>
                 <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
-                  <li>Acesse <strong>Meu Negócio → Preferências → Callbacks</strong> no Bling</li>
-                  <li>Ou acesse <a href="https://developer.bling.com.br/aplicativos" target="_blank" rel="noopener noreferrer" className="text-primary underline">developer.bling.com.br/aplicativos</a></li>
+                  <li>Acesse <a href="https://developer.bling.com.br/aplicativos" target="_blank" rel="noopener noreferrer" className="text-primary underline">developer.bling.com.br/aplicativos</a></li>
                   <li>No seu aplicativo, vá na aba <strong>"Callbacks"</strong></li>
-                  <li>Adicione a URL acima como callback para os eventos: <strong>estoque</strong></li>
-                  <li>Método: <strong>POST</strong></li>
+                  <li>Adicione a URL acima como callback para os eventos:</li>
                 </ol>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Badge variant="secondary" className="text-[10px]">estoque</Badge>
+                  <Badge variant="secondary" className="text-[10px]">produto.alteracao</Badge>
+                  <Badge variant="secondary" className="text-[10px]">produto.inclusao</Badge>
+                </div>
+                <p className="text-muted-foreground mt-2">4. Método: <strong>POST</strong></p>
+                <p className="text-muted-foreground">Ao alterar estoque ou produto no Bling, a loja será atualizada em segundos.</p>
               </div>
             </div>
           </div>
