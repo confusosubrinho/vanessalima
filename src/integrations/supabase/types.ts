@@ -1502,16 +1502,134 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      store_settings_public: {
+        Row: {
+          address: string | null
+          app_version: string | null
+          appmax_environment: string | null
+          body_code: string | null
+          cash_discount: number | null
+          cnpj: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          contact_whatsapp: string | null
+          created_at: string | null
+          facebook_pixel_id: string | null
+          facebook_url: string | null
+          free_shipping_threshold: number | null
+          full_address: string | null
+          google_analytics_id: string | null
+          head_code: string | null
+          id: string | null
+          instagram_url: string | null
+          installment_interest_rate: number | null
+          installments_without_interest: number | null
+          logo_url: string | null
+          max_installments: number | null
+          min_installment_value: number | null
+          pix_discount: number | null
+          shipping_free_enabled: boolean | null
+          shipping_free_label: string | null
+          shipping_free_min_value: number | null
+          shipping_regions: Json | null
+          shipping_store_pickup_address: string | null
+          shipping_store_pickup_enabled: boolean | null
+          shipping_store_pickup_label: string | null
+          store_name: string | null
+          tiktok_pixel_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          app_version?: string | null
+          appmax_environment?: string | null
+          body_code?: string | null
+          cash_discount?: number | null
+          cnpj?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          contact_whatsapp?: string | null
+          created_at?: string | null
+          facebook_pixel_id?: string | null
+          facebook_url?: string | null
+          free_shipping_threshold?: number | null
+          full_address?: string | null
+          google_analytics_id?: string | null
+          head_code?: string | null
+          id?: string | null
+          instagram_url?: string | null
+          installment_interest_rate?: number | null
+          installments_without_interest?: number | null
+          logo_url?: string | null
+          max_installments?: number | null
+          min_installment_value?: number | null
+          pix_discount?: number | null
+          shipping_free_enabled?: boolean | null
+          shipping_free_label?: string | null
+          shipping_free_min_value?: number | null
+          shipping_regions?: Json | null
+          shipping_store_pickup_address?: string | null
+          shipping_store_pickup_enabled?: boolean | null
+          shipping_store_pickup_label?: string | null
+          store_name?: string | null
+          tiktok_pixel_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          app_version?: string | null
+          appmax_environment?: string | null
+          body_code?: string | null
+          cash_discount?: number | null
+          cnpj?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          contact_whatsapp?: string | null
+          created_at?: string | null
+          facebook_pixel_id?: string | null
+          facebook_url?: string | null
+          free_shipping_threshold?: number | null
+          full_address?: string | null
+          google_analytics_id?: string | null
+          head_code?: string | null
+          id?: string | null
+          instagram_url?: string | null
+          installment_interest_rate?: number | null
+          installments_without_interest?: number | null
+          logo_url?: string | null
+          max_installments?: number | null
+          min_installment_value?: number | null
+          pix_discount?: number | null
+          shipping_free_enabled?: boolean | null
+          shipping_free_label?: string | null
+          shipping_free_min_value?: number | null
+          shipping_regions?: Json | null
+          shipping_store_pickup_address?: string | null
+          shipping_store_pickup_enabled?: boolean | null
+          shipping_store_pickup_label?: string | null
+          store_name?: string | null
+          tiktok_pixel_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_login_rate_limit: { Args: { p_email: string }; Returns: boolean }
+      decrement_stock: {
+        Args: { p_quantity: number; p_variant_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_coupon_uses: {
+        Args: { p_coupon_id: string }
+        Returns: undefined
       }
       is_admin: { Args: never; Returns: boolean }
     }

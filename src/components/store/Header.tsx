@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, ShoppingBag, Menu, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, ChevronUp, Truck, Heart } from 'lucide-react';
+import { User, ShoppingBag, Menu, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, Truck, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
 import { useCart } from '@/contexts/CartContext';
 import { useCategories, useProducts } from '@/hooks/useProducts';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -22,7 +22,7 @@ export function Header() {
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeMegaMenu, setActiveMegaMenu] = useState<string | null>(null);
-  const [couponOpen, setCouponOpen] = useState(false);
+  
   const megaMenuRef = useRef<HTMLDivElement>(null);
 
   // Fetch products for each category for mega menu
@@ -301,32 +301,11 @@ export function Header() {
                         ))}
                       </div>
 
-                      {/* Product suggestions & Shipping/Coupon - desktop only */}
+                      {/* Product suggestions - desktop only */}
                       {!isMobile && (
-                        <>
-                          <div className="pt-3 border-t">
-                            <CartProductSuggestions compact />
-                          </div>
-
-                          <div className="border-t pt-3 mt-3 space-y-3">
-                            <ShippingCalculator compact />
-                            
-                            <Collapsible open={couponOpen} onOpenChange={setCouponOpen}>
-                              <CollapsibleTrigger asChild>
-                                <button className="flex items-center justify-between w-full p-2 text-sm font-medium hover:bg-muted/50 rounded-lg transition-colors">
-                                  <div className="flex items-center gap-2">
-                                    <Percent className="h-4 w-4 text-primary" />
-                                    <span>Cupom de Desconto</span>
-                                  </div>
-                                  {couponOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                </button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="pt-2">
-                                <CouponInput compact />
-                              </CollapsibleContent>
-                            </Collapsible>
-                          </div>
-                        </>
+                        <div className="pt-3 border-t">
+                          <CartProductSuggestions compact />
+                        </div>
                       )}
                     </div>
 
