@@ -528,8 +528,8 @@ function BlingPanel() {
     setSyncResult(null);
     try {
       if (action === 'sync_products') {
-        // Batch sync: process in chunks of 15 to avoid edge function timeout
-        const BATCH_SIZE = 15;
+        // Batch sync: process in chunks of 5 to avoid edge function timeout
+        const BATCH_SIZE = 5;
         let offset = 0;
         let hasMore = true;
         let totalImported = 0;
