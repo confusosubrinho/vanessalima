@@ -431,38 +431,21 @@ serve(async (req) => {
         }
       }
 
-      // Decrement stock
+      // Decrement stock atomically (prevents race conditions)
       for (const product of products) {
         if (!product.variant_id) continue;
         const qty = product.quantity || 1;
-        const { data: currentVariant } = await supabase
-          .from("product_variants")
-          .select("stock_quantity")
-          .eq("id", product.variant_id)
-          .single();
-
-        if (currentVariant) {
-          await supabase
-            .from("product_variants")
-            .update({ stock_quantity: Math.max(0, currentVariant.stock_quantity - qty) })
-            .eq("id", product.variant_id);
-        }
+        await supabase.rpc("decrement_stock", {
+          p_variant_id: product.variant_id,
+          p_quantity: qty,
+        });
       }
 
-      // Increment coupon uses
+      // Increment coupon uses atomically
       if (validatedCouponId) {
-        const { data: couponData } = await supabase
-          .from("coupons")
-          .select("uses_count")
-          .eq("id", validatedCouponId)
-          .single();
-
-        if (couponData) {
-          await supabase
-            .from("coupons")
-            .update({ uses_count: (couponData.uses_count || 0) + 1 })
-            .eq("id", validatedCouponId);
-        }
+        await supabase.rpc("increment_coupon_uses", {
+          p_coupon_id: validatedCouponId,
+        });
       }
 
       // Build response
