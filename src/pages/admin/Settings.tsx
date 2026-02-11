@@ -9,9 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Store, Phone, Instagram, Facebook, Truck, CreditCard, Save, Upload, Image, AlertTriangle, Shield } from 'lucide-react';
+import { Store, Phone, Instagram, Facebook, Truck, CreditCard, Save, Upload, Image, AlertTriangle, Shield, RefreshCw } from 'lucide-react';
 import { ErrorLogsPanel } from '@/components/admin/ErrorLogsPanel';
 import { TwoFactorSetup } from '@/components/admin/TwoFactorSetup';
+import { APP_VERSION } from '@/lib/appVersion';
 
 interface StoreSettings {
   id: string;
@@ -39,6 +40,7 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [logoUploading, setLogoUploading] = useState(false);
+  const [purging, setPurging] = useState(false);
   
   const [formData, setFormData] = useState<Partial<StoreSettings>>({
     store_name: '',
@@ -161,7 +163,7 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Configurações da Loja</h1>
+        <h1 className="text-xl sm:text-3xl font-bold">Configurações da Loja</h1>
         <p className="text-muted-foreground">Gerencie as informações e configurações da sua loja</p>
       </div>
 
@@ -176,10 +178,14 @@ export default function Settings() {
                <Shield className="h-3 w-3 mr-1" />
                Segurança
              </TabsTrigger>
-             <TabsTrigger value="errors" className="text-destructive">
-               <AlertTriangle className="h-3 w-3 mr-1" />
-               Logs de Erros
-             </TabsTrigger>
+              <TabsTrigger value="errors" className="text-destructive">
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                Logs
+              </TabsTrigger>
+              <TabsTrigger value="cache">
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Cache
+              </TabsTrigger>
            </TabsList>
 
            {/* Security Tab */}
@@ -259,7 +265,7 @@ export default function Settings() {
                 <CardDescription>Como os clientes podem entrar em contato</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>E-mail</Label>
                     <Input
@@ -278,7 +284,7 @@ export default function Settings() {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>WhatsApp</Label>
                     <Input
@@ -312,7 +318,7 @@ export default function Settings() {
                 <CardDescription>Links para suas redes sociais</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="flex items-center gap-2">
                       <Instagram className="h-4 w-4" />
@@ -352,7 +358,7 @@ export default function Settings() {
                 <CardDescription>Configure dados da empresa, selos de segurança e formas de pagamento que aparecem no rodapé</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>CNPJ</Label>
                     <Input
@@ -381,6 +387,52 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
+
+           {/* Cache Tab */}
+           <TabsContent value="cache">
+             <Card>
+               <CardHeader>
+                 <CardTitle className="flex items-center gap-2">
+                   <RefreshCw className="h-5 w-5" />
+                   Gerenciamento de Cache
+                 </CardTitle>
+                 <CardDescription>Force todos os visitantes a carregar a versão mais recente do site</CardDescription>
+               </CardHeader>
+               <CardContent className="space-y-4">
+                 <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                   <p className="text-sm font-medium">Versão atual: <code className="bg-background px-2 py-0.5 rounded text-xs">{APP_VERSION}</code></p>
+                   <p className="text-xs text-muted-foreground">
+                     Ao clicar no botão abaixo, todos os usuários que estiverem com uma versão antiga serão forçados a recarregar automaticamente.
+                   </p>
+                 </div>
+                 <Button
+                   onClick={async () => {
+                     setPurging(true);
+                     try {
+                       const newVersion = Date.now().toString();
+                       const { data: s } = await supabase.from('store_settings').select('id').limit(1).maybeSingle();
+                       if (s?.id) {
+                         await supabase.from('store_settings').update({ app_version: newVersion } as any).eq('id', s.id);
+                       } else {
+                         await supabase.from('store_settings').insert({ app_version: newVersion } as any);
+                       }
+                       toast({ title: 'Cache limpo!', description: 'Todos os visitantes carregarão a versão mais recente.' });
+                     } catch (err: any) {
+                       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+                     } finally {
+                       setPurging(false);
+                     }
+                   }}
+                   disabled={purging}
+                   variant="destructive"
+                   className="w-full"
+                 >
+                   <RefreshCw className={`h-4 w-4 mr-2 ${purging ? 'animate-spin' : ''}`} />
+                   {purging ? 'Limpando...' : 'Forçar Atualização para Todos'}
+                 </Button>
+               </CardContent>
+             </Card>
+           </TabsContent>
         </Tabs>
 
         <div className="flex justify-end mt-6">

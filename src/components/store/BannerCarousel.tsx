@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBanners } from '@/hooks/useProducts';
@@ -9,6 +9,7 @@ export function BannerCarousel() {
   const { data: banners } = useBanners();
   const isMobile = useIsMobile();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const displayBanners = banners?.length ? banners : [
     {
@@ -22,20 +23,32 @@ export function BannerCarousel() {
     },
   ];
 
-  useEffect(() => {
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
     if (displayBanners.length <= 1) return;
-    const timer = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % displayBanners.length);
     }, 5000);
-    return () => clearInterval(timer);
   }, [displayBanners.length]);
+
+  useEffect(() => {
+    resetTimer();
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [resetTimer]);
 
   const goToPrevious = () => {
     setCurrentIndex((prev) => prev === 0 ? displayBanners.length - 1 : prev - 1);
+    resetTimer();
   };
 
   const goToNext = () => {
     setCurrentIndex((prev) => (prev + 1) % displayBanners.length);
+    resetTimer();
+  };
+
+  const goToIndex = (index: number) => {
+    setCurrentIndex(index);
+    resetTimer();
   };
 
   return (
@@ -95,7 +108,7 @@ export function BannerCarousel() {
           {displayBanners.map((_: any, index: number) => (
             <button
               key={index}
-              onClick={() => setCurrentIndex(index)}
+              onClick={() => goToIndex(index)}
               className={`w-3 h-3 rounded-full transition-colors ${
                 index === currentIndex ? 'bg-secondary' : 'bg-secondary/40'
               }`}

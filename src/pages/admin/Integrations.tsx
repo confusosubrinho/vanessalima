@@ -89,7 +89,7 @@ function RedeGatewayPanel() {
       {/* Credentials */}
       <div className="space-y-4">
         <h4 className="font-medium text-sm">Credenciais</h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Merchant ID (PV)</Label>
             <Input value={form.rede_merchant_id} onChange={(e) => setForm({ ...form, rede_merchant_id: e.target.value })} placeholder="Seu PV" />
@@ -116,7 +116,7 @@ function RedeGatewayPanel() {
       {/* Payment options */}
       <div className="space-y-4">
         <h4 className="font-medium text-sm">Opções de Pagamento</h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Desconto no Pix (%)</Label>
             <Input type="number" step="0.1" value={form.pix_discount} onChange={(e) => setForm({ ...form, pix_discount: parseFloat(e.target.value) })} />
@@ -628,7 +628,7 @@ function BlingPanel() {
           <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">2</span>
           Configurar Credenciais
         </h4>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Client ID</Label>
             <Input value={form.bling_client_id} onChange={(e) => setForm({ ...form, bling_client_id: e.target.value })} placeholder="Cole o Client ID" />
@@ -921,14 +921,6 @@ interface SimpleIntegration {
 
 const simpleIntegrations: SimpleIntegration[] = [
   {
-    id: 'tiny', name: 'Tiny ERP', description: 'Sistema de gestão empresarial com emissão de NF-e.',
-    icon: <Package className="h-6 w-6" />, status: 'coming_soon', category: 'erp',
-  },
-  {
-    id: 'omie', name: 'Omie', description: 'ERP online com gestão financeira e contábil integrada.',
-    icon: <Package className="h-6 w-6" />, status: 'coming_soon', category: 'erp',
-  },
-  {
     id: 'mercadopago', name: 'Mercado Pago', description: 'Receba pagamentos via PIX, cartão, boleto e muito mais.',
     icon: <CreditCard className="h-6 w-6" />, status: 'available', category: 'payment',
     configFields: [
@@ -943,18 +935,6 @@ const simpleIntegrations: SimpleIntegration[] = [
       { key: 'pix_key', label: 'Chave PIX', placeholder: 'CPF, CNPJ, email ou celular' },
       { key: 'pix_name', label: 'Nome do Beneficiário', placeholder: 'Nome que aparece no PIX' },
     ],
-  },
-  {
-    id: 'pagseguro', name: 'PagSeguro', description: 'Gateway de pagamentos com checkout transparente.',
-    icon: <CreditCard className="h-6 w-6" />, status: 'coming_soon', category: 'payment',
-  },
-  {
-    id: 'stripe', name: 'Stripe', description: 'Plataforma de pagamentos global para internet.',
-    icon: <CreditCard className="h-6 w-6" />, status: 'coming_soon', category: 'payment',
-  },
-  {
-    id: 'correios', name: 'Correios', description: 'Integração direta com os Correios para cálculo de frete.',
-    icon: <Truck className="h-6 w-6" />, status: 'coming_soon', category: 'shipping',
   },
 ];
 
@@ -1114,20 +1094,7 @@ export default function Integrations() {
         </div>
       ))}
 
-      <Card className="bg-muted/50">
-        <CardContent className="pt-6">
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-primary/10 rounded-full"><ExternalLink className="h-6 w-6 text-primary" /></div>
-            <div>
-              <h3 className="font-semibold mb-1">Precisa de outra integração?</h3>
-              <p className="text-sm text-muted-foreground mb-3">Entre em contato para solicitar novas integrações.</p>
-              <Button variant="outline" size="sm" asChild>
-                <a href="https://wa.me/5542991120205?text=Olá, preciso de uma integração personalizada" target="_blank" rel="noopener noreferrer">Solicitar Integração</a>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+
     </div>
   );
 }

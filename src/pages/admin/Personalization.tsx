@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, lazy, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+const HighlightBannersAdmin = lazy(() => import('./HighlightBanners'));
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -515,16 +516,22 @@ export default function Personalization() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Personalização</h1>
-        <p className="text-muted-foreground">Gerencie banners e vídeos da página inicial</p>
+        <h1 className="text-xl sm:text-3xl font-bold">Personalização</h1>
+        <p className="text-sm text-muted-foreground">Gerencie banners, destaques e vídeos da página inicial</p>
       </div>
 
       <Tabs defaultValue="banners" className="space-y-4">
-        <TabsList>
+        <TabsList className="flex-wrap">
           <TabsTrigger value="banners" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Banners</TabsTrigger>
+          <TabsTrigger value="destaques" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Destaques</TabsTrigger>
           <TabsTrigger value="videos" className="flex items-center gap-2"><Video className="h-4 w-4" />Inspire-se</TabsTrigger>
         </TabsList>
         <TabsContent value="banners"><BannersSection /></TabsContent>
+        <TabsContent value="destaques">
+          <Suspense fallback={<p className="text-sm text-muted-foreground py-4">Carregando...</p>}>
+            <HighlightBannersAdmin />
+          </Suspense>
+        </TabsContent>
         <TabsContent value="videos"><InstagramVideosSection /></TabsContent>
       </Tabs>
     </div>

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { ScrollToTop } from "@/components/store/ScrollToTop";
+import { VersionChecker } from "@/components/store/VersionChecker";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -98,6 +99,7 @@ const App = () => (
             <CookieConsent />
           </Suspense>
           <ScrollToTop />
+          <VersionChecker />
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/" element={<Index />} />
@@ -134,7 +136,7 @@ const App = () => (
                 <Route path="cupons" element={<Coupons />} />
                 <Route path="banners" element={<Banners />} />
                 <Route path="personalizacao" element={<Personalization />} />
-                <Route path="banners-destaque" element={<HighlightBanners />} />
+                <Route path="banners-destaque" element={<Personalization />} />
                 <Route path="integracoes" element={<Integrations />} />
                 <Route path="vendas" element={<SalesDashboard />} />
                 <Route path="registro-manual" element={<ManualRegistration />} />

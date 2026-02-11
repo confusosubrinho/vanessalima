@@ -74,7 +74,6 @@ const menuItems: MenuItem[] = [
     children: [
       { title: 'Cupons', url: '/admin/cupons' },
       { title: 'Personalização', url: '/admin/personalizacao' },
-      { title: 'Banners Destaque', url: '/admin/banners-destaque' },
       { title: 'Email Automações', url: '/admin/email-automations' },
     ]
   },
@@ -267,7 +266,7 @@ export default function AdminLayout() {
               <Link to="/" target="_blank">Ver Loja</Link>
             </Button>
           </header>
-          <main className="flex-1 p-6 bg-background overflow-auto">
+          <main className="flex-1 p-3 sm:p-6 bg-background overflow-auto">
             <Outlet />
           </main>
         </div>
