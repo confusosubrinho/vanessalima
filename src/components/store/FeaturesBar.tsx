@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { CreditCard, Truck, MessageCircle, ShieldCheck, Percent } from 'lucide-react';
 
 interface FeatureItem {
   id: string;
@@ -10,6 +11,22 @@ interface FeatureItem {
   icon_url: string | null;
   display_order: number;
   is_active: boolean;
+}
+
+const defaultIcons: Record<string, React.ReactNode> = {
+  'parcelamento': <CreditCard className="h-full w-full" />,
+  'envios': <Truck className="h-full w-full" />,
+  'atendimento': <MessageCircle className="h-full w-full" />,
+  'site 100% seguro': <ShieldCheck className="h-full w-full" />,
+  'desconto': <Percent className="h-full w-full" />,
+};
+
+function getDefaultIcon(title: string) {
+  const lower = title.toLowerCase();
+  for (const [key, icon] of Object.entries(defaultIcons)) {
+    if (lower.includes(key)) return icon;
+  }
+  return null;
 }
 
 export function FeaturesBar() {
@@ -48,6 +65,8 @@ export function FeaturesBar() {
           <div className="flex items-center justify-center gap-2 transition-opacity duration-300">
             {feature.icon_url ? (
               <img src={feature.icon_url} alt="" className="h-5 w-5 flex-shrink-0 object-contain" />
+            ) : getDefaultIcon(feature.title) ? (
+              <span className="h-5 w-5 flex-shrink-0 text-primary">{getDefaultIcon(feature.title)}</span>
             ) : null}
             <span className="font-semibold text-xs">{feature.title}</span>
             {feature.subtitle && <span className="text-[10px] text-muted-foreground">— {feature.subtitle}</span>}
@@ -65,6 +84,8 @@ export function FeaturesBar() {
             <div key={feature.id} className="flex flex-col items-center text-center">
               {feature.icon_url ? (
                 <img src={feature.icon_url} alt="" className="h-6 w-6 sm:h-8 sm:w-8 mb-1.5 sm:mb-2 object-contain" />
+              ) : getDefaultIcon(feature.title) ? (
+                <span className="h-6 w-6 sm:h-8 sm:w-8 mb-1.5 sm:mb-2 text-primary">{getDefaultIcon(feature.title)}</span>
               ) : null}
               <h3 className="font-semibold text-xs sm:text-sm whitespace-nowrap">{feature.title}</h3>
               {feature.subtitle && (
