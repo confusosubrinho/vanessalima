@@ -464,6 +464,39 @@ export type Database = {
           },
         ]
       }
+      features_bar: {
+        Row: {
+          created_at: string
+          display_order: number | null
+          icon_url: string | null
+          id: string
+          is_active: boolean | null
+          subtitle: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number | null
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          subtitle?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number | null
+          icon_url?: string | null
+          id?: string
+          is_active?: boolean | null
+          subtitle?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       highlight_banners: {
         Row: {
           created_at: string
@@ -770,6 +803,69 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      page_contents: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          meta_description: string | null
+          page_slug: string
+          page_title: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          meta_description?: string | null
+          page_slug: string
+          page_title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          meta_description?: string | null
+          page_slug?: string
+          page_title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payment_methods_display: {
+        Row: {
+          created_at: string
+          display_order: number | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          link_url: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          link_url?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          link_url?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       product_characteristics: {
         Row: {
@@ -1093,6 +1189,42 @@ export type Database = {
           updated_at?: string
           user_id?: string
           zip_code?: string | null
+        }
+        Relationships: []
+      }
+      security_seals: {
+        Row: {
+          created_at: string
+          display_order: number | null
+          html_code: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          link_url: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number | null
+          html_code?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          link_url?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number | null
+          html_code?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          link_url?: string | null
+          title?: string | null
+          updated_at?: string
         }
         Relationships: []
       }

@@ -3,7 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 const HighlightBannersAdmin = lazy(() => import('./HighlightBanners'));
 import { HomeSectionsManager } from '@/components/admin/HomeSectionsManager';
-import { LayoutGrid, Tag } from 'lucide-react';
+import { LayoutGrid, Tag, FileText, CreditCard, Sparkles } from 'lucide-react';
+import { FeaturesBarManager } from '@/components/admin/FeaturesBarManager';
+import { FooterCustomizer } from '@/components/admin/FooterCustomizer';
+import { PagesEditor } from '@/components/admin/PagesEditor';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -657,12 +660,16 @@ export default function Personalization() {
       <Tabs defaultValue="secoes" className="space-y-4">
         <TabsList className="flex-wrap">
           <TabsTrigger value="secoes" className="flex items-center gap-2"><LayoutGrid className="h-4 w-4" />Seções</TabsTrigger>
+          <TabsTrigger value="recursos" className="flex items-center gap-2"><Sparkles className="h-4 w-4" />Recursos</TabsTrigger>
           <TabsTrigger value="categorias" className="flex items-center gap-2"><Tag className="h-4 w-4" />Categorias</TabsTrigger>
           <TabsTrigger value="banners" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Banners</TabsTrigger>
           <TabsTrigger value="destaques" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Destaques</TabsTrigger>
           <TabsTrigger value="videos" className="flex items-center gap-2"><Video className="h-4 w-4" />Inspire-se</TabsTrigger>
+          <TabsTrigger value="rodape" className="flex items-center gap-2"><CreditCard className="h-4 w-4" />Rodapé</TabsTrigger>
+          <TabsTrigger value="paginas" className="flex items-center gap-2"><FileText className="h-4 w-4" />Páginas</TabsTrigger>
         </TabsList>
         <TabsContent value="secoes"><HomeSectionsManager /></TabsContent>
+        <TabsContent value="recursos"><FeaturesBarManager /></TabsContent>
         <TabsContent value="categorias"><CategoriesOrderSection /></TabsContent>
         <TabsContent value="banners"><BannersSection /></TabsContent>
         <TabsContent value="destaques">
@@ -671,6 +678,8 @@ export default function Personalization() {
           </Suspense>
         </TabsContent>
         <TabsContent value="videos"><InstagramVideosSection /></TabsContent>
+        <TabsContent value="rodape"><FooterCustomizer /></TabsContent>
+        <TabsContent value="paginas"><PagesEditor /></TabsContent>
       </Tabs>
     </div>
   );
