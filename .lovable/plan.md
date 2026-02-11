@@ -1,82 +1,109 @@
 
+# Plano de Melhorias - Admin, Cache, Banners e Ordenacao
 
-# Plano: Correção da Sincronização de Variantes do Bling
+## 1. Sistema de Versionamento e Cache Busting Automatico
 
-## Problemas Identificados
+**Problema:** Usuarios podem ver versoes antigas do site apos atualizacoes.
 
-1. **Tamanho (size)**: O campo `size` das variantes está armazenando o nome completo da variação (ex: "BIRKEN MARROM APLICAÇÃO PEROLA S690,634173 tamanho:35") ao invés de apenas "35"
-2. **Cor (color)**: Sempre salva como vazio/null -- a cor não está sendo extraída dos dados do Bling
-3. **SKU**: Frequentemente null -- não está sendo puxado corretamente da API
-4. **Color hex**: Sem mapeamento automático para cores existentes no sistema
-5. **Log de importação**: Está escondido dentro de um elemento colapsado difícil de encontrar
+**Solucao:**
+- Criar um arquivo `src/lib/appVersion.ts` com uma constante de versao baseada em timestamp de build
+- No `vite.config.ts`, injetar `VITE_APP_VERSION` com timestamp do build
+- Criar componente `VersionChecker` que consulta a tabela `store_settings` (campo `app_version`) periodicamente (a cada 60s)
+- Quando detectar versao diferente, exibir um banner fixo com botao "Atualizar" que forca `window.location.reload(true)`
+- Ao montar o app, registrar a versao atual no `localStorage`
 
-## Solução
+## 2. Botao Purge Cache no Painel de Configuracoes
 
-### 1. Corrigir a extração de atributos das variações (Edge Function)
+**Arquivo:** `src/pages/admin/Settings.tsx`
 
-O Bling API v3 retorna variações com um campo `variacao` estruturado que contém `nome` (ex: "Tamanho:35;Cor:Preto") e separadamente o `codigo` (SKU). A função atual tenta parsear do `nome` da variação que contém o nome completo do produto.
+- Adicionar nova aba "Cache" com botao "Limpar Cache de Todos"
+- Ao clicar, atualiza o campo `app_version` na tabela `store_settings` com timestamp atual
+- Isso dispara o `VersionChecker` em todos os clientes, forcando atualizacao
+- Mostrar confirmacao visual apos a acao
 
-**Correções no `bling-sync/index.ts`:**
+## 3. Correcao do Bug do Banner Carousel
 
-- Usar o campo `variacao.nome` do detalhe da variação (quando disponível via API de detalhe) que contém apenas os atributos estruturados
-- Melhorar o `parseVariationAttributes` para lidar com formatos como "TAMANHO:35", "tamanho:35", e também extrair tamanho de strings como "Tam. 35" ou apenas "35"
-- Extrair o tamanho usando regex mais robusto que busca numeros no range 33-44 dentro do nome quando o parsing estruturado falha
-- Extrair a cor de palavras-chave conhecidas no nome do produto (Preto, Branco, Marrom, etc.)
+**Arquivo:** `src/components/store/BannerCarousel.tsx`
 
-### 2. Mapeamento inteligente de cores
+**Problema:** O `useEffect` do autoplay nao reseta ao clicar manualmente, causando conflito de timers.
 
-- Criar um mapa de cores conhecidas com seus hex codes (mesmas cores do `COMMON_COLORS` no `ProductVariantsManager.tsx`)
-- Quando uma cor é extraída do Bling, fazer match fuzzy com as cores existentes no sistema
-- Se a cor não existir na lista padrão, registrá-la mesmo assim (sem hex) para que apareça no painel
+**Solucao:**
+- Usar `useRef` para armazenar o timer do `setInterval`
+- Nas funcoes `goToPrevious`, `goToNext` e no clique dos indicadores, limpar e recriar o timer
+- Isso evita que o timer antigo mude o slide logo apos uma interacao manual
 
-### 3. Mapeamento inteligente de tamanhos
+## 4. Mobile Responsivo do Painel Admin
 
-- Quando o tamanho extraído do Bling é um numero (33-44), mapear diretamente para o tamanho padronizado
-- Quando é texto (P, M, G, etc.), normalizar para uppercase
-- Quando nada é encontrado, usar "Unico"
+**Arquivo:** `src/pages/admin/AdminLayout.tsx`
 
-### 4. SKU original do Bling
+- Reduzir padding do `main` de `p-6` para `p-3 sm:p-6`
+- Garantir que o header tenha elementos ajustados para mobile
+- Sidebar ja usa collapsible, mas garantir que inicie colapsada em mobile
 
-- Garantir que o `codigo` da variação no Bling seja salvo como SKU na variante
-- Buscar o SKU tanto do campo `codigo` do detalhe da variação quanto do `v.codigo` da listagem
+**Arquivos diversos do admin:**
+- `Integrations.tsx`: Mudar grids de `grid-cols-2` para `grid-cols-1 sm:grid-cols-2` nos formularios de credenciais (e-Rede, Bling), botoes de sync de `grid-cols-4` para `grid-cols-2 sm:grid-cols-4`
+- `Settings.tsx`: Mudar grids `grid-cols-2` para `grid-cols-1 sm:grid-cols-2`, TabsList com `flex-wrap` (ja tem)
+- `Categories.tsx`: Tabela com scroll horizontal, dialog com `max-h-[90vh] overflow-y-auto` (ja tem)
+- `Banners.tsx`: Ajustar card de banner para layout vertical em mobile
+- Todos os titulos `text-3xl` para `text-xl sm:text-3xl`
+- Inputs e labels com tamanhos menores em mobile
 
-### 5. Log de importação visível
+## 5. Remover Integracoes "Em Breve" e Popup
 
-- Mover o log de importação para uma seção sempre visível (não dentro de `<details>`)
-- Adicionar filtros por status (erro, importado, atualizado, agrupado)
-- Mostrar resumo claro com contadores
+**Arquivo:** `src/pages/admin/Integrations.tsx`
 
-### 6. Filtrar produtos do tipo "Variação" do painel
+- Remover do array `simpleIntegrations` todos os itens com `status: 'coming_soon'` (Tiny, Omie, PagSeguro, Stripe, Correios)
+- Remover o card "Precisa de outra integracao?" (linhas 1117-1130) com o popup de WhatsApp
 
-- Garantir que apenas produtos do tipo "Simples" e "Com Variante" apareçam na listagem do painel admin
-- Variações que foram importadas como produtos standalone devem ser limpas automaticamente
+## 6. Banners Mobile - Padrao 600x800 com Crop
+
+**Arquivo:** `src/pages/admin/Banners.tsx` e `src/pages/admin/Personalization.tsx`
+
+- Alterar o texto de recomendacao mobile de "750x900" para "600x800"
+- Ao fazer upload de imagem mobile, verificar as dimensoes da imagem
+- Se a proporcao for compativel (3:4 ou similar como 1200:1600), aceitar diretamente
+- Se a proporcao for incompativel, abrir um modal de crop usando canvas nativo (sem lib externa):
+  - Mostrar a imagem com overlay de area de corte 600x800
+  - Permitir arrastar para posicionar o corte
+  - Botao "Cortar e Enviar" que gera o crop via canvas e faz upload
+
+## 7. Mover Banners Destaque para Personalizacao
+
+**Arquivos:**
+- `src/pages/admin/Personalization.tsx`: Adicionar nova aba "Banners Destaque" que renderiza o conteudo do `HighlightBannersAdmin`
+- `src/pages/admin/AdminLayout.tsx`: Remover "Banners Destaque" do menu lateral (item `/admin/banners-destaque` dentro de Marketing)
+- `src/App.tsx`: Manter a rota para nao quebrar, mas redirecionar para personalizacao
+
+## 8. Drag-and-Drop com Reordenacao Visual
+
+**Arquivos:** `src/pages/admin/Banners.tsx`, `src/pages/admin/Categories.tsx`, `src/pages/admin/HighlightBanners.tsx`, `src/pages/admin/Personalization.tsx`
+
+**Implementacao sem lib externa** (HTML5 Drag and Drop API nativa):
+- Adicionar `draggable="true"` nos itens com `GripVertical`
+- Handlers: `onDragStart`, `onDragOver`, `onDragEnd`, `onDrop`
+- State local `dragIndex` e `hoverIndex` para feedback visual (linha indicadora de posicao)
+- Ao soltar, recalcular `display_order` e salvar em batch via `supabase.from(table).update({display_order}).eq('id', id)` para cada item reordenado
+- Feedback visual: item arrastado fica com opacidade reduzida, posicao de destino mostra linha azul
 
 ---
 
 ## Detalhes Tecnicos
 
-### Alteracoes no `supabase/functions/bling-sync/index.ts`
+### Migracao de Banco
+- Adicionar coluna `app_version` (text, default '') na tabela `store_settings` se nao existir
 
-1. **Nova funcao `extractAttributesFromBlingVariation`**: Recebe o objeto de detalhe da variacao do Bling e extrai size/color/sku de multiplas fontes:
-   - `variacao.nome` (formato estruturado "Cor:X;Tamanho:Y")
-   - `nome` do produto (busca por palavras-chave de cor e numeros de tamanho)
-   - `codigo` para SKU
+### Arquivos a criar
+- `src/components/store/VersionChecker.tsx` - componente que verifica versao
+- `src/components/admin/MobileBannerCropper.tsx` - modal de crop para banners mobile
 
-2. **Mapa `COLOR_MAP`**: Dicionario de cores conhecidas com hex codes, usado para:
-   - Extrair cor do nome do produto quando nao vem estruturado
-   - Salvar o `color_hex` junto com o nome da cor
-
-3. **Melhorar `parseVariationAttributes`**: Regex mais robusto para extrair "tamanho:35" mesmo quando misturado com o nome do produto
-
-4. **No `upsertParentWithVariants`**: Usar a nova funcao de extracao e salvar `color_hex` nas variantes
-
-### Alteracoes no `src/pages/admin/Integrations.tsx`
-
-1. Tornar o log de sincronizacao visivel por padrao (remover `<details>`)
-2. Adicionar abas/filtros para ver apenas erros, importados, etc.
-3. Melhorar a apresentacao visual do log
-
-### Nenhuma alteracao de banco de dados necessaria
-
-A tabela `product_variants` ja possui os campos `color_hex`, `sku`, `size`, `color` -- so precisam ser preenchidos corretamente.
-
+### Arquivos a modificar
+- `vite.config.ts` - injetar VITE_APP_VERSION
+- `src/App.tsx` - adicionar VersionChecker, ajustar rotas
+- `src/pages/admin/AdminLayout.tsx` - mobile responsive, remover menu Banners Destaque
+- `src/pages/admin/Settings.tsx` - aba Cache/Purge
+- `src/pages/admin/Integrations.tsx` - remover "em breve" e popup, responsive
+- `src/pages/admin/Banners.tsx` - drag-and-drop, mobile responsive, crop mobile
+- `src/pages/admin/Categories.tsx` - drag-and-drop, mobile responsive
+- `src/pages/admin/HighlightBanners.tsx` - drag-and-drop
+- `src/pages/admin/Personalization.tsx` - integrar Banners Destaque, drag-and-drop
+- `src/components/store/BannerCarousel.tsx` - fix timer reset
