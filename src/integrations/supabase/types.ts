@@ -1232,6 +1232,8 @@ export type Database = {
         Row: {
           address: string | null
           app_version: string | null
+          appmax_access_token: string | null
+          appmax_environment: string | null
           bling_access_token: string | null
           bling_client_id: string | null
           bling_client_secret: string | null
@@ -1278,6 +1280,8 @@ export type Database = {
         Insert: {
           address?: string | null
           app_version?: string | null
+          appmax_access_token?: string | null
+          appmax_environment?: string | null
           bling_access_token?: string | null
           bling_client_id?: string | null
           bling_client_secret?: string | null
@@ -1324,6 +1328,8 @@ export type Database = {
         Update: {
           address?: string | null
           app_version?: string | null
+          appmax_access_token?: string | null
+          appmax_environment?: string | null
           bling_access_token?: string | null
           bling_client_id?: string | null
           bling_client_secret?: string | null

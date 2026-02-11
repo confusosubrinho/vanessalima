@@ -31,9 +31,8 @@ interface StoreSettings {
   installment_interest_rate: number | null;
   min_installment_value: number | null;
   installments_without_interest: number | null;
-  rede_merchant_id: string | null;
-  rede_merchant_key: string | null;
-  rede_environment: string | null;
+  appmax_access_token: string | null;
+  appmax_environment: string | null;
 }
 
 export default function Settings() {
@@ -58,9 +57,8 @@ export default function Settings() {
     installment_interest_rate: 0,
     min_installment_value: 30,
     installments_without_interest: 3,
-    rede_merchant_id: '',
-    rede_merchant_key: '',
-    rede_environment: 'sandbox',
+    appmax_access_token: '',
+    appmax_environment: 'sandbox',
   });
 
   const { data: settings, isLoading } = useQuery({
@@ -95,9 +93,8 @@ export default function Settings() {
         installment_interest_rate: (settings as any).installment_interest_rate ?? 0,
         min_installment_value: (settings as any).min_installment_value ?? 30,
         installments_without_interest: (settings as any).installments_without_interest ?? 3,
-        rede_merchant_id: (settings as any).rede_merchant_id || '',
-        rede_merchant_key: (settings as any).rede_merchant_key || '',
-        rede_environment: (settings as any).rede_environment || 'sandbox',
+        appmax_access_token: (settings as any).appmax_access_token || '',
+        appmax_environment: (settings as any).appmax_environment || 'sandbox',
       });
     }
   }, [settings]);

@@ -6,9 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// e-Rede API endpoints
-const EREDE_SANDBOX_URL = "https://api.userede.com.br/desenvolvedores/v1";
-const EREDE_PRODUCTION_URL = "https://api.userede.com.br/erede/v1";
+// Appmax API endpoints
+const APPMAX_PRODUCTION_URL = "https://admin.appmax.com.br/api/v3";
+const APPMAX_SANDBOX_URL = "https://homolog.sandboxappmax.com.br/api/v3";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -20,20 +20,19 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get Rede credentials from store_settings
+    // Get Appmax credentials from store_settings
     const { data: settings, error: settingsError } = await supabase
       .from("store_settings")
-      .select("rede_merchant_id, rede_merchant_key, rede_environment, max_installments, installments_without_interest, installment_interest_rate, min_installment_value, pix_discount, cash_discount")
+      .select("appmax_access_token, appmax_environment, max_installments, installments_without_interest, installment_interest_rate, min_installment_value, pix_discount, cash_discount")
       .limit(1)
       .maybeSingle();
 
     if (settingsError) throw new Error(`Settings error: ${settingsError.message}`);
 
-    const merchantId = settings?.rede_merchant_id;
-    const merchantKey = settings?.rede_merchant_key;
+    const accessToken = settings?.appmax_access_token;
 
-    if (!merchantId || !merchantKey) {
-      return new Response(JSON.stringify({ error: "Credenciais da Rede não configuradas" }), {
+    if (!accessToken) {
+      return new Response(JSON.stringify({ error: "Credenciais da Appmax não configuradas" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -41,89 +40,176 @@ serve(async (req) => {
 
     const { action, ...payload } = await req.json();
 
-    const isProduction = settings?.rede_environment === "production";
-    const baseUrl = isProduction ? EREDE_PRODUCTION_URL : EREDE_SANDBOX_URL;
+    const isProduction = settings?.appmax_environment === "production";
+    const baseUrl = isProduction ? APPMAX_PRODUCTION_URL : APPMAX_SANDBOX_URL;
 
-    // Basic Auth: base64(PV:key)
-    const authToken = btoa(`${merchantId}:${merchantKey}`);
+    // Helper to make Appmax API calls
+    async function appmaxFetch(endpoint: string, body: Record<string, unknown>) {
+      const response = await fetch(`${baseUrl}/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, "access-token": accessToken }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.text || data.message || `Appmax API error [${response.status}]`);
+      }
+      return data;
+    }
 
+    // ─── Action: create_transaction (full flow: customer → order → payment) ───
     if (action === "create_transaction") {
-      // Create a credit card transaction
       const {
         order_id,
-        amount, // in BRL (e.g., 199.90)
+        amount,
         installments = 1,
         card_number,
         card_holder,
         expiration_month,
         expiration_year,
         security_code,
+        customer_name,
+        customer_email,
+        customer_phone,
+        customer_cpf,
+        shipping_zip,
+        shipping_address,
+        shipping_number,
+        shipping_complement,
+        shipping_neighborhood,
+        shipping_city,
+        shipping_state,
+        payment_method = "credit-card", // credit-card | pix | boleto
+        products = [],
       } = payload;
 
-      const amountInCents = Math.round(amount * 100);
+      console.log("Appmax transaction for order:", order_id, "method:", payment_method);
 
-      const transactionBody: any = {
-        capture: true,
-        reference: order_id,
-        amount: amountInCents,
-        installments: installments,
-        cardNumber: card_number.replace(/\s/g, ""),
-        cardholderName: card_holder,
-        expirationMonth: parseInt(expiration_month),
-        expirationYear: parseInt(expiration_year),
-        securityCode: security_code,
-        softDescriptor: "VANESSALIMA",
-        kind: "credit",
-      };
+      // Step 1: Create customer
+      const nameParts = (customer_name || "Cliente").split(" ");
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(" ") || firstName;
 
-      console.log("e-Rede transaction request for order:", order_id);
-
-      const response = await fetch(`${baseUrl}/transactions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Basic ${authToken}`,
-        },
-        body: JSON.stringify(transactionBody),
+      const customerData = await appmaxFetch("customer", {
+        firstname: firstName,
+        lastname: lastName,
+        email: customer_email || "cliente@loja.com",
+        telephone: (customer_phone || "").replace(/\D/g, ""),
+        ip: "0.0.0.0",
+        postcode: (shipping_zip || "").replace(/\D/g, ""),
+        address_street: shipping_address || "",
+        address_street_number: shipping_number || "0",
+        address_street_complement: shipping_complement || "",
+        address_street_district: shipping_neighborhood || "",
+        address_city: shipping_city || "",
+        address_state: shipping_state || "",
       });
 
-      const data = await response.json();
-      console.log("e-Rede response:", JSON.stringify(data));
+      const customerId = customerData.data?.id;
+      if (!customerId) throw new Error("Falha ao criar cliente na Appmax");
 
-      if (!response.ok || data.returnCode !== "00") {
-        const errorMsg = data.returnMessage || data.message || "Transação recusada";
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: errorMsg,
-            code: data.returnCode,
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      console.log("Appmax customer created:", customerId);
+
+      // Step 2: Create order
+      const orderProducts = products.length > 0 ? products.map((p: any) => ({
+        sku: p.sku || p.product_id || "SKU001",
+        name: p.name || "Produto",
+        qty: p.quantity || 1,
+        price: p.price || 0,
+      })) : [{ sku: "ORDER", name: "Pedido", qty: 1, price: amount }];
+
+      const orderData = await appmaxFetch("order", {
+        customer_id: customerId,
+        total: amount,
+        products: orderProducts,
+      });
+
+      const appmaxOrderId = orderData.data?.id;
+      if (!appmaxOrderId) throw new Error("Falha ao criar pedido na Appmax");
+
+      console.log("Appmax order created:", appmaxOrderId);
+
+      // Step 3: Process payment based on method
+      let paymentEndpoint: string;
+      let paymentBody: Record<string, unknown> = {
+        cart: { order_id: appmaxOrderId },
+        customer: { customer_id: customerId },
+      };
+
+      if (payment_method === "pix") {
+        paymentEndpoint = "payment/pix";
+        paymentBody.payment = {
+          pix: {
+            document_number: (customer_cpf || "").replace(/\D/g, ""),
+          },
+        };
+      } else if (payment_method === "boleto") {
+        paymentEndpoint = "payment/Boleto";
+        paymentBody.payment = {
+          Boleto: {
+            document_number: (customer_cpf || "").replace(/\D/g, ""),
+          },
+        };
+      } else {
+        // credit-card
+        paymentEndpoint = "payment/CreditCard";
+        paymentBody.payment = {
+          CreditCard: {
+            number: (card_number || "").replace(/\s/g, ""),
+            cvv: security_code || "",
+            month: parseInt(expiration_month) || 1,
+            year: parseInt(expiration_year) || 2025,
+            name: card_holder || customer_name || "",
+            document_number: (customer_cpf || "").replace(/\D/g, ""),
+            installments: installments,
+            soft_descriptor: "VANESSALIMA",
+          },
+        };
       }
 
-      // Update order status on successful payment
+      console.log("Appmax payment endpoint:", paymentEndpoint);
+
+      const paymentData = await appmaxFetch(paymentEndpoint, paymentBody);
+
+      console.log("Appmax payment response:", JSON.stringify(paymentData));
+
+      // Update order status on success
       if (order_id) {
         await supabase
           .from("orders")
-          .update({ status: "processing", notes: `TID: ${data.tid}` })
+          .update({
+            status: "processing",
+            notes: `Appmax Order: ${appmaxOrderId} | Ref: ${paymentData.data?.pay_reference || "N/A"}`,
+          })
           .eq("id", order_id);
       }
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          tid: data.tid,
-          nsu: data.nsu,
-          authorization_code: data.authorizationCode,
-          return_code: data.returnCode,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      // Build response based on payment type
+      const result: Record<string, unknown> = {
+        success: true,
+        appmax_order_id: appmaxOrderId,
+        pay_reference: paymentData.data?.pay_reference,
+      };
+
+      if (payment_method === "pix" && paymentData.data) {
+        result.pix_qrcode = paymentData.data.pix_qrcode;
+        result.pix_emv = paymentData.data.pix_emv;
+        result.pix_expiration_date = paymentData.data.pix_expiration_date;
+      }
+
+      if (payment_method === "boleto" && paymentData.data) {
+        result.boleto_url = paymentData.data.pdf;
+        result.boleto_digitable_line = paymentData.data.digitable_line;
+        result.boleto_due_date = paymentData.data.due_date;
+      }
+
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
+    // ─── Action: get_payment_config ───
     if (action === "get_payment_config") {
-      // Return payment configuration for the frontend
       return new Response(
         JSON.stringify({
           max_installments: settings?.max_installments || 6,
@@ -133,21 +219,23 @@ serve(async (req) => {
           pix_discount: settings?.pix_discount || 0,
           cash_discount: settings?.cash_discount || 0,
           gateway_configured: true,
+          gateway: "appmax",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (action === "query_transaction") {
-      const { tid } = payload;
-      const response = await fetch(`${baseUrl}/transactions/${tid}`, {
-        method: "GET",
-        headers: {
-          Authorization: `Basic ${authToken}`,
-        },
+    // ─── Action: tokenize_card ───
+    if (action === "tokenize_card") {
+      const { card_number, card_cvv, card_month, card_year, card_name } = payload;
+      const tokenData = await appmaxFetch("tokenize/card", {
+        number: (card_number || "").replace(/\s/g, ""),
+        cvv: card_cvv,
+        month: parseInt(card_month),
+        year: parseInt(card_year),
+        name: card_name,
       });
-      const data = await response.json();
-      return new Response(JSON.stringify(data), {
+      return new Response(JSON.stringify({ success: true, token: tokenData.data?.token }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

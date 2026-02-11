@@ -24,9 +24,9 @@ interface ShippingRegion {
   enabled: boolean;
 }
 
-// ─── Rede Gateway Panel ───
+// ─── Appmax Gateway Panel ───
 
-function RedeGatewayPanel() {
+function AppmaxGatewayPanel() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -40,9 +40,8 @@ function RedeGatewayPanel() {
   });
 
   const [form, setForm] = useState({
-    rede_merchant_id: '',
-    rede_merchant_key: '',
-    rede_environment: 'sandbox',
+    appmax_access_token: '',
+    appmax_environment: 'sandbox',
     pix_discount: 5,
     cash_discount: 5,
     max_installments: 6,
@@ -54,9 +53,8 @@ function RedeGatewayPanel() {
   useEffect(() => {
     if (settings) {
       setForm({
-        rede_merchant_id: (settings as any).rede_merchant_id || '',
-        rede_merchant_key: (settings as any).rede_merchant_key || '',
-        rede_environment: (settings as any).rede_environment || 'sandbox',
+        appmax_access_token: (settings as any).appmax_access_token || '',
+        appmax_environment: (settings as any).appmax_environment || 'sandbox',
         pix_discount: (settings as any).pix_discount ?? 5,
         cash_discount: (settings as any).cash_discount ?? 5,
         max_installments: (settings as any).max_installments || 6,
@@ -79,29 +77,25 @@ function RedeGatewayPanel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['store-settings'] });
-      toast({ title: 'Configurações da Rede salvas!' });
+      toast({ title: 'Configurações da Appmax salvas!' });
     },
     onError: (e: any) => toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' }),
   });
+
+  const isConfigured = !!form.appmax_access_token;
 
   return (
     <div className="space-y-6">
       {/* Credentials */}
       <div className="space-y-4">
-        <h4 className="font-medium text-sm">Credenciais</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Merchant ID (PV)</Label>
-            <Input value={form.rede_merchant_id} onChange={(e) => setForm({ ...form, rede_merchant_id: e.target.value })} placeholder="Seu PV" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Chave de Integração</Label>
-            <Input type="password" value={form.rede_merchant_key} onChange={(e) => setForm({ ...form, rede_merchant_key: e.target.value })} placeholder="Token" />
-          </div>
+        <h4 className="font-medium text-sm">Credenciais Appmax</h4>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Access Token</Label>
+          <Input type="password" value={form.appmax_access_token} onChange={(e) => setForm({ ...form, appmax_access_token: e.target.value })} placeholder="Cole seu Access Token da Appmax" />
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Ambiente</Label>
-          <Select value={form.rede_environment} onValueChange={(v) => setForm({ ...form, rede_environment: v })}>
+          <Select value={form.appmax_environment} onValueChange={(v) => setForm({ ...form, appmax_environment: v })}>
             <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="sandbox">Sandbox (Teste)</SelectItem>
@@ -109,6 +103,12 @@ function RedeGatewayPanel() {
             </SelectContent>
           </Select>
         </div>
+        {isConfigured && (
+          <div className="flex items-center gap-2 text-sm text-green-600">
+            <Check className="h-4 w-4" />
+            <span>Token configurado</span>
+          </div>
+        )}
       </div>
 
       <Separator />
@@ -147,16 +147,26 @@ function RedeGatewayPanel() {
       </div>
 
       <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
-        <p className="font-medium">Como obter suas credenciais:</p>
+        <p className="font-medium">Como obter seu Access Token:</p>
         <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
-          <li>Acesse <a href="https://meu.userede.com.br" target="_blank" rel="noopener noreferrer" className="text-primary underline">meu.userede.com.br</a></li>
-          <li>Vá em "e-Rede" → "Chave de Integração"</li>
-          <li>Gere ou copie seu token e PV</li>
+          <li>Acesse <a href="https://admin.appmax.com.br" target="_blank" rel="noopener noreferrer" className="text-primary underline">admin.appmax.com.br</a></li>
+          <li>Vá em "Configurações" → "API" ou "Integrações"</li>
+          <li>Copie seu Access Token</li>
+          <li>Para testes, use o ambiente Sandbox em <a href="https://homolog.sandboxappmax.com.br" target="_blank" rel="noopener noreferrer" className="text-primary underline">homolog.sandboxappmax.com.br</a></li>
         </ol>
       </div>
 
+      <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
+        <p className="font-medium">Métodos de pagamento suportados:</p>
+        <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
+          <li><strong>Cartão de Crédito</strong> — Parcelamento, tokenização de cartão</li>
+          <li><strong>PIX</strong> — QR Code gerado automaticamente</li>
+          <li><strong>Boleto Bancário</strong> — PDF e linha digitável</li>
+        </ul>
+      </div>
+
       <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full">
-        {saveMutation.isPending ? 'Salvando...' : 'Salvar Configurações Rede'}
+        {saveMutation.isPending ? 'Salvando...' : 'Salvar Configurações Appmax'}
       </Button>
     </div>
   );
@@ -994,24 +1004,24 @@ export default function Integrations() {
               </Card>
             )}
 
-            {/* Rede Gateway (special expanded card) */}
+            {/* Appmax Gateway (special expanded card) */}
             {category.id === 'payment' && (
               <Card className="md:col-span-2 lg:col-span-3">
-                <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedPanel(expandedPanel === 'rede' ? null : 'rede')}>
+                <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedPanel(expandedPanel === 'appmax' ? null : 'appmax')}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-primary/10 rounded-lg text-primary"><CreditCard className="h-6 w-6" /></div>
                       <div>
-                        <CardTitle className="text-base">Gateway Rede (e-Rede)</CardTitle>
-                        <CardDescription className="text-xs">Pagamentos com cartão de crédito, débito, Pix e configurações de parcelamento</CardDescription>
+                        <CardTitle className="text-base">Gateway Appmax</CardTitle>
+                        <CardDescription className="text-xs">Pagamentos com cartão de crédito, Pix, boleto e configurações de parcelamento</CardDescription>
                       </div>
                     </div>
-                    {expandedPanel === 'rede' ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                    {expandedPanel === 'appmax' ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
                   </div>
                 </CardHeader>
-                {expandedPanel === 'rede' && (
+                {expandedPanel === 'appmax' && (
                   <CardContent>
-                    <RedeGatewayPanel />
+                    <AppmaxGatewayPanel />
                   </CardContent>
                 )}
               </Card>
