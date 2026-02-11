@@ -1,0 +1,1 @@
+ALTER TABLE public.store_settings ADD COLUMN shipping_allowed_services jsonb DEFAULT NULL;

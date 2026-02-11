@@ -19,7 +19,7 @@ serve(async (req) => {
     // Get Melhor Envio token from store_settings
     const { data: settings, error: settingsError } = await supabase
       .from("store_settings")
-      .select("melhor_envio_token, melhor_envio_sandbox, free_shipping_threshold, shipping_store_pickup_enabled, shipping_store_pickup_label, shipping_store_pickup_address, shipping_free_enabled, shipping_free_label, shipping_free_min_value, shipping_regions")
+      .select("melhor_envio_token, melhor_envio_sandbox, free_shipping_threshold, shipping_store_pickup_enabled, shipping_store_pickup_label, shipping_store_pickup_address, shipping_free_enabled, shipping_free_label, shipping_free_min_value, shipping_regions, shipping_allowed_services")
       .limit(1)
       .maybeSingle();
 
@@ -106,10 +106,12 @@ serve(async (req) => {
       throw new Error(`Melhor Envio API error [${response.status}]: ${JSON.stringify(data)}`);
     }
 
-    // Filter valid options (no errors)
+    // Filter valid options (no errors) and by allowed services
+    const allowedServices = (settings?.shipping_allowed_services as number[]) || [];
     const validOptions = Array.isArray(data)
       ? data
           .filter((opt: any) => !opt.error && opt.price)
+          .filter((opt: any) => allowedServices.length === 0 || allowedServices.includes(opt.id))
           .map((opt: any) => ({
             id: opt.id,
             name: opt.name,

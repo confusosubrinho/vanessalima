@@ -198,6 +198,7 @@ function MelhorEnvioPanel() {
     shipping_free_label: 'Frete Grátis',
     shipping_free_min_value: 0,
     shipping_regions: [] as ShippingRegion[],
+    shipping_allowed_services: [] as number[],
   });
 
   useEffect(() => {
@@ -214,6 +215,7 @@ function MelhorEnvioPanel() {
         shipping_free_label: s.shipping_free_label || 'Frete Grátis',
         shipping_free_min_value: s.shipping_free_min_value || 0,
         shipping_regions: (s.shipping_regions as ShippingRegion[]) || [],
+        shipping_allowed_services: (s.shipping_allowed_services as number[]) || [],
       });
     }
   }, [settings]);
@@ -278,6 +280,55 @@ function MelhorEnvioPanel() {
         <div className="flex items-center gap-2">
           <Switch checked={form.melhor_envio_sandbox} onCheckedChange={(v) => setForm({ ...form, melhor_envio_sandbox: v })} />
           <Label className="text-xs">Modo Sandbox (teste)</Label>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Allowed shipping services */}
+      <div className="space-y-3">
+        <h4 className="font-medium text-sm flex items-center gap-2">
+          <Filter className="h-4 w-4" />
+          Transportadoras Permitidas
+        </h4>
+        <p className="text-xs text-muted-foreground">Selecione quais opções de frete aparecerão para o cliente. Se nenhuma for selecionada, todas aparecerão.</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { id: 1, label: 'PAC (Correios)' },
+            { id: 2, label: 'SEDEX (Correios)' },
+            { id: 17, label: 'Mini Envios (Correios)' },
+            { id: 3, label: '.Package (Jadlog)' },
+            { id: 4, label: '.Com (Jadlog)' },
+            { id: 27, label: '.Package Centralizado (Jadlog)' },
+            { id: 12, label: 'éFácil (LATAM Cargo)' },
+            { id: 15, label: 'Expresso (Azul Cargo)' },
+            { id: 16, label: 'e-commerce (Azul Cargo)' },
+            { id: 31, label: 'Express (Loggi)' },
+            { id: 32, label: 'Coleta (Loggi)' },
+            { id: 33, label: 'Standard (JeT)' },
+            { id: 22, label: 'Rodoviário (Buslog)' },
+          ].map((svc) => {
+            const isSelected = form.shipping_allowed_services.includes(svc.id);
+            return (
+              <button
+                key={svc.id}
+                type="button"
+                onClick={() => {
+                  setForm(prev => ({
+                    ...prev,
+                    shipping_allowed_services: isSelected
+                      ? prev.shipping_allowed_services.filter(id => id !== svc.id)
+                      : [...prev.shipping_allowed_services, svc.id],
+                  }));
+                }}
+                className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
+                  isSelected ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:border-primary bg-background'
+                }`}
+              >
+                {svc.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

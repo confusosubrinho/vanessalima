@@ -1319,6 +1319,7 @@ export type Database = {
           rede_environment: string | null
           rede_merchant_id: string | null
           rede_merchant_key: string | null
+          shipping_allowed_services: Json | null
           shipping_free_enabled: boolean | null
           shipping_free_label: string | null
           shipping_free_min_value: number | null
@@ -1367,6 +1368,7 @@ export type Database = {
           rede_environment?: string | null
           rede_merchant_id?: string | null
           rede_merchant_key?: string | null
+          shipping_allowed_services?: Json | null
           shipping_free_enabled?: boolean | null
           shipping_free_label?: string | null
           shipping_free_min_value?: number | null
@@ -1415,6 +1417,7 @@ export type Database = {
           rede_environment?: string | null
           rede_merchant_id?: string | null
           rede_merchant_key?: string | null
+          shipping_allowed_services?: Json | null
           shipping_free_enabled?: boolean | null
           shipping_free_label?: string | null
           shipping_free_min_value?: number | null
