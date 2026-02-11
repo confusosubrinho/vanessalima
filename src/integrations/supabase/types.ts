@@ -666,6 +666,44 @@ export type Database = {
         }
         Relationships: []
       }
+      order_events: {
+        Row: {
+          appmax_order_id: string | null
+          event_hash: string
+          event_type: string
+          id: number
+          order_id: string | null
+          payload: Json
+          received_at: string | null
+        }
+        Insert: {
+          appmax_order_id?: string | null
+          event_hash: string
+          event_type: string
+          id?: number
+          order_id?: string | null
+          payload: Json
+          received_at?: string | null
+        }
+        Update: {
+          appmax_order_id?: string | null
+          event_hash?: string
+          event_type?: string
+          id?: number
+          order_id?: string | null
+          payload?: Json
+          received_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
@@ -729,13 +767,17 @@ export type Database = {
       }
       orders: {
         Row: {
+          appmax_customer_id: string | null
+          appmax_order_id: string | null
           coupon_code: string | null
           created_at: string
           customer_id: string | null
           discount_amount: number | null
           id: string
+          last_webhook_event: string | null
           notes: string | null
           order_number: string
+          payment_method: string | null
           shipping_address: string
           shipping_city: string
           shipping_cost: number | null
@@ -751,13 +793,17 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          appmax_customer_id?: string | null
+          appmax_order_id?: string | null
           coupon_code?: string | null
           created_at?: string
           customer_id?: string | null
           discount_amount?: number | null
           id?: string
+          last_webhook_event?: string | null
           notes?: string | null
           order_number: string
+          payment_method?: string | null
           shipping_address: string
           shipping_city: string
           shipping_cost?: number | null
@@ -773,13 +819,17 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          appmax_customer_id?: string | null
+          appmax_order_id?: string | null
           coupon_code?: string | null
           created_at?: string
           customer_id?: string | null
           discount_amount?: number | null
           id?: string
+          last_webhook_event?: string | null
           notes?: string | null
           order_number?: string
+          payment_method?: string | null
           shipping_address?: string
           shipping_city?: string
           shipping_cost?: number | null
