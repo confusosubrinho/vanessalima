@@ -43,22 +43,14 @@ import { logApiError } from '@/lib/errorLogger';
           await supabase.auth.signOut();
           const { data: retryData, error: retryError } = await query;
           if (retryError) throw retryError;
-          return (retryData as Product[])?.filter(p => hasStock(p)) || [];
+          return (retryData as Product[]) || [];
         }
         logApiError('useProducts', error, { categorySlug });
         throw error;
       }
-      // Only return products that have at least one variant with stock > 0
-      return (data as Product[])?.filter(p => hasStock(p)) || [];
+      return (data as Product[]) || [];
      },
    });
- }
-
- // Helper: check if product has any variant with stock
- function hasStock(product: Product): boolean {
-   const variants = (product as any).variants;
-   if (!variants || variants.length === 0) return true; // no variants = assume available
-   return variants.some((v: any) => v.stock_quantity > 0 && v.is_active !== false);
  }
  
  export function useProduct(slug: string) {
@@ -101,7 +93,7 @@ import { logApiError } from '@/lib/errorLogger';
          .limit(20);
        
        if (error) throw error;
-       return (data as Product[])?.filter(p => hasStock(p)) || [];
+       return (data as Product[]) || [];
      },
    });
  }
