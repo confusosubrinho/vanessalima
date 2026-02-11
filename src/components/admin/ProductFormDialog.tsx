@@ -485,39 +485,32 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
                       const sellPrice = formData.sale_price ? parseFloat(formData.sale_price) : (formData.base_price ? parseFloat(formData.base_price) : 0);
                       if (!sellPrice || sellPrice <= 0) return <p className="text-sm text-muted-foreground">Preencha o preço para ver a margem.</p>;
 
+                      const checkoutFee = 0.015; // 1.5% checkout transparente
                       const pixDiscount = storeSettings?.pix_discount || storeSettings?.cash_discount || 5;
                       const pixPrice = sellPrice * (1 - pixDiscount / 100);
-                      const pixProfit = pixPrice - cost;
+                      const pixFees = pixPrice * checkoutFee;
+                      const pixProfit = pixPrice - cost - pixFees;
                       const pixMargin = ((pixProfit / pixPrice) * 100);
 
-                      const interestRate = storeSettings?.installment_interest_rate || 0;
-                      const freeInstallments = storeSettings?.installments_without_interest || 3;
-                      const installments = 6;
-                      // For 6x: if interest applies (6 > free installments), gateway takes a fee
-                      // Typical gateway fee ~3-5% for installments beyond free tier
-                      let cardPrice = sellPrice;
-                      let gatewayFee = 0;
-                      if (installments > freeInstallments && interestRate > 0) {
-                        // Interest is charged to customer, but gateway still takes processing fee
-                        gatewayFee = sellPrice * 0.0499; // ~4.99% typical card fee
-                      } else {
-                        gatewayFee = sellPrice * 0.0499;
-                      }
-                      const cardProfit = sellPrice - cost - gatewayFee;
+                      const gatewayRate = 0.0499; // ~4.99% taxa cartão
+                      const cardFees = sellPrice * gatewayRate + sellPrice * checkoutFee;
+                      const cardProfit = sellPrice - cost - cardFees;
                       const cardMargin = ((cardProfit / sellPrice) * 100);
 
                       return (
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground">PIX ({pixDiscount}% desc.)</p>
+                            <p className="text-xs text-muted-foreground">PIX ({pixDiscount}% desc. + 1,5% checkout)</p>
                             <p className="text-sm">Venda: <strong>R$ {pixPrice.toFixed(2)}</strong></p>
+                            <p className="text-xs text-muted-foreground">Taxas: R$ {pixFees.toFixed(2)}</p>
                             <p className={`text-sm font-bold ${pixProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                               Lucro: R$ {pixProfit.toFixed(2)} ({pixMargin.toFixed(1)}%)
                             </p>
                           </div>
                           <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground">Cartão 6x (taxa ~4.99%)</p>
+                            <p className="text-xs text-muted-foreground">Cartão 6x (4.99% + 1,5% checkout)</p>
                             <p className="text-sm">Venda: <strong>R$ {sellPrice.toFixed(2)}</strong></p>
+                            <p className="text-xs text-muted-foreground">Taxas: R$ {cardFees.toFixed(2)}</p>
                             <p className={`text-sm font-bold ${cardProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                               Lucro: R$ {cardProfit.toFixed(2)} ({cardMargin.toFixed(1)}%)
                             </p>
