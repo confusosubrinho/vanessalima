@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Instagram, Facebook, Phone, Mail, MapPin } from 'lucide-react';
+import { Phone, Mail, MapPin } from 'lucide-react';
 import logo from '@/assets/logo.png';
+import { SocialIcons } from './SocialIcons';
 
 interface PaymentMethod {
   id: string;
@@ -78,12 +79,7 @@ export function Footer() {
               Calçados femininos de alta qualidade, feitos com couro legítimo e muito amor.
             </p>
             <div className="flex gap-4">
-              <a href="https://instagram.com/vanessalimashoes" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
-                <Instagram className="h-5 w-5" />
-              </a>
-              <a href="https://facebook.com/vanessalimashoes" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
-                <Facebook className="h-5 w-5" />
-              </a>
+              <SocialIcons />
             </div>
           </div>
 

@@ -22,7 +22,8 @@ import {
   X,
   Store,
   ChevronRight,
-  HelpCircle
+  HelpCircle,
+  Share2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -97,6 +98,7 @@ const menuItems: MenuItem[] = [
   { title: 'Galeria de Mídia', url: '/admin/galeria', icon: ImageIcon },
   { title: 'Juros e Cartões', url: '/admin/precos', icon: CreditCard },
   { title: 'Integrações', url: '/admin/integracoes', icon: Plug },
+  { title: 'Redes Sociais', url: '/admin/redes-sociais', icon: Share2 },
   { title: 'Central de Ajuda', url: '/admin/ajuda', icon: HelpCircle },
   { 
     title: 'Configurações', 
