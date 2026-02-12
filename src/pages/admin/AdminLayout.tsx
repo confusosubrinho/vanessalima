@@ -9,21 +9,10 @@ import {
   Settings, 
   LogOut,
   ChevronDown,
-  Plug,
   BarChart3,
-  BookOpen,
   PenSquare,
-  Globe,
-  Mail,
-  ShoppingBag,
-  ImageIcon,
-  CreditCard,
   Menu,
-  X,
   Store,
-  ChevronRight,
-  HelpCircle,
-  Share2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -66,15 +55,17 @@ const menuItems: MenuItem[] = [
     children: [
       { title: 'Produtos', url: '/admin/produtos' },
       { title: 'Categorias', url: '/admin/categorias' },
+      { title: 'Galeria de Mídia', url: '/admin/galeria' },
     ]
   },
   { title: 'Pedidos', url: '/admin/pedidos', icon: ShoppingCart },
   { title: 'Clientes', url: '/admin/clientes', icon: Users },
   {
-    title: 'Vendas',
+    title: 'Vendas & Analytics',
     icon: BarChart3,
     children: [
       { title: 'Análise de Vendas', url: '/admin/vendas' },
+      { title: 'Tráfego & UTM', url: '/admin/trafego' },
       { title: 'Registro Manual', url: '/admin/registro-manual' },
       { title: 'Carrinhos Abandonados', url: '/admin/carrinhos-abandonados' },
     ]
@@ -84,29 +75,28 @@ const menuItems: MenuItem[] = [
     icon: Tags,
     children: [
       { title: 'Cupons', url: '/admin/cupons' },
-      { title: 'Personalização', url: '/admin/personalizacao' },
       { title: 'Email Automações', url: '/admin/email-automations' },
     ]
   },
   { 
-    title: 'Analytics',
-    icon: Globe,
+    title: 'Aparência', 
+    icon: PenSquare,
     children: [
-      { title: 'Tráfego & UTM', url: '/admin/trafego' },
+      { title: 'Personalização da Home', url: '/admin/personalizacao' },
+      { title: 'Redes Sociais', url: '/admin/redes-sociais' },
+      { title: 'Páginas Institucionais', url: '/admin/paginas' },
     ]
   },
-  { title: 'Galeria de Mídia', url: '/admin/galeria', icon: ImageIcon },
-  { title: 'Juros e Cartões', url: '/admin/precos', icon: CreditCard },
-  { title: 'Integrações', url: '/admin/integracoes', icon: Plug },
-  { title: 'Redes Sociais', url: '/admin/redes-sociais', icon: Share2 },
-  { title: 'Central de Ajuda', url: '/admin/ajuda', icon: HelpCircle },
   { 
     title: 'Configurações', 
     icon: Settings,
     children: [
       { title: 'Loja', url: '/admin/configuracoes' },
+      { title: 'Juros e Cartões', url: '/admin/precos' },
+      { title: 'Integrações', url: '/admin/integracoes' },
       { title: 'Código Externo', url: '/admin/configuracoes/codigo' },
       { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes' },
+      { title: 'Central de Ajuda', url: '/admin/ajuda' },
     ]
   },
 ];

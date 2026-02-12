@@ -96,7 +96,7 @@ const initialFormData: ProductFormData = {
   depth: '',
   gtin: '',
   mpn: '',
-  brand: 'Vanessa Lima Shoes',
+  brand: '',
   condition: 'new',
   google_product_category: 'Vestuário e acessórios > Sapatos',
   age_group: 'adult',
