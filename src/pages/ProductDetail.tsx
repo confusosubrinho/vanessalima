@@ -140,13 +140,26 @@ export default function ProductDetail() {
     }).format(price);
   };
 
-  const currentPrice = Number(product.sale_price || product.base_price);
+  // Determine selected variant considering colors
+  const hasColors = colors.length > 0;
+  const selectedVariant = selectedSize
+    ? (hasColors && selectedColor
+        ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
+        : hasColors
+          ? null // Force color selection when colors exist
+          : variants.find(v => v.size === selectedSize))
+    : null;
+
+  // Price calculation: prioritize variant-specific pricing
+  const currentPrice = selectedVariant
+    ? (selectedVariant.sale_price && Number(selectedVariant.sale_price) > 0
+        ? Number(selectedVariant.sale_price)
+        : selectedVariant.base_price && Number(selectedVariant.base_price) > 0
+          ? Number(selectedVariant.base_price)
+          : Number(product.sale_price || product.base_price) + Number(selectedVariant.price_modifier || 0))
+    : Number(product.sale_price || product.base_price);
   const bestInstallment = Math.min(installmentsWithoutInterest, Math.floor(currentPrice / minInstallmentValue) || 1);
   const installmentPrice = bestInstallment > 0 ? (currentPrice / bestInstallment).toFixed(2) : currentPrice.toFixed(2);
-
-  const selectedVariant = selectedColor && selectedSize
-    ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
-    : selectedSize ? variants.find(v => v.size === selectedSize) : null;
   const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : false;
 
   const handleColorSelect = (colorName: string) => {

@@ -68,6 +68,8 @@ export interface Product {
    color_hex: string | null;
    stock_quantity: number;
    price_modifier: number;
+   base_price: number | null;
+   sale_price: number | null;
    sku: string | null;
    is_active: boolean;
    created_at: string;
