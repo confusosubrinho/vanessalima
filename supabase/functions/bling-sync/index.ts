@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getSyncableFields, getInsertOnlyFields } from "../_shared/bling-sync-fields.ts";
+import { getSyncableFields, getFirstImportFields } from "../_shared/bling-sync-fields.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -454,20 +454,20 @@ async function upsertParentWithVariants(
     .eq("bling_product_id", parentBlingId)
     .maybeSingle();
 
-  // Fields that always sync (shared definition)
+  // Fields that always sync (only dimensions/sku/gtin now)
   const updateData: any = {
     ...getSyncableFields(parentDetail),
+    bling_product_id: parentBlingId,
+  };
+
+  // Fields only set on initial import (price, name, description, brand, category, is_active, etc.)
+  const insertData: any = {
+    ...updateData,
+    ...getFirstImportFields(parentDetail),
     mpn: parentDetail.codigo || null,
     material: null,
     is_new: parentDetail.lancamento === true || parentDetail.lancamento === "S",
     category_id: categoryId,
-    bling_product_id: parentBlingId,
-  };
-
-  // Fields only set on initial import (shared definition)
-  const insertData: any = {
-    ...updateData,
-    ...getInsertOnlyFields(parentDetail),
   };
 
   let productId: string;
@@ -510,28 +510,32 @@ async function upsertParentWithVariants(
     console.log(`[sync] Skipping image sync for existing product ${productId} (preserving manual edits)`);
   }
 
-  // Sync characteristics
-  const characteristics: { name: string; value: string }[] = [];
-  if (parentDetail.pesoBruto) characteristics.push({ name: "Peso Bruto", value: `${parentDetail.pesoBruto} kg` });
-  if (parentDetail.pesoLiquido) characteristics.push({ name: "Peso Líquido", value: `${parentDetail.pesoLiquido} kg` });
-  if (parentDetail.larguraProduto) characteristics.push({ name: "Largura", value: `${parentDetail.larguraProduto} cm` });
-  if (parentDetail.alturaProduto) characteristics.push({ name: "Altura", value: `${parentDetail.alturaProduto} cm` });
-  if (parentDetail.profundidadeProduto) characteristics.push({ name: "Profundidade", value: `${parentDetail.profundidadeProduto} cm` });
-  const brandName = parentDetail.marca?.nome || (typeof parentDetail.marca === "string" ? parentDetail.marca : null);
-  if (brandName) characteristics.push({ name: "Marca", value: brandName });
-  if (parentDetail.gtin) characteristics.push({ name: "GTIN/EAN", value: parentDetail.gtin });
-  if (parentDetail.unidade) characteristics.push({ name: "Unidade", value: parentDetail.unidade });
+  // Sync characteristics ONLY on first import (preserve manual edits on updates)
+  if (imported) {
+    const characteristics: { name: string; value: string }[] = [];
+    if (parentDetail.pesoBruto) characteristics.push({ name: "Peso Bruto", value: `${parentDetail.pesoBruto} kg` });
+    if (parentDetail.pesoLiquido) characteristics.push({ name: "Peso Líquido", value: `${parentDetail.pesoLiquido} kg` });
+    if (parentDetail.larguraProduto) characteristics.push({ name: "Largura", value: `${parentDetail.larguraProduto} cm` });
+    if (parentDetail.alturaProduto) characteristics.push({ name: "Altura", value: `${parentDetail.alturaProduto} cm` });
+    if (parentDetail.profundidadeProduto) characteristics.push({ name: "Profundidade", value: `${parentDetail.profundidadeProduto} cm` });
+    const brandName = parentDetail.marca?.nome || (typeof parentDetail.marca === "string" ? parentDetail.marca : null);
+    if (brandName) characteristics.push({ name: "Marca", value: brandName });
+    if (parentDetail.gtin) characteristics.push({ name: "GTIN/EAN", value: parentDetail.gtin });
+    if (parentDetail.unidade) characteristics.push({ name: "Unidade", value: parentDetail.unidade });
 
-  if (characteristics.length > 0) {
-    await supabase.from("product_characteristics").delete().eq("product_id", productId);
-    await supabase.from("product_characteristics").insert(
-      characteristics.map((c, idx) => ({
-        product_id: productId,
-        name: c.name,
-        value: c.value,
-        display_order: idx,
-      }))
-    );
+    if (characteristics.length > 0) {
+      await supabase.from("product_characteristics").delete().eq("product_id", productId);
+      await supabase.from("product_characteristics").insert(
+        characteristics.map((c, idx) => ({
+          product_id: productId,
+          name: c.name,
+          value: c.value,
+          display_order: idx,
+        }))
+      );
+    }
+  } else if (updated) {
+    console.log(`[sync] Skipping characteristics sync for existing product ${productId} (preserving manual edits)`);
   }
 
   // ─── Sync Variants ───
@@ -691,17 +695,20 @@ async function upsertParentWithVariants(
     }
   }
 
-  // Auto-activate product if any active variant has stock > 0
-  const { data: stockedVariants } = await supabase
-    .from("product_variants")
-    .select("id")
-    .eq("product_id", productId)
-    .eq("is_active", true)
-    .gt("stock_quantity", 0)
-    .limit(1);
+  // Auto-activate product ONLY on first import if any active variant has stock > 0
+  // For existing products, is_active is managed manually in the dashboard
+  if (imported) {
+    const { data: stockedVariants } = await supabase
+      .from("product_variants")
+      .select("id")
+      .eq("product_id", productId)
+      .eq("is_active", true)
+      .gt("stock_quantity", 0)
+      .limit(1);
 
-  if (stockedVariants && stockedVariants.length > 0) {
-    await supabase.from("products").update({ is_active: true }).eq("id", productId);
+    if (stockedVariants && stockedVariants.length > 0) {
+      await supabase.from("products").update({ is_active: true }).eq("id", productId);
+    }
   }
 
   return { imported, updated, variantCount };

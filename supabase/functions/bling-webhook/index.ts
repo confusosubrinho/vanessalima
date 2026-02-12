@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getSyncableFields } from "../_shared/bling-sync-fields.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,7 +64,6 @@ function blingHeaders(token: string) {
 async function validateHmacSignature(bodyText: string, signatureHeader: string | null, clientSecret: string): Promise<boolean> {
   if (!signatureHeader || !clientSecret) return false;
   
-  // Format: "sha256=<hex>"
   const expectedPrefix = "sha256=";
   if (!signatureHeader.startsWith(expectedPrefix)) return false;
   const providedHash = signatureHeader.slice(expectedPrefix.length);
@@ -94,6 +92,19 @@ function classifyEvent(event: string): "stock" | "product" | "order" | "invoice"
   if (e.includes("order") || e.includes("pedido") || e.includes("venda")) return "order";
   if (e.includes("invoice") || e.includes("nf") || e.includes("consumer_invoice")) return "invoice";
   return "unknown";
+}
+
+// ─── Check if product is inactive in our DB (skip sync for inactive) ───
+async function isProductInactive(supabase: any, blingProductId: number): Promise<boolean> {
+  const { data } = await supabase
+    .from("products")
+    .select("is_active")
+    .eq("bling_product_id", blingProductId)
+    .maybeSingle();
+  
+  // If product exists and is inactive, skip it
+  if (data && data.is_active === false) return true;
+  return false;
 }
 
 // ─── Find variant by bling_variant_id OR by SKU fallback ───
@@ -170,16 +181,24 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
     const match = await findVariantByBlingIdOrSku(supabase, blingProductId, token);
     
     if (match) {
+      // Check if parent product is inactive — skip stock sync if so
+      const { data: parentProduct } = await supabase
+        .from("products")
+        .select("is_active")
+        .eq("id", match.productId)
+        .maybeSingle();
+      
+      if (parentProduct && parentProduct.is_active === false) {
+        console.log(`[webhook] Skipping stock update for inactive product (bling_id=${blingProductId})`);
+        return;
+      }
+
       await supabase
         .from("product_variants")
         .update({ stock_quantity: newStock })
         .eq("id", match.variantId);
       console.log(`[webhook] Stock updated: bling_id=${blingProductId} → ${newStock}`);
       
-      // Auto-activate parent if stock > 0
-      if (newStock > 0) {
-        await supabase.from("products").update({ is_active: true }).eq("id", match.productId);
-      }
       return;
     }
 
@@ -204,11 +223,62 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
   }
 }
 
-// ─── Sync a single product from Bling (lightweight, for webhook) ───
+// ─── Sync a single product from Bling — STOCK ONLY for existing products ───
 async function syncSingleProduct(supabase: any, blingProductId: number, token: string) {
   const headers = blingHeaders(token);
   
   try {
+    const actualParentId = blingProductId;
+
+    // Check if the product exists and is active
+    const { data: existing } = await supabase
+      .from("products")
+      .select("id, is_active")
+      .eq("bling_product_id", actualParentId)
+      .maybeSingle();
+
+    if (!existing) {
+      // Also try to resolve via parent
+      const res = await fetch(`${BLING_API_URL}/produtos/${blingProductId}`, { headers });
+      if (!res.ok) {
+        console.error(`[webhook] Product detail fetch failed for ${blingProductId}: ${res.status}`);
+        return;
+      }
+      const json = await res.json();
+      const detail = json?.data;
+      if (!detail) return;
+
+      const resolvedParentId = detail.produtoPai?.id || detail.idProdutoPai || blingProductId;
+      
+      const { data: parentExisting } = await supabase
+        .from("products")
+        .select("id, is_active")
+        .eq("bling_product_id", resolvedParentId)
+        .maybeSingle();
+      
+      if (!parentExisting) {
+        console.log(`[webhook] Product ${resolvedParentId} not in DB, skipping`);
+        return;
+      }
+
+      // Skip inactive products
+      if (parentExisting.is_active === false) {
+        console.log(`[webhook] Product ${resolvedParentId} is inactive, skipping sync`);
+        return;
+      }
+
+      // Only sync stock for existing products (no price, no fields)
+      await syncStockOnly(supabase, headers, parentExisting.id, resolvedParentId, detail);
+      return;
+    }
+
+    // Skip inactive products
+    if (existing.is_active === false) {
+      console.log(`[webhook] Product ${actualParentId} is inactive, skipping sync`);
+      return;
+    }
+
+    // Fetch detail to get variant info for stock sync
     const res = await fetch(`${BLING_API_URL}/produtos/${blingProductId}`, { headers });
     if (!res.ok) {
       console.error(`[webhook] Product detail fetch failed for ${blingProductId}: ${res.status}`);
@@ -218,62 +288,38 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
     const detail = json?.data;
     if (!detail) return;
 
-    const actualParentId = detail.produtoPai?.id || detail.idProdutoPai;
-    const targetBlingId = actualParentId || blingProductId;
+    // Only sync stock — no more field updates for existing products
+    await syncStockOnly(supabase, headers, existing.id, actualParentId, detail);
 
-    const { data: existing } = await supabase
-      .from("products")
-      .select("id")
-      .eq("bling_product_id", targetBlingId)
-      .maybeSingle();
-
-    if (!existing) {
-      console.log(`[webhook] Product ${targetBlingId} not in DB, skipping`);
-      return;
-    }
-
-    // Update ONLY syncable fields (shared definition — preserves name, description, images)
-    await supabase.from("products").update(getSyncableFields(detail)).eq("id", existing.id);
-
-    // Update stock for all variants of this product
-    if (detail.variacoes?.length) {
-      const varIds = detail.variacoes.map((v: any) => v.id);
-      const idsParam = varIds.map((id: number) => `idsProdutos[]=${id}`).join("&");
-      await sleep(300);
-      const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
-      const stockJson = await stockRes.json();
-      
-      for (const s of (stockJson?.data || [])) {
-        const varBlingId = s.produto?.id;
-        const qty = s.saldoVirtualTotal ?? 0;
-        if (varBlingId) {
-          await updateStockForBlingId(supabase, varBlingId, qty, token);
-        }
-      }
-    } else {
-      await sleep(300);
-      const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${targetBlingId}`, { headers });
-      const stockJson = await stockRes.json();
-      const qty = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
-      await supabase.from("product_variants").update({ stock_quantity: qty }).eq("product_id", existing.id);
-    }
-
-    // Auto-activate product if any active variant has stock > 0
-    const { data: stockedVariants } = await supabase
-      .from("product_variants")
-      .select("id")
-      .eq("product_id", existing.id)
-      .eq("is_active", true)
-      .gt("stock_quantity", 0)
-      .limit(1);
-
-    if (stockedVariants && stockedVariants.length > 0) {
-      await supabase.from("products").update({ is_active: true }).eq("id", existing.id);
-    }
-
-    console.log(`[webhook] Product ${targetBlingId} synced successfully`);
+    console.log(`[webhook] Product ${actualParentId} stock synced successfully`);
   } catch (err: any) {
     console.error(`[webhook] Error syncing product ${blingProductId}:`, err.message);
+  }
+}
+
+// ─── Sync ONLY stock for an existing product ───
+async function syncStockOnly(supabase: any, headers: any, productId: string, blingProductId: number, detail: any) {
+  // Update stock for all variants of this product
+  if (detail.variacoes?.length) {
+    const varIds = detail.variacoes.map((v: any) => v.id);
+    const idsParam = varIds.map((id: number) => `idsProdutos[]=${id}`).join("&");
+    await sleep(300);
+    const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
+    const stockJson = await stockRes.json();
+    
+    for (const s of (stockJson?.data || [])) {
+      const varBlingId = s.produto?.id;
+      const qty = s.saldoVirtualTotal ?? 0;
+      if (varBlingId) {
+        await updateStockForBlingId(supabase, varBlingId, qty);
+      }
+    }
+  } else {
+    await sleep(300);
+    const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${blingProductId}`, { headers });
+    const stockJson = await stockRes.json();
+    const qty = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
+    await supabase.from("product_variants").update({ stock_quantity: qty }).eq("product_id", productId);
   }
 }
 
@@ -290,34 +336,39 @@ async function batchStockSync(supabase: any) {
   const headers = blingHeaders(token);
 
   // Get ALL variants (both with and without bling_variant_id)
+  // JOIN with products to skip inactive ones
   const { data: allVariants } = await supabase
     .from("product_variants")
     .select("id, bling_variant_id, product_id, sku");
 
-  // Get all products with bling_product_id
+  // Get all ACTIVE products with bling_product_id (skip inactive)
   const { data: products } = await supabase
     .from("products")
-    .select("id, bling_product_id")
+    .select("id, bling_product_id, is_active")
     .not("bling_product_id", "is", null);
 
-  // Build a map: product_id -> bling_product_id
+  // Build sets of active and inactive product IDs
+  const activeProductIds = new Set<string>();
   const productBlingMap = new Map<string, number>();
   for (const p of (products || [])) {
+    if (p.is_active === false) continue; // Skip inactive products
+    activeProductIds.add(p.id);
     productBlingMap.set(p.id, p.bling_product_id);
   }
 
-  // Collect Bling IDs to query stock for
-  const blingIdToVariants = new Map<number, string[]>(); // blingId -> [variantId1, variantId2]
+  // Collect Bling IDs to query stock for (only from active products)
+  const blingIdToVariants = new Map<number, string[]>();
   
   for (const v of (allVariants || [])) {
+    // Skip variants of inactive products
+    if (!activeProductIds.has(v.product_id)) continue;
+    
     if (v.bling_variant_id) {
-      // Variant has its own Bling ID
       if (!blingIdToVariants.has(v.bling_variant_id)) {
         blingIdToVariants.set(v.bling_variant_id, []);
       }
       blingIdToVariants.get(v.bling_variant_id)!.push(v.id);
     } else {
-      // Variant without bling_variant_id - use parent product's bling_product_id
       const parentBlingId = productBlingMap.get(v.product_id);
       if (parentBlingId) {
         if (!blingIdToVariants.has(parentBlingId)) {
@@ -369,15 +420,14 @@ async function batchStockSync(supabase: any) {
     }
   }
 
-  console.log(`[cron] Stock sync complete: ${updated} updates, ${allBlingIds.length} Bling IDs checked`);
+  console.log(`[cron] Stock sync complete: ${updated} updates, ${allBlingIds.length} Bling IDs checked (inactive products skipped)`);
   return { updated, totalChecked: allBlingIds.length };
 }
 
 // ─── Idempotency check ───
 async function checkAndStoreEvent(supabase: any, eventId: string, eventType: string, blingProductId: number | null, payload: any): Promise<boolean> {
-  if (!eventId) return true; // No event ID = allow processing (legacy format)
+  if (!eventId) return true;
   
-  // Try to insert (unique constraint on event_id will prevent duplicates)
   const { error } = await supabase
     .from("bling_webhook_events")
     .insert({
@@ -389,12 +439,11 @@ async function checkAndStoreEvent(supabase: any, eventId: string, eventType: str
     });
 
   if (error) {
-    if (error.code === "23505") { // unique_violation
+    if (error.code === "23505") {
       console.log(`[webhook] Duplicate event ${eventId}, skipping`);
       return false;
     }
     console.error(`[webhook] Error storing event:`, error.message);
-    // Allow processing even if storage fails
   }
   
   return true;
@@ -422,7 +471,6 @@ serve(async (req) => {
     const supabase = createSupabase();
     const url = new URL(req.url);
     
-    // Read body as text first (needed for HMAC validation)
     const bodyText = await req.text();
     
     const isCronViaParam = url.searchParams.get("action") === "cron_stock_sync";
@@ -554,7 +602,6 @@ serve(async (req) => {
             if (eventAction.includes('deleted') || eventAction.includes('excluido') || eventAction.includes('removido')) {
               console.log(`[webhook] Product DELETED event for bling_id=${prodBlingId}`);
               
-              // Deactivate product instead of deleting (preserves order history)
               const { data: delProduct } = await supabase
                 .from("products")
                 .select("id")
@@ -567,7 +614,7 @@ serve(async (req) => {
                 console.log(`[webhook] Product ${prodBlingId} deactivated (deleted in Bling)`);
               }
             } else if (token) {
-              // Creation/update events
+              // Creation/update events — only syncs stock for existing products
               console.log(`[webhook] Product event for bling_id=${prodBlingId}`);
               await syncSingleProduct(supabase, prodBlingId, token);
             }
