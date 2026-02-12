@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Store, Phone, Instagram, Facebook, Truck, CreditCard, Save, Upload, Image, AlertTriangle, Shield, RefreshCw } from 'lucide-react';
+import { Store, Phone, Instagram, Facebook, Save, Upload, Image, AlertTriangle, Shield, RefreshCw } from 'lucide-react';
 import { ErrorLogsPanel } from '@/components/admin/ErrorLogsPanel';
 import { TwoFactorSetup } from '@/components/admin/TwoFactorSetup';
 import { APP_VERSION } from '@/lib/appVersion';
@@ -25,14 +25,6 @@ interface StoreSettings {
   instagram_url: string | null;
   facebook_url: string | null;
   free_shipping_threshold: number | null;
-  max_installments: number | null;
-  pix_discount: number | null;
-  cash_discount: number | null;
-  installment_interest_rate: number | null;
-  min_installment_value: number | null;
-  installments_without_interest: number | null;
-  appmax_access_token: string | null;
-  appmax_environment: string | null;
 }
 
 export default function Settings() {
@@ -51,14 +43,6 @@ export default function Settings() {
     instagram_url: '',
     facebook_url: '',
     free_shipping_threshold: 399,
-    max_installments: 6,
-    pix_discount: 5,
-    cash_discount: 5,
-    installment_interest_rate: 0,
-    min_installment_value: 30,
-    installments_without_interest: 3,
-    appmax_access_token: '',
-    appmax_environment: 'sandbox',
   });
 
   const { data: settings, isLoading } = useQuery({
@@ -87,14 +71,6 @@ export default function Settings() {
         instagram_url: settings.instagram_url || '',
         facebook_url: settings.facebook_url || '',
         free_shipping_threshold: settings.free_shipping_threshold || 399,
-        max_installments: settings.max_installments || 6,
-        pix_discount: (settings as any).pix_discount ?? 5,
-        cash_discount: (settings as any).cash_discount ?? 5,
-        installment_interest_rate: (settings as any).installment_interest_rate ?? 0,
-        min_installment_value: (settings as any).min_installment_value ?? 30,
-        installments_without_interest: (settings as any).installments_without_interest ?? 3,
-        appmax_access_token: (settings as any).appmax_access_token || '',
-        appmax_environment: (settings as any).appmax_environment || 'sandbox',
       });
     }
   }, [settings]);

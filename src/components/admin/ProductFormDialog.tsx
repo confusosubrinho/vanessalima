@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ProductChangeLog } from './ProductChangeLog';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateNetProfit } from '@/lib/pricingEngine';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Check, Save, Wand2 } from 'lucide-react';
@@ -143,13 +144,20 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
     queryKey: ['pricing-config'],
     queryFn: async () => {
       const { data } = await supabase.from('payment_pricing_config' as any).select('*').eq('is_active', true).limit(1).maybeSingle();
-      return data ? {
+      if (!data) return null;
+      return {
         pix_discount: Number((data as any).pix_discount) || 5,
-        installment_interest_rate: (data as any).interest_mode === 'fixed' ? Number((data as any).monthly_rate_fixed) || 0 : 0,
+        cash_discount: Number((data as any).cash_discount) || 5,
         installments_without_interest: (data as any).interest_free_installments || 3,
         max_installments: (data as any).max_installments || 6,
-        cash_discount: Number((data as any).cash_discount) || 5,
-      } : null;
+        card_cash_rate: Number((data as any).card_cash_rate) || 0,
+        interest_mode: (data as any).interest_mode || 'fixed',
+        monthly_rate_fixed: Number((data as any).monthly_rate_fixed) || 0,
+        monthly_rate_by_installment: (data as any).monthly_rate_by_installment || {},
+        min_installment_value: Number((data as any).min_installment_value) || 25,
+        transparent_checkout_fee_enabled: (data as any).transparent_checkout_fee_enabled ?? false,
+        transparent_checkout_fee_percent: Number((data as any).transparent_checkout_fee_percent) || 0,
+      };
     },
   });
 
@@ -502,30 +510,48 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
             const cost = parseFloat(formData.cost);
             const sellPrice = formData.sale_price ? parseFloat(formData.sale_price) : (formData.base_price ? parseFloat(formData.base_price) : 0);
             if (!sellPrice || sellPrice <= 0) return <p className="text-sm text-muted-foreground">Preencha o preço para ver a margem.</p>;
-            const checkoutFee = 0.015;
-            const pixDiscount = storeSettings?.pix_discount || storeSettings?.cash_discount || 5;
-            const pixPrice = sellPrice * (1 - pixDiscount / 100);
-            const pixFees = pixPrice * checkoutFee;
-            const pixProfit = pixPrice - cost - pixFees;
-            const pixMargin = ((pixProfit / pixPrice) * 100);
-            const gatewayRate = 0.0499;
-            const cardFees = sellPrice * gatewayRate + sellPrice * checkoutFee;
-            const cardProfit = sellPrice - cost - cardFees;
-            const cardMargin = ((cardProfit / sellPrice) * 100);
+            if (!storeSettings) return <p className="text-sm text-muted-foreground">Carregando config financeira...</p>;
+
+            // Use Pricing Engine for all calculations
+            const pricingConfig: import('@/lib/pricingEngine').PricingConfig = {
+              id: '', is_active: true,
+              max_installments: storeSettings.max_installments,
+              interest_free_installments: storeSettings.installments_without_interest,
+              card_cash_rate: storeSettings.card_cash_rate || 0,
+              pix_discount: storeSettings.pix_discount,
+              cash_discount: storeSettings.cash_discount,
+              interest_mode: storeSettings.interest_mode || 'fixed',
+              monthly_rate_fixed: storeSettings.monthly_rate_fixed || 0,
+              monthly_rate_by_installment: storeSettings.monthly_rate_by_installment || {},
+              min_installment_value: storeSettings.min_installment_value || 25,
+              rounding_mode: 'adjust_last',
+              transparent_checkout_fee_enabled: storeSettings.transparent_checkout_fee_enabled || false,
+              transparent_checkout_fee_percent: storeSettings.transparent_checkout_fee_percent || 0,
+            };
+
+            const pixPrice = sellPrice * (1 - pricingConfig.pix_discount / 100);
+            const pixResult = calculateNetProfit(pixPrice, cost, pricingConfig, 'pix');
+            const cardResult = calculateNetProfit(sellPrice, cost, pricingConfig, 'card', 1);
+
+            const feeLabel = pricingConfig.transparent_checkout_fee_enabled 
+              ? `+ ${pricingConfig.transparent_checkout_fee_percent}% checkout` : '';
+            const cardFeeLabel = pricingConfig.card_cash_rate > 0 
+              ? `${pricingConfig.card_cash_rate}% gateway` : '0% gateway';
+
             return (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">PIX ({pixDiscount}% desc. + 1,5%)</p>
+                  <p className="text-xs text-muted-foreground">PIX ({pricingConfig.pix_discount}% desc. {feeLabel})</p>
                   <p className="text-sm">Venda: <strong>R$ {pixPrice.toFixed(2)}</strong></p>
-                  <p className={`text-sm font-bold ${pixProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    Lucro: R$ {pixProfit.toFixed(2)} ({pixMargin.toFixed(1)}%)
+                  <p className={`text-sm font-bold ${pixResult.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    Lucro: R$ {pixResult.netProfit.toFixed(2)} ({pixResult.marginPercent.toFixed(1)}%)
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Cartão 6x (4.99% + 1,5%)</p>
+                  <p className="text-xs text-muted-foreground">Cartão 1x ({cardFeeLabel} {feeLabel})</p>
                   <p className="text-sm">Venda: <strong>R$ {sellPrice.toFixed(2)}</strong></p>
-                  <p className={`text-sm font-bold ${cardProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    Lucro: R$ {cardProfit.toFixed(2)} ({cardMargin.toFixed(1)}%)
+                  <p className={`text-sm font-bold ${cardResult.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    Lucro: R$ {cardResult.netProfit.toFixed(2)} ({cardResult.marginPercent.toFixed(1)}%)
                   </p>
                 </div>
               </div>
