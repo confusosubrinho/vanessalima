@@ -395,27 +395,28 @@ export default function Products() {
         </div>
       </div>
 
-      {/* Tabs - scrollable on mobile */}
+      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
-          <TabsList className="w-max sm:w-auto">
-            <TabsTrigger value="active-stock" className="gap-1 text-xs sm:text-sm whitespace-nowrap">
-              <CheckCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-              Ativos ({tabCounts.activeStock})
-            </TabsTrigger>
-            <TabsTrigger value="all" className="text-xs sm:text-sm whitespace-nowrap">
-              Todos ({tabCounts.all})
-            </TabsTrigger>
-            <TabsTrigger value="out-of-stock" className="gap-1 text-xs sm:text-sm whitespace-nowrap">
-              <PackageX className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-              S/ Estoque ({tabCounts.outOfStock})
-            </TabsTrigger>
-            <TabsTrigger value="inactive" className="gap-1 text-xs sm:text-sm whitespace-nowrap">
-              <EyeOff className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-              Inativos ({tabCounts.inactive})
-            </TabsTrigger>
-          </TabsList>
-        </div>
+        <TabsList className="w-full grid grid-cols-4 h-auto">
+          <TabsTrigger value="active-stock" className="text-[11px] sm:text-sm px-1 sm:px-3 py-1.5 sm:py-2 whitespace-nowrap">
+            {isMobile ? `Ativos (${tabCounts.activeStock})` : (
+              <><CheckCircle className="h-3.5 w-3.5 mr-1" />Ativos ({tabCounts.activeStock})</>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="all" className="text-[11px] sm:text-sm px-1 sm:px-3 py-1.5 sm:py-2">
+            Todos ({tabCounts.all})
+          </TabsTrigger>
+          <TabsTrigger value="out-of-stock" className="text-[11px] sm:text-sm px-1 sm:px-3 py-1.5 sm:py-2 whitespace-nowrap">
+            {isMobile ? `S/Est. (${tabCounts.outOfStock})` : (
+              <><PackageX className="h-3.5 w-3.5 mr-1" />Sem Estoque ({tabCounts.outOfStock})</>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="inactive" className="text-[11px] sm:text-sm px-1 sm:px-3 py-1.5 sm:py-2">
+            {isMobile ? `Inat. (${tabCounts.inactive})` : (
+              <><EyeOff className="h-3.5 w-3.5 mr-1" />Inativos ({tabCounts.inactive})</>
+            )}
+          </TabsTrigger>
+        </TabsList>
       </Tabs>
 
       {/* Search + Filters */}

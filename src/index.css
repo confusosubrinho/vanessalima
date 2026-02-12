@@ -213,3 +213,8 @@
 .fixed {
   will-change: transform;
 }
+
+/* Safe area for mobile bottom bar (notch devices) */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
