@@ -102,10 +102,10 @@ export default function ProductDetail() {
   const sizes = [...new Set(variants.map(v => v.size))].sort((a, b) => Number(a) - Number(b));
   const colors = [...new Map(variants.filter(v => v.color).map(v => [v.color, { name: v.color!, hex: v.color_hex }])).values()];
   
-  // Filter sizes by selected color
+  // Filter sizes by selected color, checking stock and active status
   const availableSizes = selectedColor
-    ? [...new Set(variants.filter(v => v.color === selectedColor).map(v => v.size))].sort((a, b) => Number(a) - Number(b))
-    : sizes;
+    ? [...new Set(variants.filter(v => v.color === selectedColor && v.is_active && v.stock_quantity > 0).map(v => v.size))].sort((a, b) => Number(a) - Number(b))
+    : [...new Set(variants.filter(v => v.is_active && v.stock_quantity > 0).map(v => v.size))].sort((a, b) => Number(a) - Number(b));
   
   const hasDiscount = product.sale_price && product.sale_price < product.base_price;
   const discountPercentage = hasDiscount
@@ -125,8 +125,8 @@ export default function ProductDetail() {
 
   const selectedVariant = selectedColor && selectedSize
     ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
-    : variants.find(v => v.size === selectedSize);
-  const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : true;
+    : selectedSize ? variants.find(v => v.size === selectedSize) : null;
+  const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : false;
 
   const handleColorSelect = (colorName: string) => {
     setSelectedColor(colorName);
