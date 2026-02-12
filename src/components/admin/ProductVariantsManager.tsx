@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Plus, Trash2, Settings2, Wand2 } from 'lucide-react';
+import { Plus, Trash2, Settings2, Wand2, Bell } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { StockNotifyList } from './StockNotifyList';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -353,9 +356,12 @@ export function ProductVariantsManager({
         </div>
       )}
 
-      <Button type="button" variant="outline" onClick={addVariant} className="w-full" size="sm">
-        <Plus className="h-4 w-4 mr-2" /> Adicionar variante individual
-      </Button>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" onClick={addVariant} className="flex-1" size="sm">
+          <Plus className="h-4 w-4 mr-2" /> Adicionar variante individual
+        </Button>
+        {productId && <StockNotifyButton productId={productId} />}
+      </div>
 
       {/* Advanced Edit Dialog */}
       <Dialog open={editIndex !== null} onOpenChange={(open) => { if (!open) setEditIndex(null); }}>
@@ -532,5 +538,46 @@ export function ProductVariantsManager({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function StockNotifyButton({ productId }: { productId: string }) {
+  const [showList, setShowList] = useState(false);
+
+  const { data: count } = useQuery({
+    queryKey: ['stock-notify-count', productId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('stock_notifications' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', productId)
+        .eq('is_notified', false);
+      if (error) throw error;
+      return count || 0;
+    },
+  });
+
+  if (!count || count === 0) return null;
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="relative"
+        onClick={() => setShowList(true)}
+      >
+        <Bell className="h-4 w-4 mr-1" />
+        {count}
+        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-destructive rounded-full animate-pulse" />
+      </Button>
+      <StockNotifyList
+        productId={productId}
+        productName=""
+        open={showList}
+        onOpenChange={setShowList}
+      />
+    </>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck } from 'lucide-react';
+import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck, Bell } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StoreLayout } from '@/components/store/StoreLayout';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { ProductReviews } from '@/components/store/ProductReviews';
 import { PaymentMethodsModal } from '@/components/store/PaymentMethodsModal';
 import { BuyTogether } from '@/components/store/BuyTogether';
 import { FloatingVideo } from '@/components/store/FloatingVideo';
+import { StockNotifyModal } from '@/components/store/StockNotifyModal';
 import { useRecentProducts, useRelatedProducts } from '@/hooks/useRecentProducts';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,6 +34,7 @@ export default function ProductDetail() {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('description');
+  const [showNotifyModal, setShowNotifyModal] = useState(false);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
@@ -533,10 +535,22 @@ export default function ProductDetail() {
             </div>
 
             <div className="flex gap-2 sm:gap-4">
-              <Button size="lg" className="flex-1 rounded-full text-sm sm:text-base" onClick={handleAddToCart} disabled={!isInStock}>
-                <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
-                {isInStock ? 'Adicionar ao Carrinho' : 'Esgotado'}
-              </Button>
+              {isInStock ? (
+                <Button size="lg" className="flex-1 rounded-full text-sm sm:text-base" onClick={handleAddToCart}>
+                  <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
+                  Adicionar ao Carrinho
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="flex-1 rounded-full text-sm sm:text-base border-primary text-primary hover:bg-primary/10"
+                  onClick={() => setShowNotifyModal(true)}
+                >
+                  <Bell className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
+                  Avise-me quando voltar
+                </Button>
+              )}
               <Button
                 size="lg"
                 variant="outline"
@@ -553,6 +567,21 @@ export default function ProductDetail() {
                 <Heart className={`h-5 w-5 ${isFavorite(product.id) ? 'fill-destructive text-destructive' : ''}`} />
               </Button>
             </div>
+
+            {/* Stock Notify Modal */}
+            <StockNotifyModal
+              open={showNotifyModal}
+              onOpenChange={setShowNotifyModal}
+              productId={product.id}
+              productName={product.name}
+              variantId={selectedVariant?.id}
+              variantInfo={
+                selectedSize
+                  ? `${selectedSize}${selectedColor ? ' - ' + selectedColor : ''}`
+                  : undefined
+              }
+              currentPrice={currentPrice}
+            />
 
             <a
               href={`https://wa.me/5542991120205?text=Olá, gostei deste produto: ${product.name}`}

@@ -1329,6 +1329,69 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_notifications: {
+        Row: {
+          created_at: string
+          desired_price: number | null
+          email: string | null
+          honeypot: string | null
+          id: string
+          is_notified: boolean
+          notified_at: string | null
+          product_id: string
+          status: string
+          updated_at: string
+          variant_id: string | null
+          variant_info: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          created_at?: string
+          desired_price?: number | null
+          email?: string | null
+          honeypot?: string | null
+          id?: string
+          is_notified?: boolean
+          notified_at?: string | null
+          product_id: string
+          status?: string
+          updated_at?: string
+          variant_id?: string | null
+          variant_info?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          created_at?: string
+          desired_price?: number | null
+          email?: string | null
+          honeypot?: string | null
+          id?: string
+          is_notified?: boolean
+          notified_at?: string | null
+          product_id?: string
+          status?: string
+          updated_at?: string
+          variant_id?: string | null
+          variant_info?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_notifications_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_notifications_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       store_settings: {
         Row: {
           address: string | null
