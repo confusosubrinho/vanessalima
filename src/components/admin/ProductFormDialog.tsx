@@ -3,7 +3,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Check, Save, Wand2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -404,11 +404,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
             onChange={(e) => {
               const name = e.target.value;
               const slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-              const updates: Partial<ProductFormData> = { name, slug };
-              if (!editingProduct && !formData.sku) {
-                updates.sku = name.length > 3 ? generateProductSku(name) : '';
-              }
-              setFormData(prev => ({ ...prev, ...updates }));
+              setFormData(prev => ({ ...prev, name, slug }));
             }}
             required
           />
@@ -464,10 +460,30 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
         </div>
         <div>
           <Label>SKU</Label>
-          <Input
-            value={formData.sku}
-            onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-          />
+          <div className="flex gap-1">
+            <Input
+              value={formData.sku}
+              onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="shrink-0 h-9 w-9"
+              title="Gerar SKU"
+              onClick={() => {
+                if (formData.name.length > 2) {
+                  setFormData(prev => ({ ...prev, sku: generateProductSku(prev.name) }));
+                  toast({ title: 'SKU sugerido!' });
+                } else {
+                  toast({ title: 'Preencha o nome primeiro', variant: 'destructive' });
+                }
+              }}
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -922,6 +938,16 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
       >
         <ChevronLeft className="h-4 w-4 mr-1" />
         Anterior
+      </Button>
+
+      <Button
+        type="submit"
+        variant="secondary"
+        size="sm"
+        disabled={saveMutation.isPending}
+        className="shrink-0 px-3"
+      >
+        <Save className="h-4 w-4" />
       </Button>
 
       {currentStep < STEPS.length - 1 ? (

@@ -41,7 +41,7 @@ const AVAILABLE_VARIABLES = [
 ];
 
 export function ProductSEOFields({ productData, seoData, onChange }: ProductSEOFieldsProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
 
