@@ -88,6 +88,12 @@ export function ProductVariantsManager({
     return variants.some((v, i) => i !== excludeIndex && v.sku === sku && sku !== '');
   };
 
+  const checkDuplicateVariant = (size: string, color: string | null, excludeIndex?: number): boolean => {
+    return variants.some((v, i) => 
+      i !== excludeIndex && v.size === size && (v.color || '') === (color || '')
+    );
+  };
+
   const addVariant = () => {
     const newVariant: VariantItem = {
       size: '',
@@ -116,13 +122,29 @@ export function ProductVariantsManager({
     const updated = [...variants];
     updated[index] = { ...updated[index], [field]: value };
 
-    // Auto-generate SKU when size or color changes
+    // Validate duplicate variant by size+color
     if (field === 'size' || field === 'color') {
       const size = field === 'size' ? value : updated[index].size;
       const color = field === 'color' ? value : updated[index].color;
+      
+      if (size && checkDuplicateVariant(size, color || '', index)) {
+        toast({
+          title: 'Variante duplicada!',
+          description: `Já existe uma variante ${size}${color ? ' - ' + color : ''}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+
       if (size) {
         updated[index].sku = generateSku(parentSku, size, color);
       }
+    }
+
+    // Prevent negative stock
+    if (field === 'stock_quantity' && value < 0) {
+      toast({ title: 'Estoque inválido', description: 'Estoque não pode ser negativo', variant: 'destructive' });
+      return;
     }
 
     onChange(updated);

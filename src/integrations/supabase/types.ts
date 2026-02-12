@@ -1663,7 +1663,7 @@ export type Database = {
       check_login_rate_limit: { Args: { p_email: string }; Returns: boolean }
       decrement_stock: {
         Args: { p_quantity: number; p_variant_id: string }
-        Returns: boolean
+        Returns: Json
       }
       has_role: {
         Args: {

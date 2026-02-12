@@ -278,33 +278,42 @@ serve(async (req) => {
       }
 
       // ── Stock validation + atomic decrement (prevents race condition) ──
-      // Instead of check-then-decrement, we decrement atomically BEFORE payment.
-      // If payment fails, we rollback the stock.
+      // decrement_stock now returns jsonb with success/error details and uses FOR UPDATE lock
       const stockDecrements: { variant_id: string; quantity: number; name: string }[] = [];
       for (const product of products) {
         if (!product.variant_id) continue;
         const qty = product.quantity || 1;
-        const { data: success } = await supabase.rpc("decrement_stock", {
+        const { data: result, error: rpcError } = await supabase.rpc("decrement_stock", {
           p_variant_id: product.variant_id,
           p_quantity: qty,
         });
-        if (!success) {
+
+        if (rpcError) {
           // Rollback already decremented stock
           for (const dec of stockDecrements) {
-            await supabase.rpc("decrement_stock", {
+            await supabase.rpc("increment_stock", {
               p_variant_id: dec.variant_id,
-              p_quantity: -dec.quantity,
+              p_quantity: dec.quantity,
             });
           }
-          // Get current stock for error message
-          const { data: failedVariant } = await supabase
-            .from("product_variants")
-            .select("stock_quantity, size, color")
-            .eq("id", product.variant_id)
-            .single();
+          throw new Error(`Erro ao verificar estoque: ${rpcError.message}`);
+        }
+
+        const stockResult = typeof result === 'string' ? JSON.parse(result) : result;
+
+        if (!stockResult?.success) {
+          // Rollback already decremented stock
+          for (const dec of stockDecrements) {
+            await supabase.rpc("increment_stock", {
+              p_variant_id: dec.variant_id,
+              p_quantity: dec.quantity,
+            });
+          }
           return new Response(
             JSON.stringify({
-              error: `Estoque insuficiente para "${product.name}" (${failedVariant?.size || ''}${failedVariant?.color ? " - " + failedVariant.color : ""}). Disponível: ${failedVariant?.stock_quantity || 0}`,
+              error: stockResult?.message || `Estoque insuficiente para "${product.name}"`,
+              error_code: stockResult?.error,
+              available_stock: stockResult?.available_stock,
             }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
@@ -391,11 +400,11 @@ serve(async (req) => {
       try {
         paymentData = await appmaxFetch(baseApiUrl, token, paymentEndpoint, paymentPayload);
       } catch (paymentError: any) {
-        // Rollback stock on payment failure
+        // Rollback stock on payment failure using proper increment_stock
         for (const dec of stockDecrements) {
-          await supabase.rpc("decrement_stock", {
+          await supabase.rpc("increment_stock", {
             p_variant_id: dec.variant_id,
-            p_quantity: -dec.quantity,
+            p_quantity: dec.quantity,
           });
         }
         throw paymentError;

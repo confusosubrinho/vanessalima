@@ -135,16 +135,30 @@ export default function Products() {
     }).format(price);
   };
 
-  // Helper: check if product is out of stock
+  // Helper: check if product is out of stock (only considers active variants)
   const isOutOfStock = (p: Product) => {
     if (!p.variants || p.variants.length === 0) return false;
-    return p.variants.every(v => v.stock_quantity <= 0);
+    const activeVariants = p.variants.filter(v => v.is_active);
+    if (activeVariants.length === 0) return true;
+    return activeVariants.every(v => v.stock_quantity <= 0);
   };
 
-  // Helper: check if product has stock
+  // Helper: check if product has stock (only considers active variants)
   const hasStock = (p: Product) => {
     if (!p.variants || p.variants.length === 0) return false;
-    return p.variants.some(v => v.stock_quantity > 0);
+    return p.variants.some(v => v.is_active && v.stock_quantity > 0);
+  };
+
+  // Helper: get total stock across active variants
+  const getTotalStock = (p: Product): number => {
+    if (!p.variants) return 0;
+    return p.variants.filter(v => v.is_active).reduce((sum, v) => sum + v.stock_quantity, 0);
+  };
+
+  // Helper: check for low stock variants
+  const hasLowStock = (p: Product): boolean => {
+    if (!p.variants) return false;
+    return p.variants.some(v => v.is_active && v.stock_quantity > 0 && v.stock_quantity < 5);
   };
 
   // Tab counts
@@ -504,12 +518,20 @@ export default function Products() {
                       ) : (
                         <Badge variant="outline" className="border-muted-foreground text-muted-foreground">Manual</Badge>
                       )}
-                      {isOutOfStock(product) && (
+                      {isOutOfStock(product) ? (
                         <Badge variant="destructive" className="gap-1">
                           <PackageX className="h-3 w-3" />
                           Sem Estoque
                         </Badge>
-                      )}
+                      ) : hasLowStock(product) ? (
+                        <Badge variant="outline" className="gap-1 border-orange-500 text-orange-600 dark:text-orange-400">
+                          Estoque Baixo ({getTotalStock(product)})
+                        </Badge>
+                      ) : hasStock(product) ? (
+                        <Badge variant="outline" className="gap-1 border-green-500 text-green-600 dark:text-green-400">
+                          {getTotalStock(product)} un.
+                        </Badge>
+                      ) : null}
                       {product.is_featured && <Badge variant="outline">Destaque</Badge>}
                       {product.is_new && <Badge className="bg-primary">Novo</Badge>}
                       {product.sale_price && product.sale_price < product.base_price && (
