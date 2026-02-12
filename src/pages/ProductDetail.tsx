@@ -99,13 +99,34 @@ export default function ProductDetail() {
 
   const images = product.images || [];
   const variants = product.variants?.filter(v => v.is_active) || [];
-  const sizes = [...new Set(variants.map(v => v.size))].sort((a, b) => Number(a) - Number(b));
-  const colors = [...new Map(variants.filter(v => v.color).map(v => [v.color, { name: v.color!, hex: v.color_hex }])).values()];
   
-  // Filter sizes by selected color, checking stock and active status
+  // Valid variants: active AND in stock
+  const validVariants = variants.filter(v => v.stock_quantity > 0);
+  
+  const sizes = [...new Set(variants.map(v => v.size))].sort((a, b) => {
+    const numA = Number(a); const numB = Number(b);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    return a.localeCompare(b);
+  });
+  const colors = [...new Map(validVariants.filter(v => v.color).map(v => [v.color, { name: v.color!, hex: v.color_hex }])).values()];
+  
+  // Filter sizes available for selected color
   const availableSizes = selectedColor
-    ? [...new Set(variants.filter(v => v.color === selectedColor && v.is_active && v.stock_quantity > 0).map(v => v.size))].sort((a, b) => Number(a) - Number(b))
-    : [...new Set(variants.filter(v => v.is_active && v.stock_quantity > 0).map(v => v.size))].sort((a, b) => Number(a) - Number(b));
+    ? [...new Set(validVariants.filter(v => v.color === selectedColor).map(v => v.size))].sort((a, b) => {
+        const numA = Number(a); const numB = Number(b);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      })
+    : [...new Set(validVariants.map(v => v.size))].sort((a, b) => {
+        const numA = Number(a); const numB = Number(b);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      });
+  
+  // Filter colors available for selected size
+  const availableColors = selectedSize
+    ? [...new Map(validVariants.filter(v => v.size === selectedSize && v.color).map(v => [v.color, { name: v.color!, hex: v.color_hex }])).values()]
+    : colors;
   
   const hasDiscount = product.sale_price && product.sale_price < product.base_price;
   const discountPercentage = hasDiscount
@@ -150,11 +171,41 @@ export default function ProductDetail() {
       toast({ title: 'Selecione um tamanho', variant: 'destructive' });
       return;
     }
-    const variant = selectedColor
-      ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
-      : variants.find(v => v.size === selectedSize);
-    if (!variant) return;
+
+    let variant;
+    if (selectedColor) {
+      variant = variants.find(v => 
+        v.size === selectedSize && v.color === selectedColor && v.is_active && v.stock_quantity > 0
+      );
+    } else {
+      variant = variants.find(v => 
+        v.size === selectedSize && (!v.color || v.color === '') && v.is_active && v.stock_quantity > 0
+      );
+    }
+
+    if (!variant) {
+      toast({ 
+        title: 'Variante indisponível', 
+        description: 'A combinação selecionada não está disponível em estoque.',
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    if (variant.stock_quantity < quantity) {
+      toast({ 
+        title: 'Estoque insuficiente', 
+        description: `Apenas ${variant.stock_quantity} unidade(s) disponível(is).`,
+        variant: 'destructive' 
+      });
+      return;
+    }
+
     addItem(product, variant, quantity);
+    toast({ 
+      title: 'Produto adicionado!', 
+      description: `${product.name} - Tam. ${variant.size}${variant.color ? ' - ' + variant.color : ''}`
+    });
   };
 
   const characteristics = [
@@ -381,11 +432,11 @@ export default function ProductDetail() {
             </div>
 
             {/* Color Selector */}
-            {colors.length > 0 && (
+            {availableColors.length > 0 && (
               <div>
                 <label className="block font-medium mb-2">Cor{selectedColor && `: ${selectedColor}`}</label>
                 <div className="flex flex-wrap gap-2">
-                  {colors.map(({ name, hex }) => (
+                  {availableColors.map(({ name, hex }) => (
                     <button
                       key={name}
                       onClick={() => handleColorSelect(name!)}
@@ -405,25 +456,31 @@ export default function ProductDetail() {
             <div>
               <label className="block font-medium mb-2">Tamanho</label>
               <div className="flex flex-wrap gap-2">
-                {availableSizes.map((size) => {
-                  const variant = selectedColor
-                    ? variants.find(v => v.size === size && v.color === selectedColor)
-                    : variants.find(v => v.size === size);
-                  const outOfStock = !variant || variant.stock_quantity === 0;
+                {sizes.map((size) => {
+                  const isAvailable = availableSizes.includes(size);
+                  const variantForSize = validVariants.find(v => 
+                    v.size === size && (!selectedColor || v.color === selectedColor)
+                  );
+                  const stockQty = variantForSize?.stock_quantity || 0;
                   return (
                     <button
                       key={size}
-                      onClick={() => !outOfStock && setSelectedSize(size)}
-                      disabled={outOfStock}
-                      className={`w-12 h-12 rounded-lg border-2 font-medium transition-colors ${
+                      onClick={() => isAvailable && setSelectedSize(size)}
+                      disabled={!isAvailable}
+                      className={`min-w-12 h-12 px-2 rounded-lg border-2 font-medium transition-colors flex flex-col items-center justify-center ${
                         selectedSize === size
                           ? 'border-primary bg-primary text-primary-foreground'
-                          : outOfStock
+                          : !isAvailable
                           ? 'border-muted bg-muted text-muted-foreground cursor-not-allowed line-through'
                           : 'border-border hover:border-primary'
                       }`}
                     >
-                      {size}
+                      <span>{size}</span>
+                      {isAvailable && stockQty > 0 && stockQty < 5 && selectedSize !== size && (
+                        <span className="text-[10px] text-orange-600 leading-none">
+                          {stockQty === 1 ? 'Última!' : `${stockQty} rest.`}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -438,7 +495,10 @@ export default function ProductDetail() {
                     <Minus className="h-4 w-4" />
                   </Button>
                   <span className="w-12 text-center font-medium">{quantity}</span>
-                  <Button variant="ghost" size="icon" onClick={() => setQuantity(quantity + 1)}>
+                  <Button variant="ghost" size="icon" onClick={() => {
+                    const maxStock = selectedVariant?.stock_quantity || 99;
+                    setQuantity(Math.min(quantity + 1, maxStock));
+                  }}>
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
