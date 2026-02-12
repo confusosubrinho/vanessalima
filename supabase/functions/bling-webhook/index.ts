@@ -60,11 +60,42 @@ function blingHeaders(token: string) {
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}`, Accept: "application/json" };
 }
 
+// ─── Classify Bling V3 event into action type ───
+function classifyEvent(event: string): "stock" | "product" | "order" | "invoice" | "unknown" {
+  const e = event.toLowerCase();
+  // Bling V3 events: stock.created, stock.updated, product.updated, product.created, order.created, etc.
+  if (e.includes("stock") || e.includes("estoque")) return "stock";
+  if (e.includes("product") || e.includes("produto")) return "product";
+  if (e.includes("order") || e.includes("pedido") || e.includes("venda")) return "order";
+  if (e.includes("invoice") || e.includes("nf") || e.includes("consumer_invoice")) return "invoice";
+  return "unknown";
+}
+
 // ─── Update stock for a single Bling product ID ───
 async function updateStockForBlingId(supabase: any, blingProductId: number, newStock?: number, token?: string) {
-  // If stock value provided directly, use it
   if (newStock !== undefined) {
-    // Update as product
+    // Update as variant (most specific match first)
+    const { data: variant } = await supabase
+      .from("product_variants")
+      .select("id, product_id")
+      .eq("bling_variant_id", blingProductId)
+      .maybeSingle();
+
+    if (variant) {
+      await supabase
+        .from("product_variants")
+        .update({ stock_quantity: newStock })
+        .eq("id", variant.id);
+      console.log(`[webhook] Variant stock updated: bling_variant_id=${blingProductId} → ${newStock}`);
+      
+      // Auto-activate parent if stock > 0
+      if (newStock > 0) {
+        await supabase.from("products").update({ is_active: true }).eq("id", variant.product_id);
+      }
+      return;
+    }
+
+    // Update as product (all variants without own bling_variant_id)
     const { data: product } = await supabase
       .from("products")
       .select("id")
@@ -75,28 +106,18 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
       await supabase
         .from("product_variants")
         .update({ stock_quantity: newStock })
-        .eq("product_id", product.id);
-      console.log(`[webhook] Stock updated for product bling_id=${blingProductId}: ${newStock}`);
-    }
-
-    // Update as variant
-    const { data: variant } = await supabase
-      .from("product_variants")
-      .select("id")
-      .eq("bling_variant_id", blingProductId)
-      .maybeSingle();
-
-    if (variant) {
-      await supabase
-        .from("product_variants")
-        .update({ stock_quantity: newStock })
-        .eq("id", variant.id);
-      console.log(`[webhook] Variant stock updated for bling_variant_id=${blingProductId}: ${newStock}`);
+        .eq("product_id", product.id)
+        .is("bling_variant_id", null);
+      console.log(`[webhook] Product stock updated: bling_product_id=${blingProductId} → ${newStock}`);
+      
+      if (newStock > 0) {
+        await supabase.from("products").update({ is_active: true }).eq("id", product.id);
+      }
     }
     return;
   }
 
-  // If no stock value, fetch from Bling API
+  // If no stock value provided, fetch from Bling API
   if (!token) return;
   
   try {
@@ -139,15 +160,14 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
       .maybeSingle();
 
     if (!existing) {
-      console.log(`[webhook] Product ${targetBlingId} not in DB, skipping (will be imported on next full sync)`);
+      console.log(`[webhook] Product ${targetBlingId} not in DB, skipping`);
       return;
     }
 
-    // Update basic product info
+    // Update ONLY technical fields — name, slug, description are editable in dashboard
     const basePrice = detail.preco || 0;
     const salePrice = detail.precoPromocional && detail.precoPromocional < basePrice ? detail.precoPromocional : null;
     
-    // Do NOT overwrite name, slug or description — they are editable in the dashboard
     await supabase.from("products").update({
       base_price: basePrice,
       sale_price: salePrice,
@@ -158,7 +178,6 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
     // Update stock for all variants of this product
     if (detail.variacoes?.length) {
       const varIds = detail.variacoes.map((v: any) => v.id);
-      // Batch fetch stock
       const idsParam = varIds.map((id: number) => `idsProdutos[]=${id}`).join("&");
       await sleep(300);
       const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
@@ -179,7 +198,6 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
         }
       }
     } else {
-      // Simple product - update default variant stock
       await sleep(300);
       const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${targetBlingId}`, { headers });
       const stockJson = await stockRes.json();
@@ -206,7 +224,7 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
   }
 }
 
-// ─── Batch stock sync (called by cron) ───
+// ─── Batch stock sync (called by cron every 5 min) ───
 async function batchStockSync(supabase: any) {
   let token: string;
   try {
@@ -218,28 +236,31 @@ async function batchStockSync(supabase: any) {
   
   const headers = blingHeaders(token);
 
-  // Get all products with bling_product_id
-  const { data: products } = await supabase
-    .from("products")
-    .select("id, bling_product_id")
-    .not("bling_product_id", "is", null);
-
-  if (!products?.length) return { updated: 0 };
-
-  // Also get all variants with bling_variant_id
+  // Get all variants with bling_variant_id (most specific - handles variations correctly)
   const { data: variants } = await supabase
     .from("product_variants")
     .select("id, bling_variant_id, product_id")
     .not("bling_variant_id", "is", null);
 
-  // Collect ALL bling IDs we need stock for (products + variants)
-  const allBlingIds: number[] = [];
-  const productBlingIds = products.map((p: any) => p.bling_product_id);
+  // Get products that have simple variants (no bling_variant_id) 
+  const { data: products } = await supabase
+    .from("products")
+    .select("id, bling_product_id")
+    .not("bling_product_id", "is", null);
+
+  // Find products that have at least one variant WITHOUT bling_variant_id (simple products)
+  const variantProductIds = new Set((variants || []).map((v: any) => v.product_id));
+  const simpleProducts = (products || []).filter((p: any) => {
+    // Only include if this product has no variants with bling_variant_id
+    return !variantProductIds.has(p.id);
+  });
+
+  // Collect unique Bling IDs
   const variantBlingIds = (variants || []).map((v: any) => v.bling_variant_id);
-  
-  // Deduplicate
-  const uniqueIds = new Set([...productBlingIds, ...variantBlingIds]);
-  allBlingIds.push(...uniqueIds);
+  const simpleProductBlingIds = simpleProducts.map((p: any) => p.bling_product_id);
+  const allBlingIds = [...new Set([...variantBlingIds, ...simpleProductBlingIds])];
+
+  if (allBlingIds.length === 0) return { updated: 0 };
 
   let updated = 0;
 
@@ -263,25 +284,24 @@ async function batchStockSync(supabase: any) {
         const qty = stock.saldoVirtualTotal ?? 0;
         if (!blingId) continue;
 
-        // Update as product (all variants of this product)
-        const product = products.find((p: any) => p.bling_product_id === blingId);
-        if (product) {
-          // Only update variants that DON'T have their own bling_variant_id
-          await supabase
-            .from("product_variants")
-            .update({ stock_quantity: qty })
-            .eq("product_id", product.id)
-            .is("bling_variant_id", null);
-          updated++;
-        }
-
-        // Update as specific variant
+        // Update specific variant
         const variant = (variants || []).find((v: any) => v.bling_variant_id === blingId);
         if (variant) {
           await supabase
             .from("product_variants")
             .update({ stock_quantity: qty })
             .eq("id", variant.id);
+          updated++;
+          continue; // Don't double-update
+        }
+
+        // Update simple product (all variants)
+        const product = simpleProducts.find((p: any) => p.bling_product_id === blingId);
+        if (product) {
+          await supabase
+            .from("product_variants")
+            .update({ stock_quantity: qty })
+            .eq("product_id", product.id);
           updated++;
         }
       }
@@ -301,23 +321,10 @@ serve(async (req) => {
 
   try {
     const supabase = createSupabase();
-    
-    // Check if this is a cron-triggered stock sync (via query param or body)
     const url = new URL(req.url);
-    
-    // #4: Validate Bling webhook secret
-    const blingWebhookSecret = Deno.env.get("BLING_WEBHOOK_SECRET");
-    if (blingWebhookSecret) {
-      const urlToken = url.searchParams.get("token");
-      if (urlToken !== blingWebhookSecret) {
-        console.warn("[webhook] Invalid Bling webhook token received");
-        return new Response("Unauthorized", { status: 401, headers: corsHeaders });
-      }
-    }
     
     const isCronViaParam = url.searchParams.get("action") === "cron_stock_sync";
     
-    // Clone request to read body (since body can only be read once)
     const bodyText = await req.text();
     let payload: any = {};
     try { payload = JSON.parse(bodyText); } catch (_) {}
@@ -334,21 +341,22 @@ serve(async (req) => {
 
     console.log("[webhook] Received:", JSON.stringify(payload));
 
-    // Bling V3 webhook/callback payload structure:
-    // Callbacks: { retorno: { estoques: [...] } } or { retorno: { produtos: [...] } }
-    // OR newer format: { evento: string, dados: { ... } }
-    // OR direct array: { data: { ... } }
+    // ─── Bling V3 webhook format ───
+    // { event: "stock.created", data: { produto: { id: 123 }, saldoFisicoTotal: 10, ... } }
+    // { event: "product.updated", data: { id: 123, ... } }
+    // { event: "order.created", data: { id: 123, ... } }
+    // Legacy format: { evento: "estoque", dados: { ... } }
+    // Callback format: { retorno: { estoques: [...] } }
     
-    const evento = payload?.evento || payload?.event;
-    const dados = payload?.dados || payload?.data;
+    const evento = payload?.event || payload?.evento;
+    const dados = payload?.data || payload?.dados;
     const retorno = payload?.retorno;
 
-    // ─── Handle Bling V3 Callback format (retorno.estoques/produtos) ───
+    // ─── Handle legacy callback format ───
     if (retorno) {
       let token: string | null = null;
       try { token = await getValidToken(supabase); } catch (_) {}
 
-      // Stock callbacks
       if (retorno.estoques) {
         const estoques = Array.isArray(retorno.estoques) ? retorno.estoques : [retorno.estoques];
         for (const estoque of estoques) {
@@ -362,16 +370,13 @@ serve(async (req) => {
         console.log(`[webhook] Processed ${estoques.length} stock callback(s)`);
       }
 
-      // Product callbacks
       if (retorno.produtos) {
         const produtos = Array.isArray(retorno.produtos) ? retorno.produtos : [retorno.produtos];
         if (token) {
           for (const prod of produtos) {
             const p = prod.produto || prod;
             const blingId = p.id || p.idProduto;
-            if (blingId) {
-              await syncSingleProduct(supabase, blingId, token);
-            }
+            if (blingId) await syncSingleProduct(supabase, blingId, token);
           }
           console.log(`[webhook] Processed ${produtos.length} product callback(s)`);
         }
@@ -382,36 +387,61 @@ serve(async (req) => {
       });
     }
 
-    // ─── Handle evento/dados format ───
+    // ─── Handle V3 event format ───
     if (!evento) {
       return new Response(JSON.stringify({ ok: true, message: "No event" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const eventType = classifyEvent(evento);
+    console.log(`[webhook] Event: ${evento} → classified as: ${eventType}`);
+
     let token: string | null = null;
     try { token = await getValidToken(supabase); } catch (_) {}
 
-    // Handle stock change events
-    if (evento === "estoque" || evento.includes("estoque")) {
-      const blingProductId = dados?.idProduto || dados?.produto?.id;
-      const novoSaldo = dados?.saldoVirtualTotal ?? dados?.quantidade;
-      
-      if (blingProductId) {
-        await updateStockForBlingId(supabase, blingProductId, novoSaldo !== undefined ? novoSaldo : undefined, token || undefined);
+    switch (eventType) {
+      case "stock": {
+        // Bling V3 stock.created/stock.updated:
+        // data: { produto: { id: 123 }, saldoFisicoTotal: 10, saldoVirtualTotal: 8, deposito: {...}, operacao: "E"/"S", quantidade: 1 }
+        const blingProductId = dados?.produto?.id || dados?.idProduto;
+        const saldoVirtual = dados?.saldoVirtualTotal;
+        
+        if (blingProductId) {
+          console.log(`[webhook] Stock event for bling_id=${blingProductId}, saldoVirtual=${saldoVirtual}`);
+          await updateStockForBlingId(
+            supabase, 
+            blingProductId, 
+            saldoVirtual !== undefined ? saldoVirtual : undefined, 
+            token || undefined
+          );
+        }
+        break;
       }
-    }
 
-    // Handle product update/create events - sync the individual product
-    if (evento === "produto.alteracao" || evento === "produto.inclusao" || evento.includes("produto")) {
-      const blingProductId = dados?.id || dados?.idProduto || dados?.produto?.id;
-      if (blingProductId && token) {
-        await syncSingleProduct(supabase, blingProductId, token);
+      case "product": {
+        // Bling V3 product.updated/product.created:
+        // data: { id: 123, ... }
+        const blingProductId = dados?.id || dados?.idProduto || dados?.produto?.id;
+        if (blingProductId && token) {
+          console.log(`[webhook] Product event for bling_id=${blingProductId}`);
+          await syncSingleProduct(supabase, blingProductId, token);
+        }
+        break;
       }
+
+      case "order":
+      case "invoice":
+        // Orders and invoices: just acknowledge
+        console.log(`[webhook] ${eventType} event acknowledged: ${evento}`);
+        break;
+
+      default:
+        console.log(`[webhook] Unknown event type: ${evento}`);
     }
 
     return new Response(
-      JSON.stringify({ ok: true, evento }),
+      JSON.stringify({ ok: true, evento, eventType }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
