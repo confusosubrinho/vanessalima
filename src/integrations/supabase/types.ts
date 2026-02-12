@@ -125,6 +125,48 @@ export type Database = {
         }
         Relationships: []
       }
+      bling_webhook_events: {
+        Row: {
+          bling_product_id: number | null
+          created_at: string
+          event_id: string
+          event_type: string
+          id: string
+          last_error: string | null
+          payload: Json
+          processed_at: string | null
+          received_at: string
+          retries: number
+          status: string
+        }
+        Insert: {
+          bling_product_id?: number | null
+          created_at?: string
+          event_id: string
+          event_type: string
+          id?: string
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
+          retries?: number
+          status?: string
+        }
+        Update: {
+          bling_product_id?: number | null
+          created_at?: string
+          event_id?: string
+          event_type?: string
+          id?: string
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
+          retries?: number
+          status?: string
+        }
+        Relationships: []
+      }
       buy_together_products: {
         Row: {
           created_at: string
