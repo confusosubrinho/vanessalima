@@ -1,7 +1,8 @@
  import { useQuery } from '@tanstack/react-query';
  import { supabase } from '@/integrations/supabase/client';
- import { Package, ShoppingCart, Users, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react';
- import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Package, ShoppingCart, Users, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useIsMobile } from '@/hooks/use-mobile';
  
  export default function Dashboard() {
    const { data: stats } = useQuery({
@@ -69,91 +70,93 @@
      cancelled: 'Cancelado',
    };
  
-   return (
-     <div className="space-y-6">
-       <div>
-         <h1 className="text-3xl font-bold">Dashboard</h1>
-         <p className="text-muted-foreground">Visão geral da sua loja</p>
+    const isMobile = useIsMobile();
+
+    return (
+    <div className="space-y-4 md:space-y-6">
+      <div>
+        <h1 className="text-xl md:text-3xl font-bold">Dashboard</h1>
+        <p className="text-xs md:text-sm text-muted-foreground">Visão geral da sua loja</p>
+      </div>
+
+      {/* Stats cards */}
+      <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 md:p-6 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Receita Total</CardTitle>
+              <DollarSign className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+              <div className="text-lg md:text-2xl font-bold truncate">{formatPrice(stats?.revenue || 0)}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">
+                <span className="text-green-600 flex items-center gap-1">
+                  <ArrowUpRight className="h-3 w-3" /> +12%
+                </span>
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 md:p-6 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Pedidos</CardTitle>
+              <ShoppingCart className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+              <div className="text-lg md:text-2xl font-bold">{stats?.orders || 0}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">
+                {stats?.pendingOrders || 0} pendentes
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 md:p-6 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Produtos</CardTitle>
+              <Package className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+              <div className="text-lg md:text-2xl font-bold">{stats?.products || 0}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">Cadastrados</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 md:p-6 pb-1 md:pb-2">
+              <CardTitle className="text-xs md:text-sm font-medium">Clientes</CardTitle>
+              <Users className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+              <div className="text-lg md:text-2xl font-bold">{stats?.customers || 0}</div>
+              <p className="text-[10px] md:text-xs text-muted-foreground">Cadastrados</p>
+            </CardContent>
+          </Card>
        </div>
  
-       {/* Stats cards */}
-       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-         <Card>
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-             <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
-             <DollarSign className="h-4 w-4 text-muted-foreground" />
-           </CardHeader>
-           <CardContent>
-             <div className="text-2xl font-bold">{formatPrice(stats?.revenue || 0)}</div>
-             <p className="text-xs text-muted-foreground">
-               <span className="text-green-600 flex items-center gap-1">
-                 <ArrowUpRight className="h-3 w-3" /> +12% este mês
-               </span>
-             </p>
-           </CardContent>
-         </Card>
-         <Card>
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-             <CardTitle className="text-sm font-medium">Pedidos</CardTitle>
-             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-           </CardHeader>
-           <CardContent>
-             <div className="text-2xl font-bold">{stats?.orders || 0}</div>
-             <p className="text-xs text-muted-foreground">
-               {stats?.pendingOrders || 0} pendentes
-             </p>
-           </CardContent>
-         </Card>
-         <Card>
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-             <CardTitle className="text-sm font-medium">Produtos</CardTitle>
-             <Package className="h-4 w-4 text-muted-foreground" />
-           </CardHeader>
-           <CardContent>
-             <div className="text-2xl font-bold">{stats?.products || 0}</div>
-             <p className="text-xs text-muted-foreground">Cadastrados</p>
-           </CardContent>
-         </Card>
-         <Card>
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-             <CardTitle className="text-sm font-medium">Clientes</CardTitle>
-             <Users className="h-4 w-4 text-muted-foreground" />
-           </CardHeader>
-           <CardContent>
-             <div className="text-2xl font-bold">{stats?.customers || 0}</div>
-             <p className="text-xs text-muted-foreground">Cadastrados</p>
-           </CardContent>
-         </Card>
-       </div>
- 
-       {/* Recent orders */}
-       <Card>
-         <CardHeader>
-           <CardTitle>Pedidos Recentes</CardTitle>
-         </CardHeader>
-         <CardContent>
-           {recentOrders?.length === 0 ? (
-             <p className="text-muted-foreground text-center py-8">Nenhum pedido ainda</p>
-           ) : (
-             <div className="space-y-4">
-               {recentOrders?.map((order) => (
-                 <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
-                   <div>
-                     <p className="font-medium">{order.order_number}</p>
-                     <p className="text-sm text-muted-foreground">{order.shipping_name}</p>
-                   </div>
-                   <div className="text-right">
-                     <p className="font-medium">{formatPrice(Number(order.total_amount))}</p>
-                     <span className={`text-xs px-2 py-1 rounded-full ${statusColors[order.status]}`}>
-                       {statusLabels[order.status]}
-                     </span>
-                   </div>
-                 </div>
-               ))}
-             </div>
-           )}
-         </CardContent>
-       </Card>
+        {/* Recent orders */}
+        <Card>
+          <CardHeader className="p-3 md:p-6">
+            <CardTitle className="text-base md:text-lg">Pedidos Recentes</CardTitle>
+          </CardHeader>
+          <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
+            {recentOrders?.length === 0 ? (
+              <p className="text-muted-foreground text-center py-6 text-sm">Nenhum pedido ainda</p>
+            ) : (
+              <div className="space-y-2 md:space-y-4">
+                {recentOrders?.map((order) => (
+                  <div key={order.id} className="flex items-center justify-between p-2.5 md:p-4 border rounded-lg gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm truncate">{order.order_number}</p>
+                      <p className="text-xs text-muted-foreground truncate">{order.shipping_name}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-medium text-sm">{formatPrice(Number(order.total_amount))}</p>
+                      <span className={`text-[10px] md:text-xs px-1.5 py-0.5 rounded-full ${statusColors[order.status]}`}>
+                        {statusLabels[order.status]}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
      </div>
    );
  }

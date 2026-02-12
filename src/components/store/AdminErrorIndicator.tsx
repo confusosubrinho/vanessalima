@@ -49,7 +49,7 @@ export function AdminErrorIndicator() {
   const warningCount = errors.filter(e => e.severity === 'warning').length;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] max-w-sm">
+    <div className="fixed bottom-20 md:bottom-4 right-4 z-40 max-w-sm">
       {!isOpen ? (
         <button
           onClick={() => setIsOpen(true)}
