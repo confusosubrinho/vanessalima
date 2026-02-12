@@ -137,7 +137,7 @@ const App = () => (
                 <Route path="cupons" element={<Coupons />} />
                 <Route path="banners" element={<Banners />} />
                 <Route path="personalizacao" element={<Personalization />} />
-                <Route path="banners-destaque" element={<Personalization />} />
+                <Route path="banners-destaque" element={<HighlightBanners />} />
                 <Route path="integracoes" element={<Integrations />} />
                 <Route path="vendas" element={<SalesDashboard />} />
                 <Route path="registro-manual" element={<ManualRegistration />} />

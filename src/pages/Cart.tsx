@@ -8,6 +8,7 @@ import { ShippingCalculator } from '@/components/store/ShippingCalculator';
 import { CouponInput } from '@/components/store/CouponInput';
 import { CartProductSuggestions } from '@/components/store/CartProductSuggestions';
 import { supabase } from '@/integrations/supabase/client';
+import { useStoreSettings } from '@/hooks/useProducts';
 import { useQuery } from '@tanstack/react-query';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getBestHighlight, formatCurrency } from '@/lib/pricingEngine';
@@ -33,8 +34,8 @@ export default function Cart() {
     refetchOnWindowFocus: true,
   });
 
-  // Use pricing config for free shipping threshold
-  const freeShippingThreshold = 399; // This comes from store_settings shipping config, not financial
+  const { data: storeSettings } = useStoreSettings();
+  const freeShippingThreshold = storeSettings?.free_shipping_threshold ?? 399;
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
