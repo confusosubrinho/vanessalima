@@ -918,8 +918,6 @@ async function syncProducts(supabase: any, token: string, batchLimit: number = 0
   console.log(`Classified into ${groups.size} product groups (${standaloneItems.length} standalone, ${patternOneCount} pattern1-variations, ${patternTwoCount} pattern2-variations)`);
 
   // ─── PHASE 3: Process each group ───
-  // OPTIMIZATION: Process groups with variations FIRST, then simple products
-  // Skip simple products that already exist in DB to avoid API timeout
   const processedParentIds = new Set<number>();
   
   // Collect all existing products by bling_product_id for quick lookup
@@ -929,8 +927,12 @@ async function syncProducts(supabase: any, token: string, batchLimit: number = 0
     .not("bling_product_id", "is", null);
   const existingBlingIds = new Set((existingProducts || []).map((p: any) => p.bling_product_id));
 
-  // Sort: process groups WITH variations first, then simple products
+  // Sort: NEW products first (they need full import), then existing with variations
   const sortedGroups = [...groups.entries()].sort((a, b) => {
+    const aExists = existingBlingIds.has(a[0]);
+    const bExists = existingBlingIds.has(b[0]);
+    if (!aExists && bExists) return -1; // new products first
+    if (aExists && !bExists) return 1;
     const aHasVars = !a[1].isSimple && a[1].variationItems.length > 0;
     const bHasVars = !b[1].isSimple && b[1].variationItems.length > 0;
     if (aHasVars && !bHasVars) return -1;
@@ -946,18 +948,27 @@ async function syncProducts(supabase: any, token: string, batchLimit: number = 0
   if (batchLimit > 0) {
     processableGroups = processableGroups.slice(0, batchLimit);
   }
-  console.log(`Processing ${processableGroups.length} groups (offset=${batchOffset}, limit=${batchLimit || 'all'}, total=${sortedGroups.length})`);
+  console.log(`Processing ${processableGroups.length} groups (offset=${batchOffset}, limit=${batchLimit || 'all'}, total=${sortedGroups.length}, new=${sortedGroups.filter(([id]) => !existingBlingIds.has(id)).length})`);
 
   for (const [parentBlingId, group] of processableGroups) {
     if (processedParentIds.has(parentBlingId)) continue;
     processedParentIds.add(parentBlingId);
 
-    // Skip products that already exist in our DB
-    // In new_only mode: skip ALL existing. In normal mode: skip only simple (variations still update).
+    // OPTIMIZATION: Skip existing products more aggressively
+    // - new_only mode: skip ALL existing
+    // - normal mode: skip existing simple products (stock synced via cron/webhook)
+    //   AND skip existing products with variations (their stock is also synced via cron/webhook)
+    //   Only full-sync new products that don't exist yet
     if (existingBlingIds.has(parentBlingId)) {
-      if (newOnly || group.isSimple) {
+      if (newOnly) {
         totalSkipped++;
         syncLog.push({ bling_id: parentBlingId, name: group.parentListItem?.nome || `ID ${parentBlingId}`, status: 'skipped', message: 'Produto já existe no banco', variants: 0 });
+        continue;
+      }
+      // In normal mode, skip simple products - their stock is handled by webhook/cron
+      if (group.isSimple) {
+        totalSkipped++;
+        syncLog.push({ bling_id: parentBlingId, name: group.parentListItem?.nome || `ID ${parentBlingId}`, status: 'skipped', message: 'Produto simples já existe (estoque via webhook)', variants: 0 });
         continue;
       }
     }
