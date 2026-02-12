@@ -150,7 +150,9 @@ export default function ProductDetail() {
       toast({ title: 'Selecione um tamanho', variant: 'destructive' });
       return;
     }
-    const variant = variants.find(v => v.size === selectedSize);
+    const variant = selectedColor
+      ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
+      : variants.find(v => v.size === selectedSize);
     if (!variant) return;
     addItem(product, variant, quantity);
   };
