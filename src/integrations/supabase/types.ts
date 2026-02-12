@@ -1087,6 +1087,7 @@ export type Database = {
       }
       product_variants: {
         Row: {
+          base_price: number | null
           bling_variant_id: number | null
           color: string | null
           color_hex: string | null
@@ -1095,11 +1096,13 @@ export type Database = {
           is_active: boolean | null
           price_modifier: number | null
           product_id: string
+          sale_price: number | null
           size: string
           sku: string | null
           stock_quantity: number
         }
         Insert: {
+          base_price?: number | null
           bling_variant_id?: number | null
           color?: string | null
           color_hex?: string | null
@@ -1108,11 +1111,13 @@ export type Database = {
           is_active?: boolean | null
           price_modifier?: number | null
           product_id: string
+          sale_price?: number | null
           size: string
           sku?: string | null
           stock_quantity?: number
         }
         Update: {
+          base_price?: number | null
           bling_variant_id?: number | null
           color?: string | null
           color_hex?: string | null
@@ -1121,6 +1126,7 @@ export type Database = {
           is_active?: boolean | null
           price_modifier?: number | null
           product_id?: string
+          sale_price?: number | null
           size?: string
           sku?: string | null
           stock_quantity?: number

@@ -61,9 +61,17 @@ import { saveAbandonedCart } from '@/lib/utmTracker';
         quantity: i.quantity,
         price: Number(i.product.sale_price || i.product.base_price),
       }));
-      const sub = items.reduce((sum, item) => {
-        return sum + (Number(item.product.sale_price || item.product.base_price) + Number(item.variant.price_modifier || 0)) * item.quantity;
-      }, 0);
+       const sub = items.reduce((sum, item) => {
+         let variantPrice: number;
+         if (item.variant.sale_price && Number(item.variant.sale_price) > 0) {
+           variantPrice = Number(item.variant.sale_price);
+         } else if (item.variant.base_price && Number(item.variant.base_price) > 0) {
+           variantPrice = Number(item.variant.base_price);
+         } else {
+           variantPrice = Number(item.product.sale_price || item.product.base_price) + Number(item.variant.price_modifier || 0);
+         }
+         return sum + variantPrice * item.quantity;
+       }, 0);
       saveAbandonedCart(cartData, sub);
     }, 30000); // Save after 30s of inactivity
     return () => { if (abandonedTimeout.current) clearTimeout(abandonedTimeout.current); };
@@ -129,8 +137,16 @@ import { saveAbandonedCart } from '@/lib/utmTracker';
    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
  
    const subtotal = items.reduce((sum, item) => {
-     const price = item.product.sale_price || item.product.base_price;
-     return sum + (Number(price) + Number(item.variant.price_modifier || 0)) * item.quantity;
+     let variantPrice: number;
+     if (item.variant.sale_price && Number(item.variant.sale_price) > 0) {
+       variantPrice = Number(item.variant.sale_price);
+     } else if (item.variant.base_price && Number(item.variant.base_price) > 0) {
+       variantPrice = Number(item.variant.base_price);
+     } else {
+       const productPrice = item.product.sale_price || item.product.base_price;
+       variantPrice = Number(productPrice) + Number(item.variant.price_modifier || 0);
+     }
+     return sum + variantPrice * item.quantity;
    }, 0);
  
    const applyCoupon = (coupon: Coupon) => {
