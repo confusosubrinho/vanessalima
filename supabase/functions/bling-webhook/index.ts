@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getSyncableFields } from "../_shared/bling-sync-fields.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -231,16 +232,8 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
       return;
     }
 
-    // Update ONLY technical fields
-    const basePrice = detail.preco || 0;
-    const salePrice = detail.precoPromocional && detail.precoPromocional < basePrice ? detail.precoPromocional : null;
-    
-    await supabase.from("products").update({
-      base_price: basePrice,
-      sale_price: salePrice,
-      is_active: detail.situacao === "A",
-      weight: detail.pesoBruto || detail.pesoLiquido || undefined,
-    }).eq("id", existing.id);
+    // Update ONLY syncable fields (shared definition — preserves name, description, images)
+    await supabase.from("products").update(getSyncableFields(detail)).eq("id", existing.id);
 
     // Update stock for all variants of this product
     if (detail.variacoes?.length) {

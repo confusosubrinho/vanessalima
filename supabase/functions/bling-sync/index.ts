@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getSyncableFields, getInsertOnlyFields } from "../_shared/bling-sync-fields.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -453,31 +454,20 @@ async function upsertParentWithVariants(
     .eq("bling_product_id", parentBlingId)
     .maybeSingle();
 
-  // Fields that always sync (prices, stock-related, category, etc.)
+  // Fields that always sync (shared definition)
   const updateData: any = {
-    base_price: basePrice,
-    sale_price: salePrice,
-    sku: parentDetail.codigo || null,
-    gtin: parentDetail.gtin || null,
+    ...getSyncableFields(parentDetail),
     mpn: parentDetail.codigo || null,
-    weight: parentDetail.pesoBruto || parentDetail.pesoLiquido || null,
-    width: parentDetail.larguraProduto || null,
-    height: parentDetail.alturaProduto || null,
-    depth: parentDetail.profundidadeProduto || null,
-    brand: parentDetail.marca?.nome || (typeof parentDetail.marca === "string" ? parentDetail.marca : null),
     material: null,
-    condition: parentDetail.condicao === 0 ? "new" : parentDetail.condicao === 1 ? "refurbished" : "used",
-    is_active: parentDetail.situacao === "A",
     is_new: parentDetail.lancamento === true || parentDetail.lancamento === "S",
     category_id: categoryId,
     bling_product_id: parentBlingId,
   };
 
-  // Fields only set on initial import (name, slug, description are editable in the dashboard)
+  // Fields only set on initial import (shared definition)
   const insertData: any = {
     ...updateData,
-    name: parentDetail.nome,
-    description: parentDetail.descricaoCurta || parentDetail.descricaoComplementar || parentDetail.observacoes || null,
+    ...getInsertOnlyFields(parentDetail),
   };
 
   let productId: string;
