@@ -1,6 +1,7 @@
  import { useQuery } from '@tanstack/react-query';
  import { supabase } from '@/integrations/supabase/client';
 import { Package, ShoppingCart, Users, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { HelpHint } from '@/components/HelpHint';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
  
@@ -75,7 +76,10 @@ import { useIsMobile } from '@/hooks/use-mobile';
     return (
     <div className="space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-xl md:text-3xl font-bold">Dashboard</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl md:text-3xl font-bold">Dashboard</h1>
+          <HelpHint helpKey="admin.dashboard" />
+        </div>
         <p className="text-xs md:text-sm text-muted-foreground">Visão geral da sua loja</p>
       </div>
 

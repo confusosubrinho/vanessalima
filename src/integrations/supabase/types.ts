@@ -539,6 +539,36 @@ export type Database = {
         }
         Relationships: []
       }
+      help_articles: {
+        Row: {
+          audience: string
+          content: string
+          created_at: string
+          id: string
+          key: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          audience?: string
+          content?: string
+          created_at?: string
+          id?: string
+          key: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          audience?: string
+          content?: string
+          created_at?: string
+          id?: string
+          key?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       highlight_banners: {
         Row: {
           created_at: string

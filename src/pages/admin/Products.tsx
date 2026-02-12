@@ -27,6 +27,7 @@ import { BulkEditDialog } from '@/components/admin/BulkEditDialog';
 import { useCategories } from '@/hooks/useProducts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { HelpHint } from '@/components/HelpHint';
 
 interface Product {
   id: string;
@@ -449,7 +450,10 @@ export default function Products() {
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-bold">Produtos</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-bold">Produtos</h1>
+            <HelpHint helpKey="admin.products" />
+          </div>
           <p className="text-sm text-muted-foreground hidden sm:block">Gerencie os produtos da sua loja</p>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">

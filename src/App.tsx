@@ -56,6 +56,7 @@ const EmailAutomations = lazy(() => import("./pages/admin/EmailAutomations"));
 const TrafficDashboard = lazy(() => import("./pages/admin/TrafficDashboard"));
 const MediaGallery = lazy(() => import("./pages/admin/MediaGallery"));
 const PricingSettings = lazy(() => import("./pages/admin/PricingSettings"));
+const HelpEditor = lazy(() => import("./pages/admin/HelpEditor"));
 
 // Lazy load non-critical floating components
 const WhatsAppFloat = lazy(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat })));
@@ -149,6 +150,7 @@ const App = () => (
                 <Route path="trafego" element={<TrafficDashboard />} />
                 <Route path="galeria" element={<MediaGallery />} />
                 <Route path="precos" element={<PricingSettings />} />
+                <Route path="ajuda" element={<HelpEditor />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />

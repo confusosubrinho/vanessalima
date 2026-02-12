@@ -12,6 +12,7 @@ import { useStoreSettings } from '@/hooks/useProducts';
 import { useQuery } from '@tanstack/react-query';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getBestHighlight, formatCurrency } from '@/lib/pricingEngine';
+import { HelpHint } from '@/components/HelpHint';
 
 export default function Cart() {
   const { items, subtotal, removeItem, updateQuantity, clearCart, discount, selectedShipping, setSelectedShipping, total } = useCart();
@@ -72,6 +73,7 @@ export default function Cart() {
             </Link>
           </Button>
           <h1 className="text-lg sm:text-2xl font-bold">Carrinho de Compras</h1>
+          <HelpHint helpKey="store.cart" />
           <span className="text-muted-foreground text-sm">({items.length} {items.length === 1 ? 'item' : 'itens'})</span>
         </div>
 

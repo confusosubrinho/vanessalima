@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal } from 'lucide-react';
+import { HelpHint } from '@/components/HelpHint';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Button } from '@/components/ui/button';
@@ -209,7 +210,10 @@ export default function Orders() {
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-xl md:text-3xl font-bold">Pedidos</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl md:text-3xl font-bold">Pedidos</h1>
+            <HelpHint helpKey="admin.orders" />
+          </div>
           <p className="text-xs md:text-sm text-muted-foreground">Gerencie os pedidos da sua loja</p>
         </div>
         {isMobile ? (

@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { CreditCard, Percent, Calculator, Save, Info, Plus, Trash2, ShieldCheck } from 'lucide-react';
+import { HelpHint } from '@/components/HelpHint';
 import { invalidatePricingCache, getInstallmentOptions, formatCurrency, type PricingConfig } from '@/lib/pricingEngine';
 
 interface RateEntry {
@@ -151,6 +152,7 @@ export default function PricingSettings() {
         <h1 className="text-xl sm:text-3xl font-bold flex items-center gap-2">
           <CreditCard className="h-6 w-6" />
           Juros e Cartões
+          <HelpHint helpKey="admin.pricing" />
         </h1>
         <p className="text-muted-foreground">Fonte única de verdade para parcelamento, juros e descontos de todo o site</p>
       </div>

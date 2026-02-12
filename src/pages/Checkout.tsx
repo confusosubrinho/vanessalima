@@ -13,6 +13,7 @@ import { validateCPF, formatCPF, formatCEP, formatPhone, lookupCEP } from '@/lib
 import { ShippingCalculator } from '@/components/store/ShippingCalculator';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentOptions, formatCurrency as formatPricingCurrency, type PricingConfig } from '@/lib/pricingEngine';
+import { HelpHint } from '@/components/HelpHint';
 import { CouponInput } from '@/components/store/CouponInput';
 import logo from '@/assets/logo.png';
 
@@ -621,7 +622,10 @@ export default function Checkout() {
               {/* Step 3: Payment */}
               {currentStep === 'payment' && (
                 <div className="space-y-6 animate-fade-in">
-                  <h2 className="text-xl font-bold">Pagamento</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold">Pagamento</h2>
+                    <HelpHint helpKey="store.checkout" />
+                  </div>
 
                   {/* Coupon in payment step */}
                   <CouponInput />

@@ -13,6 +13,7 @@ import { Store, Phone, Instagram, Facebook, Save, Upload, Image, AlertTriangle, 
 import { ErrorLogsPanel } from '@/components/admin/ErrorLogsPanel';
 import { TwoFactorSetup } from '@/components/admin/TwoFactorSetup';
 import { APP_VERSION } from '@/lib/appVersion';
+import { HelpHint } from '@/components/HelpHint';
 
 interface StoreSettings {
   id: string;
@@ -135,10 +136,11 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex items-center gap-2">
         <h1 className="text-xl sm:text-3xl font-bold">Configurações da Loja</h1>
-        <p className="text-muted-foreground">Gerencie as informações e configurações da sua loja</p>
+        <HelpHint helpKey="admin.settings" />
       </div>
+      <p className="text-muted-foreground">Gerencie as informações e configurações da sua loja</p>
 
       <form onSubmit={handleSubmit}>
         <Tabs defaultValue="general" className="space-y-6">
