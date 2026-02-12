@@ -6,8 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BLING_API_URL = "https://bling.com.br/Api/v3";
-const BLING_TOKEN_URL = "https://bling.com.br/Api/v3/oauth/token";
+const BLING_API_URL = "https://api.bling.com.br/Api/v3";
+const BLING_TOKEN_URL = "https://api.bling.com.br/Api/v3/oauth/token";
 const BLING_RATE_LIMIT_MS = 340; // ~3 req/s (Bling limit is 3/s, small margin)
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
@@ -1134,24 +1134,48 @@ async function syncProducts(supabase: any, token: string, batchLimit: number = 0
 async function syncStock(supabase: any, token: string) {
   const headers = blingHeaders(token);
 
-  // Get all products with bling IDs
+  // Get ALL variants
+  const { data: allVariants } = await supabase
+    .from("product_variants")
+    .select("id, bling_variant_id, product_id, sku");
+
+  // Get all products with bling_product_id
   const { data: products } = await supabase
     .from("products")
     .select("id, bling_product_id")
     .not("bling_product_id", "is", null);
 
-  // Get all variants with individual bling_variant_id
-  const { data: variants } = await supabase
-    .from("product_variants")
-    .select("id, bling_variant_id, product_id")
-    .not("bling_variant_id", "is", null);
+  if (!products?.length && !allVariants?.length) return { updated: 0 };
 
-  if (!products?.length && !variants?.length) return { updated: 0 };
+  // Build product_id -> bling_product_id map
+  const productBlingMap = new Map<string, number>();
+  for (const p of (products || [])) {
+    productBlingMap.set(p.id, p.bling_product_id);
+  }
 
-  // Collect ALL unique bling IDs
-  const productBlingIds = (products || []).map((p: any) => p.bling_product_id);
-  const variantBlingIds = (variants || []).map((v: any) => v.bling_variant_id);
-  const allBlingIds = [...new Set([...productBlingIds, ...variantBlingIds])];
+  // Map: blingId -> [variantId1, variantId2]
+  const blingIdToVariants = new Map<number, string[]>();
+  
+  for (const v of (allVariants || [])) {
+    if (v.bling_variant_id) {
+      if (!blingIdToVariants.has(v.bling_variant_id)) {
+        blingIdToVariants.set(v.bling_variant_id, []);
+      }
+      blingIdToVariants.get(v.bling_variant_id)!.push(v.id);
+    } else {
+      // Use parent product's bling_product_id as fallback
+      const parentBlingId = productBlingMap.get(v.product_id);
+      if (parentBlingId) {
+        if (!blingIdToVariants.has(parentBlingId)) {
+          blingIdToVariants.set(parentBlingId, []);
+        }
+        blingIdToVariants.get(parentBlingId)!.push(v.id);
+      }
+    }
+  }
+
+  const allBlingIds = [...blingIdToVariants.keys()];
+  if (allBlingIds.length === 0) return { updated: 0 };
 
   let updated = 0;
 
@@ -1175,25 +1199,15 @@ async function syncStock(supabase: any, token: string) {
       const qty = stock.saldoVirtualTotal ?? 0;
       if (!blingId) continue;
 
-      // Update as product (only variants WITHOUT their own bling_variant_id)
-      const product = (products || []).find((p: any) => p.bling_product_id === blingId);
-      if (product) {
-        await supabase
-          .from("product_variants")
-          .update({ stock_quantity: qty })
-          .eq("product_id", product.id)
-          .is("bling_variant_id", null);
-        updated++;
-      }
-
-      // Update as specific variant
-      const variant = (variants || []).find((v: any) => v.bling_variant_id === blingId);
-      if (variant) {
-        await supabase
-          .from("product_variants")
-          .update({ stock_quantity: qty })
-          .eq("id", variant.id);
-        updated++;
+      const variantIds = blingIdToVariants.get(blingId);
+      if (variantIds) {
+        for (const vid of variantIds) {
+          await supabase
+            .from("product_variants")
+            .update({ stock_quantity: qty })
+            .eq("id", vid);
+        }
+        updated += variantIds.length;
       }
     }
   }
@@ -1439,9 +1453,122 @@ serve(async (req) => {
         result = await syncStock(supabase, token);
         break;
 
+      case "relink_variants": {
+        // Re-link variants that have NULL bling_variant_id by matching SKU with Bling
+        // Supports batch processing: limit (default 30) and offset (default 0)
+        const relinkLimit = payload.limit || 30;
+        const relinkOffset = payload.offset || 0;
+
+        const { data: unlinkedVariants } = await supabase
+          .from("product_variants")
+          .select("id, sku, product_id")
+          .is("bling_variant_id", null)
+          .not("sku", "is", null);
+
+        const { data: linkedProducts } = await supabase
+          .from("products")
+          .select("id, bling_product_id")
+          .not("bling_product_id", "is", null);
+
+        const prodBlingMap = new Map<string, number>();
+        for (const p of (linkedProducts || [])) {
+          prodBlingMap.set(p.id, p.bling_product_id);
+        }
+
+        let linked = 0;
+        let stockUpdated = 0;
+        const relinkHeaders = blingHeaders(token);
+        const processedParents = new Set<number>();
+        const relinkLog: Array<{ sku: string; bling_variant_id: number | null; stock: number | null; status: string }> = [];
+
+        // Group unlinked variants by parent product
+        const varsByProduct = new Map<string, Array<{ id: string; sku: string }>>();
+        for (const v of (unlinkedVariants || [])) {
+          if (!v.sku) continue;
+          if (!varsByProduct.has(v.product_id)) varsByProduct.set(v.product_id, []);
+          varsByProduct.get(v.product_id)!.push({ id: v.id, sku: v.sku });
+        }
+
+        // Apply offset and limit to product groups
+        const productEntries = [...varsByProduct.entries()];
+        const batchEntries = productEntries.slice(relinkOffset, relinkOffset + relinkLimit);
+
+        for (const [productId, variants] of batchEntries) {
+          const parentBlingId = prodBlingMap.get(productId);
+          if (!parentBlingId || processedParents.has(parentBlingId)) continue;
+          processedParents.add(parentBlingId);
+
+          try {
+            await sleep(BLING_RATE_LIMIT_MS);
+            const detailRes = await fetchWithRateLimit(`${BLING_API_URL}/produtos/${parentBlingId}`, { headers: relinkHeaders });
+            if (!detailRes.ok) continue;
+            const detailJson = await detailRes.json();
+            const detail = detailJson?.data;
+            if (!detail?.variacoes?.length) continue;
+
+            // Build SKU -> bling variation ID map
+            const skuToBlingId = new Map<string, number>();
+            for (const v of detail.variacoes) {
+              const vSku = v.codigo;
+              if (vSku) skuToBlingId.set(vSku, v.id);
+            }
+
+            // Match local variants by SKU
+            for (const localVar of variants) {
+              const blingVarId = skuToBlingId.get(localVar.sku);
+              if (blingVarId) {
+                await supabase
+                  .from("product_variants")
+                  .update({ bling_variant_id: blingVarId })
+                  .eq("id", localVar.id);
+                linked++;
+                relinkLog.push({ sku: localVar.sku, bling_variant_id: blingVarId, stock: null, status: "linked" });
+              } else {
+                relinkLog.push({ sku: localVar.sku, bling_variant_id: null, stock: null, status: "no_match" });
+              }
+            }
+
+            // Also batch-update stock for all variations
+            const varIds = detail.variacoes.map((v: any) => v.id);
+            const idsParam = varIds.map((id: number) => `idsProdutos[]=${id}`).join("&");
+            await sleep(BLING_RATE_LIMIT_MS);
+            const stockRes = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers: relinkHeaders });
+            const stockJson = await stockRes.json();
+            
+            for (const s of (stockJson?.data || [])) {
+              const bId = s.produto?.id;
+              const qty = s.saldoVirtualTotal ?? 0;
+              if (bId) {
+                const { data: linkedVar } = await supabase
+                  .from("product_variants")
+                  .select("id")
+                  .eq("bling_variant_id", bId)
+                  .maybeSingle();
+                if (linkedVar) {
+                  await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", linkedVar.id);
+                  stockUpdated++;
+                }
+              }
+            }
+          } catch (err: any) {
+            console.error(`[relink] Error for parent ${parentBlingId}:`, err.message);
+          }
+        }
+
+        const hasMoreRelink = (relinkOffset + relinkLimit) < productEntries.length;
+        console.log(`[relink] Batch done: ${linked} linked, ${stockUpdated} stock updated (offset=${relinkOffset}, limit=${relinkLimit}, total=${productEntries.length})`);
+        result = { 
+          linked, stockUpdated, 
+          totalUnlinked: unlinkedVariants?.length || 0,
+          totalProductGroups: productEntries.length,
+          hasMore: hasMoreRelink,
+          nextOffset: hasMoreRelink ? relinkOffset + relinkLimit : 0,
+          log: relinkLog.slice(0, 50) 
+        };
+        break;
+      }
+
       case "cleanup_variations": {
-        // Remove products that are actually variations (have Cor:X;Tamanho:Y in name)
-        // These should be variants under their parent, not standalone products
         const { data: variationProducts } = await supabase
           .from("products")
           .select("id, name, bling_product_id")
@@ -1450,7 +1577,6 @@ serve(async (req) => {
         let cleanedCount = 0;
         const cleanedNames: string[] = [];
         for (const prod of (variationProducts || [])) {
-          // Verify this product's bling_product_id exists as a variant under another product
           const { data: existsAsVariant } = await supabase
             .from("product_variants")
             .select("id")
@@ -1458,7 +1584,6 @@ serve(async (req) => {
             .maybeSingle();
           
           if (existsAsVariant) {
-            // Safe to delete - it exists as a variant under its parent
             await supabase.from("product_images").delete().eq("product_id", prod.id);
             await supabase.from("product_variants").delete().eq("product_id", prod.id);
             await supabase.from("product_characteristics").delete().eq("product_id", prod.id);

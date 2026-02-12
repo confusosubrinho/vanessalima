@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BLING_TOKEN_URL = "https://bling.com.br/Api/v3/oauth/token";
+const BLING_TOKEN_URL = "https://api.bling.com.br/Api/v3/oauth/token";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

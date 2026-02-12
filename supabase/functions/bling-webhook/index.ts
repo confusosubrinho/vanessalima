@@ -6,8 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BLING_API_URL = "https://bling.com.br/Api/v3";
-const BLING_TOKEN_URL = "https://bling.com.br/Api/v3/oauth/token";
+const BLING_API_URL = "https://api.bling.com.br/Api/v3";
+const BLING_TOKEN_URL = "https://api.bling.com.br/Api/v3/oauth/token";
 
 function createSupabase() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -60,10 +60,34 @@ function blingHeaders(token: string) {
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}`, Accept: "application/json" };
 }
 
+// ─── HMAC Signature Validation ───
+async function validateHmacSignature(bodyText: string, signatureHeader: string | null, clientSecret: string): Promise<boolean> {
+  if (!signatureHeader || !clientSecret) return false;
+  
+  // Format: "sha256=<hex>"
+  const expectedPrefix = "sha256=";
+  if (!signatureHeader.startsWith(expectedPrefix)) return false;
+  const providedHash = signatureHeader.slice(expectedPrefix.length);
+  
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(clientSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(bodyText));
+  const computedHash = Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+  
+  return computedHash === providedHash;
+}
+
 // ─── Classify Bling V3 event into action type ───
 function classifyEvent(event: string): "stock" | "product" | "order" | "invoice" | "unknown" {
   const e = event.toLowerCase();
-  // Bling V3 events: stock.created, stock.updated, product.updated, product.created, order.created, etc.
   if (e.includes("stock") || e.includes("estoque")) return "stock";
   if (e.includes("product") || e.includes("produto")) return "product";
   if (e.includes("order") || e.includes("pedido") || e.includes("venda")) return "order";
@@ -71,49 +95,94 @@ function classifyEvent(event: string): "stock" | "product" | "order" | "invoice"
   return "unknown";
 }
 
-// ─── Update stock for a single Bling product ID ───
-async function updateStockForBlingId(supabase: any, blingProductId: number, newStock?: number, token?: string) {
-  if (newStock !== undefined) {
-    // Update as variant (most specific match first)
-    const { data: variant } = await supabase
+// ─── Find variant by bling_variant_id OR by SKU fallback ───
+async function findVariantByBlingIdOrSku(supabase: any, blingId: number, token?: string): Promise<{ variantId: string; productId: string } | null> {
+  // Try bling_variant_id first (fastest)
+  const { data: variant } = await supabase
+    .from("product_variants")
+    .select("id, product_id")
+    .eq("bling_variant_id", blingId)
+    .maybeSingle();
+
+  if (variant) return { variantId: variant.id, productId: variant.product_id };
+
+  // Try as parent product (for simple products)
+  const { data: product } = await supabase
+    .from("products")
+    .select("id")
+    .eq("bling_product_id", blingId)
+    .maybeSingle();
+
+  if (product) {
+    // Get default variant for this product
+    const { data: defaultVar } = await supabase
       .from("product_variants")
-      .select("id, product_id")
-      .eq("bling_variant_id", blingProductId)
+      .select("id")
+      .eq("product_id", product.id)
+      .limit(1)
       .maybeSingle();
 
-    if (variant) {
+    if (defaultVar) return { variantId: defaultVar.id, productId: product.id };
+  }
+
+  // SKU fallback: fetch product from Bling API to get SKU, then match locally
+  if (token) {
+    try {
+      const headers = blingHeaders(token);
+      const res = await fetch(`${BLING_API_URL}/produtos/${blingId}`, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        const detail = json?.data;
+        const sku = detail?.codigo;
+        
+        if (sku) {
+          const { data: skuVariant } = await supabase
+            .from("product_variants")
+            .select("id, product_id")
+            .eq("sku", sku)
+            .maybeSingle();
+
+          if (skuVariant) {
+            // Link the variant for future lookups
+            await supabase
+              .from("product_variants")
+              .update({ bling_variant_id: blingId })
+              .eq("id", skuVariant.id);
+            console.log(`[webhook] Linked variant ${skuVariant.id} to bling_id=${blingId} via SKU=${sku}`);
+            return { variantId: skuVariant.id, productId: skuVariant.product_id };
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[webhook] SKU fallback failed for ${blingId}:`, err);
+    }
+  }
+
+  return null;
+}
+
+// ─── Update stock for a single Bling product ID ───
+async function updateStockForBlingId(supabase: any, blingProductId: number, newStock?: number, token?: string) {
+  if (newStock === undefined && !token) return;
+
+  if (newStock !== undefined) {
+    const match = await findVariantByBlingIdOrSku(supabase, blingProductId, token);
+    
+    if (match) {
       await supabase
         .from("product_variants")
         .update({ stock_quantity: newStock })
-        .eq("id", variant.id);
-      console.log(`[webhook] Variant stock updated: bling_variant_id=${blingProductId} → ${newStock}`);
+        .eq("id", match.variantId);
+      console.log(`[webhook] Stock updated: bling_id=${blingProductId} → ${newStock}`);
       
       // Auto-activate parent if stock > 0
       if (newStock > 0) {
-        await supabase.from("products").update({ is_active: true }).eq("id", variant.product_id);
+        await supabase.from("products").update({ is_active: true }).eq("id", match.productId);
       }
       return;
     }
 
-    // Update as product (all variants without own bling_variant_id)
-    const { data: product } = await supabase
-      .from("products")
-      .select("id")
-      .eq("bling_product_id", blingProductId)
-      .maybeSingle();
-
-    if (product) {
-      await supabase
-        .from("product_variants")
-        .update({ stock_quantity: newStock })
-        .eq("product_id", product.id)
-        .is("bling_variant_id", null);
-      console.log(`[webhook] Product stock updated: bling_product_id=${blingProductId} → ${newStock}`);
-      
-      if (newStock > 0) {
-        await supabase.from("products").update({ is_active: true }).eq("id", product.id);
-      }
-    }
+    console.log(`[webhook] No match found for bling_id=${blingProductId}`);
     return;
   }
 
@@ -127,7 +196,7 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
     const stock = json?.data?.[0]?.saldoVirtualTotal ?? null;
     
     if (stock !== null) {
-      await updateStockForBlingId(supabase, blingProductId, stock);
+      await updateStockForBlingId(supabase, blingProductId, stock, token);
     }
   } catch (err) {
     console.error(`[webhook] Error fetching stock for ${blingProductId}:`, err);
@@ -148,11 +217,9 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
     const detail = json?.data;
     if (!detail) return;
 
-    // Check if product is a variation (has produtoPai)
     const actualParentId = detail.produtoPai?.id || detail.idProdutoPai;
     const targetBlingId = actualParentId || blingProductId;
 
-    // Find existing product
     const { data: existing } = await supabase
       .from("products")
       .select("id")
@@ -164,7 +231,7 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
       return;
     }
 
-    // Update ONLY technical fields — name, slug, description are editable in dashboard
+    // Update ONLY technical fields
     const basePrice = detail.preco || 0;
     const salePrice = detail.precoPromocional && detail.precoPromocional < basePrice ? detail.precoPromocional : null;
     
@@ -187,14 +254,7 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
         const varBlingId = s.produto?.id;
         const qty = s.saldoVirtualTotal ?? 0;
         if (varBlingId) {
-          const { data: variant } = await supabase
-            .from("product_variants")
-            .select("id")
-            .eq("bling_variant_id", varBlingId)
-            .maybeSingle();
-          if (variant) {
-            await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", variant.id);
-          }
+          await updateStockForBlingId(supabase, varBlingId, qty, token);
         }
       }
     } else {
@@ -236,30 +296,46 @@ async function batchStockSync(supabase: any) {
   
   const headers = blingHeaders(token);
 
-  // Get all variants with bling_variant_id (most specific - handles variations correctly)
-  const { data: variants } = await supabase
+  // Get ALL variants (both with and without bling_variant_id)
+  const { data: allVariants } = await supabase
     .from("product_variants")
-    .select("id, bling_variant_id, product_id")
-    .not("bling_variant_id", "is", null);
+    .select("id, bling_variant_id, product_id, sku");
 
-  // Get products that have simple variants (no bling_variant_id) 
+  // Get all products with bling_product_id
   const { data: products } = await supabase
     .from("products")
     .select("id, bling_product_id")
     .not("bling_product_id", "is", null);
 
-  // Find products that have at least one variant WITHOUT bling_variant_id (simple products)
-  const variantProductIds = new Set((variants || []).map((v: any) => v.product_id));
-  const simpleProducts = (products || []).filter((p: any) => {
-    // Only include if this product has no variants with bling_variant_id
-    return !variantProductIds.has(p.id);
-  });
+  // Build a map: product_id -> bling_product_id
+  const productBlingMap = new Map<string, number>();
+  for (const p of (products || [])) {
+    productBlingMap.set(p.id, p.bling_product_id);
+  }
 
-  // Collect unique Bling IDs
-  const variantBlingIds = (variants || []).map((v: any) => v.bling_variant_id);
-  const simpleProductBlingIds = simpleProducts.map((p: any) => p.bling_product_id);
-  const allBlingIds = [...new Set([...variantBlingIds, ...simpleProductBlingIds])];
+  // Collect Bling IDs to query stock for
+  const blingIdToVariants = new Map<number, string[]>(); // blingId -> [variantId1, variantId2]
+  
+  for (const v of (allVariants || [])) {
+    if (v.bling_variant_id) {
+      // Variant has its own Bling ID
+      if (!blingIdToVariants.has(v.bling_variant_id)) {
+        blingIdToVariants.set(v.bling_variant_id, []);
+      }
+      blingIdToVariants.get(v.bling_variant_id)!.push(v.id);
+    } else {
+      // Variant without bling_variant_id - use parent product's bling_product_id
+      const parentBlingId = productBlingMap.get(v.product_id);
+      if (parentBlingId) {
+        if (!blingIdToVariants.has(parentBlingId)) {
+          blingIdToVariants.set(parentBlingId, []);
+        }
+        blingIdToVariants.get(parentBlingId)!.push(v.id);
+      }
+    }
+  }
 
+  const allBlingIds = [...blingIdToVariants.keys()];
   if (allBlingIds.length === 0) return { updated: 0 };
 
   let updated = 0;
@@ -284,25 +360,15 @@ async function batchStockSync(supabase: any) {
         const qty = stock.saldoVirtualTotal ?? 0;
         if (!blingId) continue;
 
-        // Update specific variant
-        const variant = (variants || []).find((v: any) => v.bling_variant_id === blingId);
-        if (variant) {
-          await supabase
-            .from("product_variants")
-            .update({ stock_quantity: qty })
-            .eq("id", variant.id);
-          updated++;
-          continue; // Don't double-update
-        }
-
-        // Update simple product (all variants)
-        const product = simpleProducts.find((p: any) => p.bling_product_id === blingId);
-        if (product) {
-          await supabase
-            .from("product_variants")
-            .update({ stock_quantity: qty })
-            .eq("product_id", product.id);
-          updated++;
+        const variantIds = blingIdToVariants.get(blingId);
+        if (variantIds) {
+          for (const vid of variantIds) {
+            await supabase
+              .from("product_variants")
+              .update({ stock_quantity: qty })
+              .eq("id", vid);
+          }
+          updated += variantIds.length;
         }
       }
     } catch (err: any) {
@@ -314,6 +380,46 @@ async function batchStockSync(supabase: any) {
   return { updated, totalChecked: allBlingIds.length };
 }
 
+// ─── Idempotency check ───
+async function checkAndStoreEvent(supabase: any, eventId: string, eventType: string, blingProductId: number | null, payload: any): Promise<boolean> {
+  if (!eventId) return true; // No event ID = allow processing (legacy format)
+  
+  // Try to insert (unique constraint on event_id will prevent duplicates)
+  const { error } = await supabase
+    .from("bling_webhook_events")
+    .insert({
+      event_id: eventId,
+      event_type: eventType,
+      bling_product_id: blingProductId,
+      payload,
+      status: "processing",
+    });
+
+  if (error) {
+    if (error.code === "23505") { // unique_violation
+      console.log(`[webhook] Duplicate event ${eventId}, skipping`);
+      return false;
+    }
+    console.error(`[webhook] Error storing event:`, error.message);
+    // Allow processing even if storage fails
+  }
+  
+  return true;
+}
+
+async function markEventProcessed(supabase: any, eventId: string, error?: string) {
+  if (!eventId) return;
+  
+  await supabase
+    .from("bling_webhook_events")
+    .update({
+      processed_at: new Date().toISOString(),
+      status: error ? "failed" : "processed",
+      last_error: error || null,
+    })
+    .eq("event_id", eventId);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -323,9 +429,11 @@ serve(async (req) => {
     const supabase = createSupabase();
     const url = new URL(req.url);
     
+    // Read body as text first (needed for HMAC validation)
+    const bodyText = await req.text();
+    
     const isCronViaParam = url.searchParams.get("action") === "cron_stock_sync";
     
-    const bodyText = await req.text();
     let payload: any = {};
     try { payload = JSON.parse(bodyText); } catch (_) {}
     
@@ -339,17 +447,33 @@ serve(async (req) => {
       });
     }
 
-    console.log("[webhook] Received:", JSON.stringify(payload));
+    // ─── HMAC Signature Validation ───
+    const signatureHeader = req.headers.get("X-Bling-Signature-256") || req.headers.get("x-bling-signature-256");
+    if (signatureHeader) {
+      const { data: settings } = await supabase
+        .from("store_settings")
+        .select("bling_client_secret")
+        .limit(1)
+        .maybeSingle();
+      
+      if (settings?.bling_client_secret) {
+        const isValid = await validateHmacSignature(bodyText, signatureHeader, settings.bling_client_secret);
+        if (!isValid) {
+          console.error("[webhook] Invalid HMAC signature - rejecting");
+          return new Response(JSON.stringify({ error: "Invalid signature" }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        console.log("[webhook] HMAC signature valid ✓");
+      }
+    }
 
-    // ─── Bling V3 webhook format ───
-    // { event: "stock.created", data: { produto: { id: 123 }, saldoFisicoTotal: 10, ... } }
-    // { event: "product.updated", data: { id: 123, ... } }
-    // { event: "order.created", data: { id: 123, ... } }
-    // Legacy format: { evento: "estoque", dados: { ... } }
-    // Callback format: { retorno: { estoques: [...] } }
-    
+    console.log("[webhook] Received:", JSON.stringify(payload).substring(0, 500));
+
     const evento = payload?.event || payload?.evento;
     const dados = payload?.data || payload?.dados;
+    const eventId = payload?.eventId;
     const retorno = payload?.retorno;
 
     // ─── Handle legacy callback format ───
@@ -397,48 +521,61 @@ serve(async (req) => {
     const eventType = classifyEvent(evento);
     console.log(`[webhook] Event: ${evento} → classified as: ${eventType}`);
 
+    // ─── Idempotency check ───
+    const blingProductId = dados?.produto?.id || dados?.id || dados?.idProduto || null;
+    const shouldProcess = await checkAndStoreEvent(supabase, eventId, evento, blingProductId, payload);
+    if (!shouldProcess) {
+      return new Response(JSON.stringify({ ok: true, message: "Duplicate event" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     let token: string | null = null;
     try { token = await getValidToken(supabase); } catch (_) {}
+    let processingError: string | undefined;
 
-    switch (eventType) {
-      case "stock": {
-        // Bling V3 stock.created/stock.updated:
-        // data: { produto: { id: 123 }, saldoFisicoTotal: 10, saldoVirtualTotal: 8, deposito: {...}, operacao: "E"/"S", quantidade: 1 }
-        const blingProductId = dados?.produto?.id || dados?.idProduto;
-        const saldoVirtual = dados?.saldoVirtualTotal;
-        
-        if (blingProductId) {
-          console.log(`[webhook] Stock event for bling_id=${blingProductId}, saldoVirtual=${saldoVirtual}`);
-          await updateStockForBlingId(
-            supabase, 
-            blingProductId, 
-            saldoVirtual !== undefined ? saldoVirtual : undefined, 
-            token || undefined
-          );
+    try {
+      switch (eventType) {
+        case "stock": {
+          const stockBlingId = dados?.produto?.id || dados?.idProduto;
+          const saldoVirtual = dados?.saldoVirtualTotal;
+          
+          if (stockBlingId) {
+            console.log(`[webhook] Stock event for bling_id=${stockBlingId}, saldoVirtual=${saldoVirtual}`);
+            await updateStockForBlingId(
+              supabase, 
+              stockBlingId, 
+              saldoVirtual !== undefined ? saldoVirtual : undefined, 
+              token || undefined
+            );
+          }
+          break;
         }
-        break;
-      }
 
-      case "product": {
-        // Bling V3 product.updated/product.created:
-        // data: { id: 123, ... }
-        const blingProductId = dados?.id || dados?.idProduto || dados?.produto?.id;
-        if (blingProductId && token) {
-          console.log(`[webhook] Product event for bling_id=${blingProductId}`);
-          await syncSingleProduct(supabase, blingProductId, token);
+        case "product": {
+          const prodBlingId = dados?.id || dados?.idProduto || dados?.produto?.id;
+          if (prodBlingId && token) {
+            console.log(`[webhook] Product event for bling_id=${prodBlingId}`);
+            await syncSingleProduct(supabase, prodBlingId, token);
+          }
+          break;
         }
-        break;
+
+        case "order":
+        case "invoice":
+          console.log(`[webhook] ${eventType} event acknowledged: ${evento}`);
+          break;
+
+        default:
+          console.log(`[webhook] Unknown event type: ${evento}`);
       }
-
-      case "order":
-      case "invoice":
-        // Orders and invoices: just acknowledge
-        console.log(`[webhook] ${eventType} event acknowledged: ${evento}`);
-        break;
-
-      default:
-        console.log(`[webhook] Unknown event type: ${evento}`);
+    } catch (err: any) {
+      processingError = err.message;
+      console.error(`[webhook] Processing error for ${eventId}:`, err.message);
     }
+
+    // Mark event as processed
+    await markEventProcessed(supabase, eventId, processingError);
 
     return new Response(
       JSON.stringify({ ok: true, evento, eventType }),
