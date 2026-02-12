@@ -950,12 +950,12 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`p-0 ${isMobile ? 'max-w-[100vw] w-full h-[100dvh] max-h-[100dvh] rounded-none border-0 m-0' : 'max-w-4xl max-h-[95vh]'}`}>
+      <DialogContent className={`p-0 flex flex-col ${isMobile ? 'max-w-[100vw] w-full h-[100dvh] max-h-[100dvh] rounded-none border-0 !left-0 !top-0 !translate-x-0 !translate-y-0 data-[state=open]:!slide-in-from-left-0 data-[state=open]:!slide-in-from-top-0 data-[state=closed]:!slide-out-to-left-0 data-[state=closed]:!slide-out-to-top-0' : 'max-w-4xl max-h-[95vh]'}`}>
         <DialogHeader className="p-4 sm:p-6 pb-0">
           <DialogTitle>{editingProduct ? 'Editar Produto' : 'Novo Produto'}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <form onSubmit={handleSubmit} className={`flex flex-col min-h-0 overflow-hidden ${isMobile ? 'flex-1' : ''}`}>
           {isMobile ? (
             <>
               {renderStepIndicator()}

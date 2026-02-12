@@ -1,7 +1,8 @@
 import { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle, Store } from 'lucide-react';
+import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle, Store, ChevronDown } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
@@ -71,6 +72,7 @@ interface Product {
 export default function Products() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const { data: categories } = useCategories();
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -81,6 +83,7 @@ export default function Products() {
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<string>('active-stock');
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
   const ITEMS_PER_PAGE = 25;
 
   const { data: products, isLoading } = useQuery({
@@ -323,286 +326,407 @@ export default function Products() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Produtos</h1>
-          <p className="text-muted-foreground">Gerencie os produtos da sua loja</p>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold">Produtos</h1>
+          <p className="text-sm text-muted-foreground hidden sm:block">Gerencie os produtos da sua loja</p>
         </div>
-        <div className="flex items-center gap-2">
-          <label>
-            <input ref={trayImportRef} type="file" accept=".csv" className="hidden" onChange={handleTrayImport} />
-            <Button variant="outline" size="sm" asChild disabled={trayImporting}>
-              <span>
-                <Store className="h-4 w-4 mr-2" />
-                {trayImporting ? 'Importando...' : 'Importar Tray'}
-              </span>
-            </Button>
-          </label>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
-          <label>
-            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
-            <Button variant="outline" size="sm" asChild>
-              <span>
-                <Upload className="h-4 w-4 mr-2" />
-                Importar
-              </span>
-            </Button>
-          </label>
-          <Button onClick={handleNewProduct}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Produto
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          {!isMobile && (
+            <>
+              <label>
+                <input ref={trayImportRef} type="file" accept=".csv" className="hidden" onChange={handleTrayImport} />
+                <Button variant="outline" size="sm" asChild disabled={trayImporting}>
+                  <span>
+                    <Store className="h-4 w-4 mr-2" />
+                    {trayImporting ? 'Importando...' : 'Importar Tray'}
+                  </span>
+                </Button>
+              </label>
+              <Button variant="outline" size="sm" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-2" />
+                Exportar
+              </Button>
+              <label>
+                <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+                <Button variant="outline" size="sm" asChild>
+                  <span>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Importar
+                  </span>
+                </Button>
+              </label>
+            </>
+          )}
+          {isMobile ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-9 w-9">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Store className="h-4 w-4" />
+                    Importar Tray
+                    <input ref={trayImportRef} type="file" accept=".csv" className="hidden" onChange={handleTrayImport} />
+                  </label>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExport}>
+                  <Download className="h-4 w-4 mr-2" /> Exportar
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Upload className="h-4 w-4" />
+                    Importar CSV
+                    <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+                  </label>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          <Button onClick={handleNewProduct} size={isMobile ? 'icon' : 'default'} className={isMobile ? 'h-9 w-9' : ''}>
+            <Plus className="h-4 w-4" />
+            {!isMobile && <span className="ml-2">Novo Produto</span>}
           </Button>
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - scrollable on mobile */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="active-stock" className="gap-1.5">
-            <CheckCircle className="h-3.5 w-3.5" />
-            Ativos com Estoque ({tabCounts.activeStock})
-          </TabsTrigger>
-          <TabsTrigger value="all">
-            Todos ({tabCounts.all})
-          </TabsTrigger>
-          <TabsTrigger value="out-of-stock" className="gap-1.5">
-            <PackageX className="h-3.5 w-3.5" />
-            Sem Estoque ({tabCounts.outOfStock})
-          </TabsTrigger>
-          <TabsTrigger value="inactive" className="gap-1.5">
-            <EyeOff className="h-3.5 w-3.5" />
-            Inativos ({tabCounts.inactive})
-          </TabsTrigger>
-        </TabsList>
+        <div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
+          <TabsList className="w-max sm:w-auto">
+            <TabsTrigger value="active-stock" className="gap-1 text-xs sm:text-sm whitespace-nowrap">
+              <CheckCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              Ativos ({tabCounts.activeStock})
+            </TabsTrigger>
+            <TabsTrigger value="all" className="text-xs sm:text-sm whitespace-nowrap">
+              Todos ({tabCounts.all})
+            </TabsTrigger>
+            <TabsTrigger value="out-of-stock" className="gap-1 text-xs sm:text-sm whitespace-nowrap">
+              <PackageX className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              S/ Estoque ({tabCounts.outOfStock})
+            </TabsTrigger>
+            <TabsTrigger value="inactive" className="gap-1 text-xs sm:text-sm whitespace-nowrap">
+              <EyeOff className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              Inativos ({tabCounts.inactive})
+            </TabsTrigger>
+          </TabsList>
+        </div>
       </Tabs>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nome ou SKU..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+      {/* Search + Filters */}
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome ou SKU..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          {isMobile && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 flex-shrink-0"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <ArrowUpDown className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Categoria" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas categorias</SelectItem>
-            {categories?.map((cat) => (
-              <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Filters row - collapsible on mobile */}
+        {(!isMobile || showFilters) && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-full sm:w-[160px]">
+                <ArrowUpDown className="h-3.5 w-3.5 mr-1.5" />
+                <SelectValue placeholder="Ordenar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Mais recentes</SelectItem>
+                <SelectItem value="oldest">Mais antigos</SelectItem>
+                <SelectItem value="price-desc">Maior preço</SelectItem>
+                <SelectItem value="price-asc">Menor preço</SelectItem>
+                <SelectItem value="name-asc">Nome A-Z</SelectItem>
+                <SelectItem value="name-desc">Nome Z-A</SelectItem>
+              </SelectContent>
+            </Select>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="active">Ativos</SelectItem>
-            <SelectItem value="inactive">Inativos</SelectItem>
-            <SelectItem value="featured">Destaques</SelectItem>
-            <SelectItem value="new">Lançamentos</SelectItem>
-            <SelectItem value="sale">Em promoção</SelectItem>
-          </SelectContent>
-        </Select>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-full sm:w-[140px]">
+                <SelectValue placeholder="Origem" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas origens</SelectItem>
+                <SelectItem value="bling">Bling</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+              </SelectContent>
+            </Select>
 
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-[160px]">
-            <ArrowUpDown className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Ordenar" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="newest">Mais recentes</SelectItem>
-            <SelectItem value="oldest">Mais antigos</SelectItem>
-            <SelectItem value="price-desc">Maior preço</SelectItem>
-            <SelectItem value="price-asc">Menor preço</SelectItem>
-            <SelectItem value="name-asc">Nome A-Z</SelectItem>
-            <SelectItem value="name-desc">Nome Z-A</SelectItem>
-          </SelectContent>
-        </Select>
+            {!isMobile && (
+              <>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas categorias</SelectItem>
+                    {categories?.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-        <Select value={sourceFilter} onValueChange={setSourceFilter}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="Origem" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas origens</SelectItem>
-            <SelectItem value="bling">Bling</SelectItem>
-            <SelectItem value="manual">Manual</SelectItem>
-          </SelectContent>
-        </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[150px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="active">Ativos</SelectItem>
+                    <SelectItem value="inactive">Inativos</SelectItem>
+                    <SelectItem value="featured">Destaques</SelectItem>
+                    <SelectItem value="new">Lançamentos</SelectItem>
+                    <SelectItem value="sale">Em promoção</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            )}
 
-        {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            Limpar filtros
-          </Button>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Limpar filtros
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
       {/* Results count */}
-      <p className="text-sm text-muted-foreground">
+      <p className="text-xs sm:text-sm text-muted-foreground">
         {filteredProducts.length} produto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}
         {totalPages > 1 && ` — Página ${currentPage} de ${totalPages}`}
       </p>
 
-      <div className="bg-background rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Produto</TableHead>
-              <TableHead>Categoria</TableHead>
-              <TableHead>Preço</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell>
-              </TableRow>
-            ) : paginatedProducts.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                  Nenhum produto encontrado
-                </TableCell>
-              </TableRow>
-            ) : (
-              paginatedProducts.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={product.images?.find(i => i.is_primary)?.url || product.images?.[0]?.url || '/placeholder.svg'}
-                        alt={product.name}
-                        className="w-12 h-12 rounded-lg object-cover"
-                      />
-                      <div>
-                        <p className="font-medium">{product.name}</p>
-                        <p className="text-sm text-muted-foreground">{product.sku}</p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{product.category?.name || '-'}</TableCell>
-                  <TableCell>
-                    <div>
-                      {product.sale_price && (
-                        <span className="text-muted-foreground line-through text-sm mr-2">
-                          {formatPrice(Number(product.base_price))}
-                        </span>
-                      )}
-                      <span className="font-medium">
-                        {formatPrice(Number(product.sale_price || product.base_price))}
+      {/* Product list - card layout on mobile, table on desktop */}
+      {isMobile ? (
+        <div className="space-y-2">
+          {isLoading ? (
+            <p className="text-center py-8 text-muted-foreground">Carregando...</p>
+          ) : paginatedProducts.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">Nenhum produto encontrado</p>
+          ) : (
+            paginatedProducts.map((product) => (
+              <div
+                key={product.id}
+                className="flex items-center gap-3 p-3 rounded-lg border bg-background active:bg-muted/50 transition-colors cursor-pointer"
+                onClick={() => handleEdit(product)}
+              >
+                <img
+                  src={product.images?.find(i => i.is_primary)?.url || product.images?.[0]?.url || '/placeholder.svg'}
+                  alt={product.name}
+                  className="w-14 h-14 rounded-lg object-cover flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{product.name}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-sm font-semibold text-primary">
+                      {formatPrice(Number(product.sale_price || product.base_price))}
+                    </span>
+                    {product.sale_price && product.sale_price < product.base_price && (
+                      <span className="text-xs text-muted-foreground line-through">
+                        {formatPrice(Number(product.base_price))}
                       </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      <Badge variant={product.is_active ? 'default' : 'secondary'}>
-                        {product.is_active ? 'Ativo' : 'Inativo'}
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1 flex-wrap">
+                    {!product.is_active && (
+                      <Badge variant="secondary" className="text-[10px] h-4 px-1">Inativo</Badge>
+                    )}
+                    {isOutOfStock(product) ? (
+                      <Badge variant="destructive" className="text-[10px] h-4 px-1">Sem Estoque</Badge>
+                    ) : hasStock(product) ? (
+                      <Badge variant="outline" className="text-[10px] h-4 px-1 border-green-500 text-green-600">
+                        {getTotalStock(product)} un.
                       </Badge>
-                      {product.bling_product_id ? (
-                        <Badge variant="outline" className="border-blue-500 text-blue-600 dark:text-blue-400">Bling</Badge>
-                      ) : (
-                        <Badge variant="outline" className="border-muted-foreground text-muted-foreground">Manual</Badge>
-                      )}
-                      {isOutOfStock(product) ? (
-                        <Badge variant="destructive" className="gap-1">
-                          <PackageX className="h-3 w-3" />
-                          Sem Estoque
-                        </Badge>
-                      ) : hasLowStock(product) ? (
-                        <Badge variant="outline" className="gap-1 border-orange-500 text-orange-600 dark:text-orange-400">
-                          Estoque Baixo ({getTotalStock(product)})
-                        </Badge>
-                      ) : hasStock(product) ? (
-                        <Badge variant="outline" className="gap-1 border-green-500 text-green-600 dark:text-green-400">
-                          {getTotalStock(product)} un.
-                        </Badge>
-                      ) : null}
-                      {product.is_featured && <Badge variant="outline">Destaque</Badge>}
-                      {product.is_new && <Badge className="bg-primary">Novo</Badge>}
-                      {product.sale_price && product.sale_price < product.base_price && (
-                        <Badge className="bg-destructive">Promoção</Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEdit(product)}>
-                          <Pencil className="h-4 w-4 mr-2" /> Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => deleteMutation.mutate(product.id)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    ) : null}
+                    {product.bling_product_id ? (
+                      <Badge variant="outline" className="text-[10px] h-4 px-1 border-blue-500 text-blue-600">Bling</Badge>
+                    ) : null}
+                  </div>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(product); }}>
+                      <Pencil className="h-4 w-4 mr-2" /> Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(product.id); }}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+        <div className="bg-background rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Produto</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead>Preço</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell>
+                </TableRow>
+              ) : paginatedProducts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    Nenhum produto encontrado
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                paginatedProducts.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={product.images?.find(i => i.is_primary)?.url || product.images?.[0]?.url || '/placeholder.svg'}
+                          alt={product.name}
+                          className="w-12 h-12 rounded-lg object-cover"
+                        />
+                        <div>
+                          <p className="font-medium">{product.name}</p>
+                          <p className="text-sm text-muted-foreground">{product.sku}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{product.category?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div>
+                        {product.sale_price && (
+                          <span className="text-muted-foreground line-through text-sm mr-2">
+                            {formatPrice(Number(product.base_price))}
+                          </span>
+                        )}
+                        <span className="font-medium">
+                          {formatPrice(Number(product.sale_price || product.base_price))}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant={product.is_active ? 'default' : 'secondary'}>
+                          {product.is_active ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                        {product.bling_product_id ? (
+                          <Badge variant="outline" className="border-blue-500 text-blue-600 dark:text-blue-400">Bling</Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-muted-foreground text-muted-foreground">Manual</Badge>
+                        )}
+                        {isOutOfStock(product) ? (
+                          <Badge variant="destructive" className="gap-1">
+                            <PackageX className="h-3 w-3" />
+                            Sem Estoque
+                          </Badge>
+                        ) : hasLowStock(product) ? (
+                          <Badge variant="outline" className="gap-1 border-orange-500 text-orange-600 dark:text-orange-400">
+                            Estoque Baixo ({getTotalStock(product)})
+                          </Badge>
+                        ) : hasStock(product) ? (
+                          <Badge variant="outline" className="gap-1 border-green-500 text-green-600 dark:text-green-400">
+                            {getTotalStock(product)} un.
+                          </Badge>
+                        ) : null}
+                        {product.is_featured && <Badge variant="outline">Destaque</Badge>}
+                        {product.is_new && <Badge className="bg-primary">Novo</Badge>}
+                        {product.sale_price && product.sale_price < product.base_price && (
+                          <Badge className="bg-destructive">Promoção</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEdit(product)}>
+                            <Pencil className="h-4 w-4 mr-2" /> Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => deleteMutation.mutate(product.id)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-2">
+        <div className="flex items-center justify-center gap-1 sm:gap-2 pt-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setCurrentPage(1)}
-            disabled={currentPage === 1}
-          >
-            «
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+            className="h-8 px-2 sm:px-3"
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             disabled={currentPage === 1}
           >
-            ‹ Anterior
+            ‹
           </Button>
           <div className="flex items-center gap-1">
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            {Array.from({ length: Math.min(isMobile ? 3 : 5, totalPages) }, (_, i) => {
               let pageNum: number;
-              if (totalPages <= 5) {
+              const maxVisible = isMobile ? 3 : 5;
+              if (totalPages <= maxVisible) {
                 pageNum = i + 1;
-              } else if (currentPage <= 3) {
+              } else if (currentPage <= Math.ceil(maxVisible / 2)) {
                 pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNum = totalPages - 4 + i;
+              } else if (currentPage >= totalPages - Math.floor(maxVisible / 2)) {
+                pageNum = totalPages - maxVisible + 1 + i;
               } else {
-                pageNum = currentPage - 2 + i;
+                pageNum = currentPage - Math.floor(maxVisible / 2) + i;
               }
               return (
                 <Button
                   key={pageNum}
                   variant={currentPage === pageNum ? 'default' : 'outline'}
                   size="sm"
-                  className="w-8 h-8 p-0"
+                  className="w-8 h-8 p-0 text-xs"
                   onClick={() => setCurrentPage(pageNum)}
                 >
                   {pageNum}
@@ -613,18 +737,11 @@ export default function Products() {
           <Button
             variant="outline"
             size="sm"
+            className="h-8 px-2 sm:px-3"
             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
           >
-            Próxima ›
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage(totalPages)}
-            disabled={currentPage === totalPages}
-          >
-            »
+            ›
           </Button>
         </div>
       )}
