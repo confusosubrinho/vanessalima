@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -40,6 +40,20 @@ export default function ProductDetail() {
   const { data: recentProducts } = useRecentProducts(product?.id);
   const { data: relatedProducts } = useRelatedProducts(product?.category_id, product?.id);
   const { data: storeSettings } = useStoreSettings();
+
+  // Auto-select first available variant when product loads
+  useEffect(() => {
+    if (!product) return;
+    const variants = product.variants?.filter((v: any) => v.is_active && v.stock_quantity > 0) || [];
+    if (variants.length === 0) return;
+    const first = variants[0];
+    if (first.color) {
+      setSelectedColor(first.color);
+    }
+    setSelectedSize(first.size);
+    setQuantity(1);
+    setSelectedImage(0);
+  }, [product?.id]);
 
   const pixDiscountPercent = storeSettings?.pix_discount ?? 5;
   const maxInstallments = storeSettings?.max_installments ?? 10;
