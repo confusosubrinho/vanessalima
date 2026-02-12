@@ -149,12 +149,19 @@ serve(async (req) => {
       const hasCredentials = !!Deno.env.get("APPMAX_CLIENT_ID") && !!Deno.env.get("APPMAX_CLIENT_SECRET");
       return new Response(
         JSON.stringify({
+          // Full pricing config from payment_pricing_config (single source of truth)
           max_installments: pricingConfig?.max_installments || 6,
-          installments_without_interest: pricingConfig?.interest_free_installments || 3,
-          installment_interest_rate: pricingConfig?.interest_mode === "fixed" ? (pricingConfig?.monthly_rate_fixed || 0) : 0,
-          min_installment_value: pricingConfig?.min_installment_value || 30,
-          pix_discount: pricingConfig?.pix_discount || 0,
-          cash_discount: pricingConfig?.cash_discount || 0,
+          interest_free_installments: pricingConfig?.interest_free_installments || 3,
+          interest_mode: pricingConfig?.interest_mode || "fixed",
+          monthly_rate_fixed: Number(pricingConfig?.monthly_rate_fixed) || 0,
+          monthly_rate_by_installment: pricingConfig?.monthly_rate_by_installment || {},
+          min_installment_value: Number(pricingConfig?.min_installment_value) || 30,
+          pix_discount: Number(pricingConfig?.pix_discount) || 0,
+          cash_discount: Number(pricingConfig?.cash_discount) || 0,
+          card_cash_rate: Number(pricingConfig?.card_cash_rate) || 0,
+          rounding_mode: pricingConfig?.rounding_mode || "adjust_last",
+          transparent_checkout_fee_enabled: pricingConfig?.transparent_checkout_fee_enabled ?? false,
+          transparent_checkout_fee_percent: Number(pricingConfig?.transparent_checkout_fee_percent) || 0,
           gateway_configured: hasCredentials,
           gateway: "appmax",
         }),

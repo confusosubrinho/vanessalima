@@ -20,6 +20,7 @@ export interface PricingConfig {
 export interface InstallmentOption {
   n: number;
   installmentValue: number;
+  lastInstallmentValue: number;
   total: number;
   hasInterest: boolean;
   monthlyRate: number;
@@ -31,6 +32,27 @@ let _cachedConfig: PricingConfig | null = null;
 let _cacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
+const DEFAULT_CONFIG: PricingConfig = {
+  id: '',
+  is_active: true,
+  max_installments: 6,
+  interest_free_installments: 3,
+  card_cash_rate: 0,
+  pix_discount: 5,
+  cash_discount: 5,
+  interest_mode: 'fixed',
+  monthly_rate_fixed: 0,
+  monthly_rate_by_installment: {},
+  min_installment_value: 25,
+  rounding_mode: 'adjust_last',
+  transparent_checkout_fee_enabled: false,
+  transparent_checkout_fee_percent: 0,
+};
+
+/**
+ * Single source of truth — returns active financial config.
+ * Alias: getFinancialConfig
+ */
 export async function getActivePricingConfig(): Promise<PricingConfig> {
   if (_cachedConfig && Date.now() - _cacheTime < CACHE_TTL) {
     return _cachedConfig;
@@ -44,23 +66,7 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
     .maybeSingle();
 
   if (error || !data) {
-    // Fallback defaults
-    return {
-      id: '',
-      is_active: true,
-      max_installments: 6,
-      interest_free_installments: 3,
-      card_cash_rate: 0,
-      pix_discount: 5,
-      cash_discount: 5,
-      interest_mode: 'fixed',
-      monthly_rate_fixed: 0,
-      monthly_rate_by_installment: {},
-      min_installment_value: 25,
-      rounding_mode: 'adjust_last',
-      transparent_checkout_fee_enabled: false,
-      transparent_checkout_fee_percent: 0,
-    };
+    return { ...DEFAULT_CONFIG };
   }
 
   const config: PricingConfig = {
@@ -85,6 +91,9 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
   return config;
 }
 
+/** Alias for getActivePricingConfig — the single financial config function. */
+export const getFinancialConfig = getActivePricingConfig;
+
 export function invalidatePricingCache() {
   _cachedConfig = null;
   _cacheTime = 0;
@@ -106,17 +115,78 @@ function getMonthlyRate(config: PricingConfig, n: number): number {
  * Calculate installment value using Price (annuity) formula.
  * parcela = P * (i * (1+i)^n) / ((1+i)^n - 1)
  */
-function calcInstallment(price: number, monthlyRate: number, n: number): { installmentValue: number; total: number } {
-  if (n === 1 || monthlyRate <= 0) {
-    return { installmentValue: Math.round(price * 100) / 100, total: Math.round(price * 100) / 100 };
-  }
-  
+function calcInstallmentRaw(price: number, monthlyRate: number, n: number): number {
+  if (n === 1 || monthlyRate <= 0) return price;
   const i = monthlyRate;
   const factor = (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1);
-  const installmentValue = Math.round(price * factor * 100) / 100;
-  const total = Math.round(installmentValue * n * 100) / 100;
-  
-  return { installmentValue, total };
+  return price * factor;
+}
+
+/**
+ * Apply rounding_mode = adjust_last:
+ * Round each installment to 2 decimals, adjust last one so total is exact.
+ */
+function applyRounding(
+  rawInstallment: number,
+  n: number,
+  totalExact: number,
+  mode: string
+): { installmentValue: number; lastInstallmentValue: number; total: number } {
+  if (n === 1) {
+    const v = Math.round(rawInstallment * 100) / 100;
+    return { installmentValue: v, lastInstallmentValue: v, total: v };
+  }
+
+  const installmentValue = Math.floor(rawInstallment * 100) / 100;
+  const totalRounded = Math.round(totalExact * 100) / 100;
+
+  if (mode === 'adjust_last') {
+    const sumFirstN = Math.round(installmentValue * (n - 1) * 100) / 100;
+    const lastInstallmentValue = Math.round((totalRounded - sumFirstN) * 100) / 100;
+    return { installmentValue, lastInstallmentValue, total: totalRounded };
+  }
+
+  // truncate mode (fallback)
+  return { installmentValue, lastInstallmentValue: installmentValue, total: Math.round(installmentValue * n * 100) / 100 };
+}
+
+/**
+ * Core installment calculation — used by front and back.
+ */
+export function calculateInstallments(
+  price: number,
+  config: PricingConfig,
+  paymentMethod: 'card' | 'pix' = 'card',
+  requestedInstallments?: number
+): { installmentValue: number; lastInstallmentValue: number; total: number; hasInterest: boolean; monthlyRate: number } {
+  if (paymentMethod === 'pix') {
+    const pixTotal = getPixPrice(price, config);
+    return { installmentValue: pixTotal, lastInstallmentValue: pixTotal, total: pixTotal, hasInterest: false, monthlyRate: 0 };
+  }
+
+  const n = requestedInstallments || 1;
+
+  // For 1x with card_cash_rate
+  let basePrice = price;
+  if (n === 1 && config.card_cash_rate > 0) {
+    basePrice = price * (1 + config.card_cash_rate / 100);
+  }
+
+  const monthlyRate = getMonthlyRate(config, n);
+  const hasInterest = monthlyRate > 0;
+
+  if (!hasInterest) {
+    const raw = basePrice / n;
+    const totalExact = basePrice;
+    const { installmentValue, lastInstallmentValue, total } = applyRounding(raw, n, totalExact, config.rounding_mode);
+    return { installmentValue, lastInstallmentValue, total, hasInterest: false, monthlyRate: 0 };
+  }
+
+  // Interest-bearing
+  const rawInstallment = calcInstallmentRaw(price, monthlyRate, n);
+  const totalExact = rawInstallment * n;
+  const { installmentValue, lastInstallmentValue, total } = applyRounding(rawInstallment, n, totalExact, config.rounding_mode);
+  return { installmentValue, lastInstallmentValue, total, hasInterest: true, monthlyRate };
 }
 
 /**
@@ -126,31 +196,21 @@ export function getInstallmentOptions(price: number, config: PricingConfig): Ins
   const options: InstallmentOption[] = [];
 
   for (let n = 1; n <= config.max_installments; n++) {
-    const monthlyRate = getMonthlyRate(config, n);
-    const hasInterest = monthlyRate > 0;
-    
-    // For 1x with card_cash_rate
-    let basePrice = price;
-    if (n === 1 && config.card_cash_rate > 0) {
-      basePrice = price * (1 + config.card_cash_rate / 100);
-    }
-    
-    const { installmentValue, total } = hasInterest 
-      ? calcInstallment(price, monthlyRate, n) 
-      : { installmentValue: Math.round(basePrice / n * 100) / 100, total: Math.round(basePrice * 100) / 100 };
+    const result = calculateInstallments(price, config, 'card', n);
 
     // Check min installment value
-    if (n > 1 && installmentValue < config.min_installment_value) break;
+    if (n > 1 && result.installmentValue < config.min_installment_value) break;
 
-    const suffix = hasInterest ? ` (total ${formatCurrency(total)})` : ' sem juros';
+    const suffix = result.hasInterest ? ` (total ${formatCurrency(result.total)})` : ' sem juros';
     
     options.push({
       n,
-      installmentValue,
-      total,
-      hasInterest,
-      monthlyRate,
-      label: `${n}x de ${formatCurrency(installmentValue)}${suffix}`,
+      installmentValue: result.installmentValue,
+      lastInstallmentValue: result.lastInstallmentValue,
+      total: result.total,
+      hasInterest: result.hasInterest,
+      monthlyRate: result.monthlyRate,
+      label: `${n}x de ${formatCurrency(result.installmentValue)}${suffix}`,
     });
   }
 
@@ -196,6 +256,7 @@ export function getTransparentCheckoutFee(orderTotal: number, config: PricingCon
 
 /**
  * Calculate net profit for an order considering cost, gateway fees and checkout fee.
+ * This is the ONLY function that should be used for profit/margin calculations.
  */
 export function calculateNetProfit(
   revenue: number,
@@ -203,24 +264,24 @@ export function calculateNetProfit(
   config: PricingConfig,
   paymentMethod: 'pix' | 'card' = 'card',
   installments: number = 1
-): { netProfit: number; marginPercent: number; checkoutFee: number; gatewayRate: number } {
+): { netProfit: number; marginPercent: number; checkoutFee: number; gatewayFee: number; totalFees: number } {
   const checkoutFee = getTransparentCheckoutFee(revenue, config);
   
-  // Gateway rate: for card 1x use card_cash_rate, for installments use the monthly rate
-  let gatewayRate = 0;
+  // Gateway fee: for card 1x use card_cash_rate
+  // For interest-free installments the merchant absorbs the cost (card_cash_rate applied)
+  // For interest-bearing installments the customer pays interest, but there's still a base gateway fee
+  let gatewayFee = 0;
   if (paymentMethod === 'card') {
-    if (installments === 1) {
-      gatewayRate = revenue * (config.card_cash_rate / 100);
-    } else if (installments > config.interest_free_installments) {
-      const monthlyRate = getMonthlyRate(config, installments);
-      gatewayRate = revenue * monthlyRate * installments; // approximate
-    }
+    // The card_cash_rate represents the gateway's base fee for card transactions
+    gatewayFee = revenue * (config.card_cash_rate / 100);
   }
+  // PIX typically has no gateway fee (or a much lower one) — handled by card_cash_rate = 0 for pix
   
-  const netProfit = revenue - cost - checkoutFee - gatewayRate;
+  const totalFees = checkoutFee + gatewayFee;
+  const netProfit = revenue - cost - totalFees;
   const marginPercent = revenue > 0 ? (netProfit / revenue) * 100 : 0;
   
-  return { netProfit, marginPercent, checkoutFee, gatewayRate };
+  return { netProfit, marginPercent, checkoutFee, gatewayFee, totalFees };
 }
 
 /**
