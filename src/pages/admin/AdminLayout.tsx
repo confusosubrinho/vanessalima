@@ -45,9 +45,10 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import logo from '@/assets/logo.png';
+import logoFallback from '@/assets/logo.png';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useQuery } from '@tanstack/react-query';
 
 interface MenuItem {
   title: string;
@@ -116,12 +117,29 @@ const mobileTabItems = [
   { title: 'Vendas', url: '/admin/vendas', icon: BarChart3 },
 ];
 
+function useStoreLogo() {
+  return useQuery({
+    queryKey: ['store-logo'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('store_settings')
+        .select('header_logo_url, logo_url, store_name')
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
 function AdminSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const { data: storeSettings } = useStoreLogo();
+  const logoSrc = storeSettings?.header_logo_url || storeSettings?.logo_url || logoFallback;
 
   useEffect(() => {
     const groupsToOpen: string[] = [];
@@ -160,8 +178,7 @@ function AdminSidebar() {
     <Sidebar className="border-r bg-sidebar" collapsible="icon">
       <div className="p-4 border-b">
         <Link to="/admin" className="flex items-center gap-2">
-          <img src={logo} alt="Admin" className="h-8" />
-          {!isCollapsed && <span className="font-bold text-sm">Admin</span>}
+          <img src={logoSrc} alt={storeSettings?.store_name || 'Loja'} className="h-8 max-w-[140px] object-contain" />
         </Link>
       </div>
       <SidebarContent>
@@ -241,6 +258,8 @@ function MobileMenuSheet() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<string[]>([]);
+  const { data: storeSettings } = useStoreLogo();
+  const logoSrc = storeSettings?.header_logo_url || storeSettings?.logo_url || logoFallback;
 
   useEffect(() => {
     // Auto-expand active group
@@ -280,8 +299,7 @@ function MobileMenuSheet() {
       <SheetContent side="left" className="w-[280px] p-0 flex flex-col">
         <SheetHeader className="p-4 border-b">
           <SheetTitle className="flex items-center gap-2">
-            <img src={logo} alt="Admin" className="h-7" />
-            <span className="text-sm font-bold">Painel Admin</span>
+            <img src={logoSrc} alt={storeSettings?.store_name || 'Loja'} className="h-7 max-w-[140px] object-contain" />
           </SheetTitle>
         </SheetHeader>
         <ScrollArea className="flex-1">
