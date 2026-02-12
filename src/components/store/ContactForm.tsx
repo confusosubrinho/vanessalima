@@ -5,9 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useStoreContact, formatPhone } from '@/hooks/useStoreContact';
 
 export function ContactForm() {
   const { toast } = useToast();
+  const { data: contact } = useStoreContact();
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', phone: '', subject: '', message: '' });
 
@@ -31,33 +33,43 @@ export function ContactForm() {
 
         <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           <div className="space-y-6">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                <Phone className="h-5 w-5 text-primary" />
+            {contact?.contact_phone && (
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Phone className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h4 className="font-medium">Telefone / WhatsApp</h4>
+                  <a href={`tel:${contact.contact_phone.replace(/\D/g, '')}`} className="text-sm text-muted-foreground hover:text-primary">
+                    {formatPhone(contact.contact_phone)}
+                  </a>
+                </div>
               </div>
-              <div>
-                <h4 className="font-medium">Telefone / WhatsApp</h4>
-                <a href="tel:42991120205" className="text-sm text-muted-foreground hover:text-primary">(42) 99112-0205</a>
+            )}
+            {contact?.contact_email && (
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Mail className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h4 className="font-medium">Email</h4>
+                  <a href={`mailto:${contact.contact_email}`} className="text-sm text-muted-foreground hover:text-primary">
+                    {contact.contact_email}
+                  </a>
+                </div>
               </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                <Mail className="h-5 w-5 text-primary" />
+            )}
+            {(contact?.full_address || contact?.address) && (
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                  <MapPin className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h4 className="font-medium">Endereço</h4>
+                  <p className="text-sm text-muted-foreground">{contact.full_address || contact.address}</p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-medium">Email</h4>
-                <a href="mailto:contato@vanessalimashoes.com.br" className="text-sm text-muted-foreground hover:text-primary">contato@vanessalimashoes.com.br</a>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                <MapPin className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h4 className="font-medium">Endereço</h4>
-                <p className="text-sm text-muted-foreground">Guarapuava - PR</p>
-              </div>
-            </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="md:col-span-2 space-y-4">

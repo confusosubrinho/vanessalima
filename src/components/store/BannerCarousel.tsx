@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBanners } from '@/hooks/useProducts';
 import { useIsMobile } from '@/hooks/use-mobile';
-import banner1 from '@/assets/banner-1.png';
 
 export function BannerCarousel() {
   const { data: banners } = useBanners();
@@ -11,17 +10,7 @@ export function BannerCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const displayBanners = banners?.length ? banners : [
-    {
-      id: '1',
-      image_url: banner1,
-      mobile_image_url: null,
-      title: 'RENOVA',
-      subtitle: 'Super Sale com descontos de até 50%',
-      cta_text: 'Ver ofertas',
-      cta_url: '/bijuterias',
-    },
-  ];
+  const displayBanners = banners || [];
 
   const resetTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -35,6 +24,8 @@ export function BannerCarousel() {
     resetTimer();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [resetTimer]);
+
+  if (displayBanners.length === 0) return null;
 
   const goToPrevious = () => {
     setCurrentIndex((prev) => prev === 0 ? displayBanners.length - 1 : prev - 1);

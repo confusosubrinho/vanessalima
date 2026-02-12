@@ -176,15 +176,17 @@ export function Header() {
                 </div>
               </div>
               <div className="border-t p-4">
-                <a
-                  href="https://wa.me/5542991120205"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 py-2.5 bg-[#25D366] text-white rounded-full font-medium text-sm"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  Fale pelo WhatsApp
-                </a>
+                {headerSettings?.contact_whatsapp && (
+                  <a
+                    href={`https://wa.me/${(headerSettings.contact_whatsapp as string).replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 py-2.5 bg-[#25D366] text-white rounded-full font-medium text-sm"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Fale pelo WhatsApp
+                  </a>
+                )}
               </div>
             </SheetContent>
           </Sheet>

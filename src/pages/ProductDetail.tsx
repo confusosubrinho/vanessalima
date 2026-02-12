@@ -587,15 +587,17 @@ export default function ProductDetail() {
               currentPrice={currentPrice}
             />
 
-            <a
-              href={`https://wa.me/5542991120205?text=Olá, gostei deste produto: ${product.name}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1.5 py-2 px-4 border border-[#25D366] text-[#25D366] rounded-full hover:bg-[#25D366]/10 transition-colors font-medium text-sm"
-            >
-              <MessageCircle className="h-4 w-4" />
-              Comprar pelo WhatsApp
-            </a>
+            {storeSettings?.contact_whatsapp && (
+              <a
+                href={`https://wa.me/${(storeSettings.contact_whatsapp as string).replace(/\D/g, '')}?text=${encodeURIComponent(`Olá, gostei deste produto: ${product.name}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 py-2 px-4 border border-[#25D366] text-[#25D366] rounded-full hover:bg-[#25D366]/10 transition-colors font-medium text-sm"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Comprar pelo WhatsApp
+              </a>
+            )}
             
             <div className="pt-4">
               <ShippingCalculator />
