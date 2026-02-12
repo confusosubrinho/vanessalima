@@ -33,19 +33,8 @@ export default function Cart() {
     refetchOnWindowFocus: true,
   });
 
-  const [storeConfig, setStoreConfig] = useState({ freeShippingThreshold: 399, maxInstallments: 6, installmentsWithoutInterest: 3 });
-
-  useEffect(() => {
-    supabase.from('store_settings').select('free_shipping_threshold, max_installments, installments_without_interest').limit(1).maybeSingle().then(({ data }) => {
-      if (data) {
-        setStoreConfig({
-          freeShippingThreshold: Number(data.free_shipping_threshold) || 399,
-          maxInstallments: data.max_installments || 6,
-          installmentsWithoutInterest: data.installments_without_interest || 3,
-        });
-      }
-    });
-  }, []);
+  // Use pricing config for free shipping threshold
+  const freeShippingThreshold = 399; // This comes from store_settings shipping config, not financial
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -54,8 +43,8 @@ export default function Cart() {
     }).format(price);
   };
 
-  const remainingForFreeShipping = storeConfig.freeShippingThreshold - subtotal;
-  const hasFreeShipping = subtotal >= storeConfig.freeShippingThreshold;
+  const remainingForFreeShipping = freeShippingThreshold - subtotal;
+  const hasFreeShipping = subtotal >= freeShippingThreshold;
 
   if (items.length === 0) {
     return (
@@ -100,7 +89,7 @@ export default function Cart() {
           <div className="w-full bg-muted rounded-full h-2">
             <div
               className="bg-primary h-2 rounded-full transition-all"
-              style={{ width: `${Math.min((subtotal / storeConfig.freeShippingThreshold) * 100, 100)}%` }}
+              style={{ width: `${Math.min((subtotal / freeShippingThreshold) * 100, 100)}%` }}
             />
           </div>
         </div>
@@ -235,7 +224,7 @@ export default function Cart() {
                   <span>{formatPrice(total)}</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  ou {pricingConfig ? getBestHighlight(total, pricingConfig) : `${storeConfig.installmentsWithoutInterest}x de ${formatPrice(total / storeConfig.installmentsWithoutInterest)} sem juros`}
+                  ou {pricingConfig ? getBestHighlight(total, pricingConfig) : `até 6x sem juros`}
                 </p>
               </div>
 

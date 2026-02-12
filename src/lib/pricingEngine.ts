@@ -13,6 +13,8 @@ export interface PricingConfig {
   monthly_rate_by_installment: Record<string, number>;
   min_installment_value: number;
   rounding_mode: 'adjust_last' | 'truncate';
+  transparent_checkout_fee_enabled: boolean;
+  transparent_checkout_fee_percent: number;
 }
 
 export interface InstallmentOption {
@@ -56,6 +58,8 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
       monthly_rate_by_installment: {},
       min_installment_value: 25,
       rounding_mode: 'adjust_last',
+      transparent_checkout_fee_enabled: false,
+      transparent_checkout_fee_percent: 0,
     };
   }
 
@@ -72,6 +76,8 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
     monthly_rate_by_installment: (data as any).monthly_rate_by_installment || {},
     min_installment_value: Number((data as any).min_installment_value) || 25,
     rounding_mode: (data as any).rounding_mode || 'adjust_last',
+    transparent_checkout_fee_enabled: (data as any).transparent_checkout_fee_enabled ?? false,
+    transparent_checkout_fee_percent: Number((data as any).transparent_checkout_fee_percent) || 0,
   };
 
   _cachedConfig = config;
@@ -178,6 +184,43 @@ export function getBestHighlight(price: number, config: PricingConfig): string {
  */
 export function getPixPrice(price: number, config: PricingConfig): number {
   return Math.round(price * (1 - config.pix_discount / 100) * 100) / 100;
+}
+
+/**
+ * Calculate transparent checkout fee (internal cost, not shown to customer).
+ */
+export function getTransparentCheckoutFee(orderTotal: number, config: PricingConfig): number {
+  if (!config.transparent_checkout_fee_enabled || config.transparent_checkout_fee_percent <= 0) return 0;
+  return Math.round(orderTotal * (config.transparent_checkout_fee_percent / 100) * 100) / 100;
+}
+
+/**
+ * Calculate net profit for an order considering cost, gateway fees and checkout fee.
+ */
+export function calculateNetProfit(
+  revenue: number,
+  cost: number,
+  config: PricingConfig,
+  paymentMethod: 'pix' | 'card' = 'card',
+  installments: number = 1
+): { netProfit: number; marginPercent: number; checkoutFee: number; gatewayRate: number } {
+  const checkoutFee = getTransparentCheckoutFee(revenue, config);
+  
+  // Gateway rate: for card 1x use card_cash_rate, for installments use the monthly rate
+  let gatewayRate = 0;
+  if (paymentMethod === 'card') {
+    if (installments === 1) {
+      gatewayRate = revenue * (config.card_cash_rate / 100);
+    } else if (installments > config.interest_free_installments) {
+      const monthlyRate = getMonthlyRate(config, installments);
+      gatewayRate = revenue * monthlyRate * installments; // approximate
+    }
+  }
+  
+  const netProfit = revenue - cost - checkoutFee - gatewayRate;
+  const marginPercent = revenue > 0 ? (netProfit / revenue) * 100 : 0;
+  
+  return { netProfit, marginPercent, checkoutFee, gatewayRate };
 }
 
 /**

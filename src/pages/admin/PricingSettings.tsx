@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { CreditCard, Percent, Calculator, Save, Info, Plus, Trash2 } from 'lucide-react';
+import { CreditCard, Percent, Calculator, Save, Info, Plus, Trash2, ShieldCheck } from 'lucide-react';
 import { invalidatePricingCache, getInstallmentOptions, formatCurrency, type PricingConfig } from '@/lib/pricingEngine';
 
 interface RateEntry {
@@ -46,6 +46,8 @@ export default function PricingSettings() {
     monthly_rate_fixed: 0,
     min_installment_value: 25,
     rounding_mode: 'adjust_last',
+    transparent_checkout_fee_enabled: false,
+    transparent_checkout_fee_percent: 0,
   });
 
   const [rateEntries, setRateEntries] = useState<RateEntry[]>([]);
@@ -63,6 +65,8 @@ export default function PricingSettings() {
         monthly_rate_fixed: Number(config.monthly_rate_fixed) || 0,
         min_installment_value: Number(config.min_installment_value) || 25,
         rounding_mode: config.rounding_mode || 'adjust_last',
+        transparent_checkout_fee_enabled: config.transparent_checkout_fee_enabled ?? false,
+        transparent_checkout_fee_percent: Number(config.transparent_checkout_fee_percent) || 0,
       });
 
       // Parse rate entries from JSON
@@ -110,25 +114,11 @@ export default function PricingSettings() {
           .insert({ ...payload, is_active: true } as any);
         if (error) throw error;
       }
-
-      // Also sync to store_settings for backward compat
-      const { data: settings } = await supabase.from('store_settings').select('id').limit(1).maybeSingle();
-      if (settings?.id) {
-        await supabase.from('store_settings').update({
-          max_installments: form.max_installments,
-          installments_without_interest: form.interest_free_installments,
-          installment_interest_rate: form.interest_mode === 'fixed' ? form.monthly_rate_fixed : 0,
-          min_installment_value: form.min_installment_value,
-          pix_discount: form.pix_discount,
-          cash_discount: form.cash_discount,
-        } as any).eq('id', settings.id);
-      }
     },
     onSuccess: () => {
       invalidatePricingCache();
       queryClient.invalidateQueries({ queryKey: ['pricing-config'] });
       queryClient.invalidateQueries({ queryKey: ['pricing-config-admin'] });
-      queryClient.invalidateQueries({ queryKey: ['store-settings'] });
       toast({ title: 'Configurações de preços salvas!' });
     },
     onError: (e: any) => toast({ title: 'Erro ao salvar', description: e.message, variant: 'destructive' }),
@@ -162,7 +152,7 @@ export default function PricingSettings() {
           <CreditCard className="h-6 w-6" />
           Juros e Cartões
         </h1>
-        <p className="text-muted-foreground">Configure parcelamento, juros e descontos para todo o site</p>
+        <p className="text-muted-foreground">Fonte única de verdade para parcelamento, juros e descontos de todo o site</p>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -342,6 +332,50 @@ export default function PricingSettings() {
             </CardContent>
           </Card>
 
+          {/* Transparent Checkout Fee */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ShieldCheck className="h-4 w-4" />
+                Taxa de Checkout Transparente
+              </CardTitle>
+              <CardDescription>Custo operacional interno — não afeta o preço mostrado ao cliente</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={form.transparent_checkout_fee_enabled}
+                  onCheckedChange={v => setForm(f => ({ ...f, transparent_checkout_fee_enabled: v }))}
+                />
+                <Label className="text-sm">Ativar taxa de checkout transparente</Label>
+              </div>
+              {form.transparent_checkout_fee_enabled && (
+                <div className="space-y-1.5 pl-4 border-l-2 border-primary/20">
+                  <Label className="text-xs">Percentual da taxa (%)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={form.transparent_checkout_fee_percent}
+                    onChange={e => setForm(f => ({ ...f, transparent_checkout_fee_percent: parseFloat(e.target.value) || 0 }))}
+                    className="w-[200px]"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Ex: 1.5 = 1,5% deduzido internamente do lucro em dashboards e relatórios. 
+                    Não altera o valor cobrado do cliente.
+                  </p>
+                  {previewPrice > 0 && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Para um pedido de {formatCurrency(previewPrice)}, a taxa seria de{' '}
+                      <span className="font-medium text-foreground">
+                        {formatCurrency(previewPrice * (form.transparent_checkout_fee_percent / 100))}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full" size="lg">
             <Save className="h-4 w-4 mr-2" />
             {saveMutation.isPending ? 'Salvando...' : 'Salvar Configurações'}
@@ -400,6 +434,18 @@ export default function PricingSettings() {
                   </p>
                 )}
               </div>
+
+              {form.transparent_checkout_fee_enabled && (
+                <>
+                  <Separator />
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium">Custo interno (checkout transparente):</p>
+                    <p className="text-xs text-muted-foreground">
+                      Taxa: {formatCurrency(previewPrice * (form.transparent_checkout_fee_percent / 100))} ({form.transparent_checkout_fee_percent}%)
+                    </p>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
