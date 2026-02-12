@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Store, Phone, Instagram, Facebook, Save, Upload, Image, AlertTriangle, Shield, RefreshCw } from 'lucide-react';
+import { Store, Phone, Save, Upload, Image, AlertTriangle, Shield, RefreshCw } from 'lucide-react';
 import { ErrorLogsPanel } from '@/components/admin/ErrorLogsPanel';
 import { TwoFactorSetup } from '@/components/admin/TwoFactorSetup';
 import { APP_VERSION } from '@/lib/appVersion';
@@ -23,8 +23,6 @@ interface StoreSettings {
   contact_phone: string | null;
   contact_whatsapp: string | null;
   address: string | null;
-  instagram_url: string | null;
-  facebook_url: string | null;
   free_shipping_threshold: number | null;
 }
 
@@ -41,8 +39,6 @@ export default function Settings() {
     contact_phone: '',
     contact_whatsapp: '',
     address: '',
-    instagram_url: '',
-    facebook_url: '',
     free_shipping_threshold: 399,
   });
 
@@ -69,8 +65,6 @@ export default function Settings() {
         contact_phone: settings.contact_phone || '',
         contact_whatsapp: settings.contact_whatsapp || '',
         address: settings.address || '',
-        instagram_url: settings.instagram_url || '',
-        facebook_url: settings.facebook_url || '',
         free_shipping_threshold: settings.free_shipping_threshold || 399,
       });
     }
@@ -147,7 +141,7 @@ export default function Settings() {
            <TabsList className="flex-wrap">
             <TabsTrigger value="general">Geral</TabsTrigger>
             <TabsTrigger value="contact">Contato</TabsTrigger>
-            <TabsTrigger value="social">Redes Sociais</TabsTrigger>
+            <TabsTrigger value="footer">Footer</TabsTrigger>
             <TabsTrigger value="footer">Footer</TabsTrigger>
              <TabsTrigger value="security">
                <Shield className="h-3 w-3 mr-1" />
@@ -283,43 +277,7 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="social" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Instagram className="h-5 w-5" />
-                  Redes Sociais
-                </CardTitle>
-                <CardDescription>Links para suas redes sociais</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Instagram className="h-4 w-4" />
-                      Instagram
-                    </Label>
-                    <Input
-                      value={formData.instagram_url || ''}
-                      onChange={(e) => setFormData({ ...formData, instagram_url: e.target.value })}
-                      placeholder="https://instagram.com/sualoja"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Facebook className="h-4 w-4" />
-                      Facebook
-                    </Label>
-                    <Input
-                      value={formData.facebook_url || ''}
-                      onChange={(e) => setFormData({ ...formData, facebook_url: e.target.value })}
-                      placeholder="https://facebook.com/sualoja"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {/* Redes Sociais agora em /admin/redes-sociais */}
 
           {/* Shipping, Payments and Rede tabs moved to Integrações */}
 

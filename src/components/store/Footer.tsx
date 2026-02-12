@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Phone, Mail, MapPin } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { SocialIcons } from './SocialIcons';
+import { useStoreContact, formatPhone } from '@/hooks/useStoreContact';
 
 interface PaymentMethod {
   id: string;
@@ -25,6 +26,10 @@ interface SecuritySeal {
 }
 
 export function Footer() {
+  const { data: contact } = useStoreContact();
+  const storeName = contact?.store_name || 'Loja';
+  const logoSrc = contact?.header_logo_url || contact?.logo_url || logo;
+
   const { data: paymentMethods } = useQuery({
     queryKey: ['payment-methods'],
     queryFn: async () => {
@@ -74,10 +79,7 @@ export function Footer() {
       <div className="container-custom py-8 sm:py-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
           <div className="space-y-4 col-span-2 md:col-span-1">
-            <img src={logo} alt="Vanessa Lima Shoes" className="h-10 sm:h-12 brightness-0 invert" loading="lazy" decoding="async" width={120} height={48} />
-            <p className="text-sm text-secondary-foreground/80">
-              Calçados femininos de alta qualidade, feitos com couro legítimo e muito amor.
-            </p>
+            <img src={logoSrc} alt={storeName} className="h-10 sm:h-12 brightness-0 invert max-w-[160px] object-contain" loading="lazy" decoding="async" />
             <div className="flex gap-4">
               <SocialIcons />
             </div>
@@ -108,18 +110,28 @@ export function Footer() {
           <div>
             <h4 className="font-semibold mb-4">Contato</h4>
             <ul className="space-y-3 text-sm text-secondary-foreground/80">
-              <li className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-primary" />
-                <a href="tel:42991120205" className="hover:text-primary transition-colors">42 99112-0205</a>
-              </li>
-              <li className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-primary" />
-                <a href="mailto:contato@vanessalimashoes.com.br" className="hover:text-primary transition-colors">contato@vanessalimashoes.com.br</a>
-              </li>
-              <li className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-primary mt-0.5" />
-                <span>Rua Professor Cleto - até 669/670<br/>União da Vitória - PR, CEP: 84600140</span>
-              </li>
+              {contact?.contact_phone && (
+                <li className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-primary" />
+                  <a href={`tel:${contact.contact_phone.replace(/\D/g, '')}`} className="hover:text-primary transition-colors">
+                    {formatPhone(contact.contact_phone)}
+                  </a>
+                </li>
+              )}
+              {contact?.contact_email && (
+                <li className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-primary" />
+                  <a href={`mailto:${contact.contact_email}`} className="hover:text-primary transition-colors">
+                    {contact.contact_email}
+                  </a>
+                </li>
+              )}
+              {(contact?.full_address || contact?.address) && (
+                <li className="flex items-start gap-2">
+                  <MapPin className="h-4 w-4 text-primary mt-0.5" />
+                  <span>{contact.full_address || contact.address}</span>
+                </li>
+              )}
             </ul>
           </div>
         </div>
@@ -162,18 +174,23 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="bg-secondary-foreground/5">
-        <div className="container-custom py-3">
-          <p className="text-[10px] sm:text-xs text-secondary-foreground/50 text-center leading-relaxed">
-            Vanessa S. de Lima Store · CNPJ: 19.947.968/0001-58 · Rua Professor Cleto - até 669/670, União da Vitória - PR, CEP: 84600140
-          </p>
+      {/* Company info from settings */}
+      {(contact?.cnpj || contact?.full_address) && (
+        <div className="bg-secondary-foreground/5">
+          <div className="container-custom py-3">
+            <p className="text-[10px] sm:text-xs text-secondary-foreground/50 text-center leading-relaxed">
+              {storeName}
+              {contact.cnpj && ` · CNPJ: ${contact.cnpj}`}
+              {contact.full_address && ` · ${contact.full_address}`}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="bg-secondary-foreground/5">
         <div className="container-custom py-3">
           <p className="text-xs text-secondary-foreground/40 text-center">
-            © 2025 Vanessa Lima Shoes. Todos os direitos reservados. · Criado com ❤️ por <a href="https://studioninja.com.br" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors font-medium">Studio Ninja</a>
+            © {new Date().getFullYear()} {storeName}. Todos os direitos reservados.
           </p>
         </div>
       </div>
