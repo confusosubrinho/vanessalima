@@ -1354,6 +1354,12 @@ export type Database = {
           full_address: string | null
           google_analytics_id: string | null
           head_code: string | null
+          header_highlight_icon: string | null
+          header_highlight_text: string | null
+          header_highlight_url: string | null
+          header_logo_url: string | null
+          header_menu_order: Json | null
+          header_subhead_text: string | null
           id: string
           instagram_url: string | null
           installment_interest_rate: number | null
@@ -1403,6 +1409,12 @@ export type Database = {
           full_address?: string | null
           google_analytics_id?: string | null
           head_code?: string | null
+          header_highlight_icon?: string | null
+          header_highlight_text?: string | null
+          header_highlight_url?: string | null
+          header_logo_url?: string | null
+          header_menu_order?: Json | null
+          header_subhead_text?: string | null
           id?: string
           instagram_url?: string | null
           installment_interest_rate?: number | null
@@ -1452,6 +1464,12 @@ export type Database = {
           full_address?: string | null
           google_analytics_id?: string | null
           head_code?: string | null
+          header_highlight_icon?: string | null
+          header_highlight_text?: string | null
+          header_highlight_url?: string | null
+          header_logo_url?: string | null
+          header_menu_order?: Json | null
+          header_subhead_text?: string | null
           id?: string
           instagram_url?: string | null
           installment_interest_rate?: number | null
@@ -1571,6 +1589,12 @@ export type Database = {
           full_address: string | null
           google_analytics_id: string | null
           head_code: string | null
+          header_highlight_icon: string | null
+          header_highlight_text: string | null
+          header_highlight_url: string | null
+          header_logo_url: string | null
+          header_menu_order: Json | null
+          header_subhead_text: string | null
           id: string | null
           instagram_url: string | null
           installment_interest_rate: number | null
@@ -1607,6 +1631,12 @@ export type Database = {
           full_address?: string | null
           google_analytics_id?: string | null
           head_code?: string | null
+          header_highlight_icon?: string | null
+          header_highlight_text?: string | null
+          header_highlight_url?: string | null
+          header_logo_url?: string | null
+          header_menu_order?: Json | null
+          header_subhead_text?: string | null
           id?: string | null
           instagram_url?: string | null
           installment_interest_rate?: number | null
@@ -1643,6 +1673,12 @@ export type Database = {
           full_address?: string | null
           google_analytics_id?: string | null
           head_code?: string | null
+          header_highlight_icon?: string | null
+          header_highlight_text?: string | null
+          header_highlight_url?: string | null
+          header_logo_url?: string | null
+          header_menu_order?: Json | null
+          header_subhead_text?: string | null
           id?: string | null
           instagram_url?: string | null
           installment_interest_rate?: number | null

@@ -1,19 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, ShoppingBag, Menu, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, Truck, Heart } from 'lucide-react';
+import { User, ShoppingBag, Menu, Phone, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, Truck, Heart, Star, Sparkles, Gift, Tag, Flame, Zap, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
 import { useCart } from '@/contexts/CartContext';
 import { useCategories, useProducts } from '@/hooks/useProducts';
 import { useIsMobile } from '@/hooks/use-mobile';
-import logo from '@/assets/logo.png';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import defaultLogo from '@/assets/logo.png';
 import { ShippingCalculator } from './ShippingCalculator';
 import { CouponInput } from './CouponInput';
 import { SearchPreview } from './SearchPreview';
 import { CartProductSuggestions } from './CartProductSuggestions';
 
-const FREE_SHIPPING_THRESHOLD = 399;
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+  Percent, Star, Sparkles, Heart, Gift, Tag, Flame, Zap, Crown, ShoppingBag,
+};
 
 export function Header() {
   const navigate = useNavigate();
@@ -24,6 +28,29 @@ export function Header() {
   const [activeMegaMenu, setActiveMegaMenu] = useState<string | null>(null);
   
   const megaMenuRef = useRef<HTMLDivElement>(null);
+
+  // Fetch header settings from public view
+  const { data: headerSettings } = useQuery({
+    queryKey: ['store-settings-public'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('store_settings_public' as any)
+        .select('*')
+        .maybeSingle();
+      if (error) throw error;
+      return data as any;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const logo = headerSettings?.header_logo_url || headerSettings?.logo_url || defaultLogo;
+  const subheadText = headerSettings?.header_subhead_text || 'Frete grátis para compras acima de R$ 399*';
+  const highlightText = headerSettings?.header_highlight_text || 'Bijuterias';
+  const highlightUrl = headerSettings?.header_highlight_url || '/bijuterias';
+  const highlightIconName = headerSettings?.header_highlight_icon || 'Percent';
+  const HighlightIcon = ICON_MAP[highlightIconName] || Percent;
+  const menuOrder: string[] = (headerSettings?.header_menu_order as string[]) || [];
+  const FREE_SHIPPING_THRESHOLD = headerSettings?.free_shipping_threshold || 399;
 
   // Fetch products for each category for mega menu
   const { data: allProducts } = useProducts();
@@ -50,7 +77,15 @@ export function Header() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const mainCategories = categories?.slice(0, 7) || [];
+  // Order categories by header_menu_order if set
+  const orderedCategories = (() => {
+    const cats = categories || [];
+    if (!menuOrder || menuOrder.length === 0) return cats;
+    const ordered = menuOrder.map(id => cats.find(c => c.id === id)).filter(Boolean) as typeof cats;
+    const remaining = cats.filter(c => !menuOrder.includes(c.id));
+    return [...ordered, ...remaining];
+  })();
+  const mainCategories = orderedCategories.slice(0, 7);
 
   // Get products for a category
   const getProductsForCategory = (categoryId: string) => {
@@ -67,7 +102,7 @@ export function Header() {
       {/* Top bar - Promo */}
       <div className="bg-primary text-primary-foreground text-xs sm:text-sm py-1.5 sm:py-2">
         <div className="container-custom flex items-center justify-center">
-          <span className="font-medium text-center">Frete grátis para compras acima de R$ 399*</span>
+          <span className="font-medium text-center">{subheadText}</span>
         </div>
       </div>
 
@@ -109,12 +144,12 @@ export function Header() {
                 </div>
                 <div className="px-2 mt-2">
                   <Link
-                    to="/bijuterias"
+                    to={highlightUrl}
                     className="flex items-center gap-3 py-3 px-4 bg-secondary text-secondary-foreground rounded-lg font-medium text-sm"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <Percent className="h-4 w-4" />
-                    Bijuterias
+                    <HighlightIcon className="h-4 w-4" />
+                    {highlightText}
                   </Link>
                 </div>
                 <div className="border-t mt-4 pt-3 px-2 space-y-0.5">
@@ -500,10 +535,10 @@ export function Header() {
               })}
               </div>
 
-              {/* Bijuterias button - right side */}
-              <Link to="/bijuterias" className="flex-shrink-0 flex items-center gap-1.5 py-2 px-5 bg-secondary text-secondary-foreground rounded-full hover:bg-secondary/80 transition-colors font-medium text-sm ml-2">
-                <Percent className="h-3.5 w-3.5" />
-                Bijuterias
+              {/* Highlight button - right side */}
+              <Link to={highlightUrl} className="flex-shrink-0 flex items-center gap-1.5 py-2 px-5 bg-secondary text-secondary-foreground rounded-full hover:bg-secondary/80 transition-colors font-medium text-sm ml-2">
+                <HighlightIcon className="h-3.5 w-3.5" />
+                {highlightText}
               </Link>
             </div>
         </div>
