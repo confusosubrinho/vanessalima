@@ -138,10 +138,16 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
   });
 
   const { data: storeSettings } = useQuery({
-    queryKey: ['store-settings'],
+    queryKey: ['pricing-config'],
     queryFn: async () => {
-      const { data } = await supabase.from('store_settings').select('pix_discount, installment_interest_rate, installments_without_interest, max_installments, cash_discount').single();
-      return data;
+      const { data } = await supabase.from('payment_pricing_config' as any).select('*').eq('is_active', true).limit(1).maybeSingle();
+      return data ? {
+        pix_discount: Number((data as any).pix_discount) || 5,
+        installment_interest_rate: (data as any).interest_mode === 'fixed' ? Number((data as any).monthly_rate_fixed) || 0 : 0,
+        installments_without_interest: (data as any).interest_free_installments || 3,
+        max_installments: (data as any).max_installments || 6,
+        cash_discount: Number((data as any).cash_discount) || 5,
+      } : null;
     },
   });
 

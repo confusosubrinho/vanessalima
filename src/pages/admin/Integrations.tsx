@@ -42,12 +42,6 @@ function AppmaxGatewayPanel() {
   const [form, setForm] = useState({
     appmax_access_token: '',
     appmax_environment: 'sandbox',
-    pix_discount: 5,
-    cash_discount: 5,
-    max_installments: 6,
-    installments_without_interest: 3,
-    installment_interest_rate: 0,
-    min_installment_value: 30,
   });
 
   useEffect(() => {
@@ -55,12 +49,6 @@ function AppmaxGatewayPanel() {
       setForm({
         appmax_access_token: (settings as any).appmax_access_token || '',
         appmax_environment: (settings as any).appmax_environment || 'sandbox',
-        pix_discount: (settings as any).pix_discount ?? 5,
-        cash_discount: (settings as any).cash_discount ?? 5,
-        max_installments: (settings as any).max_installments || 6,
-        installments_without_interest: (settings as any).installments_without_interest ?? 3,
-        installment_interest_rate: (settings as any).installment_interest_rate ?? 0,
-        min_installment_value: (settings as any).min_installment_value ?? 30,
       });
     }
   }, [settings]);
@@ -113,37 +101,9 @@ function AppmaxGatewayPanel() {
 
       <Separator />
 
-      {/* Payment options */}
-      <div className="space-y-4">
-        <h4 className="font-medium text-sm">Opções de Pagamento</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Desconto no Pix (%)</Label>
-            <Input type="number" step="0.1" value={form.pix_discount} onChange={(e) => setForm({ ...form, pix_discount: parseFloat(e.target.value) })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Desconto à Vista (%)</Label>
-            <Input type="number" step="0.1" value={form.cash_discount} onChange={(e) => setForm({ ...form, cash_discount: parseFloat(e.target.value) })} />
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Máx. Parcelas</Label>
-            <Input type="number" value={form.max_installments} onChange={(e) => setForm({ ...form, max_installments: parseInt(e.target.value) })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Parcelas s/ Juros</Label>
-            <Input type="number" value={form.installments_without_interest} onChange={(e) => setForm({ ...form, installments_without_interest: parseInt(e.target.value) })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Juros (%/mês)</Label>
-            <Input type="number" step="0.01" value={form.installment_interest_rate} onChange={(e) => setForm({ ...form, installment_interest_rate: parseFloat(e.target.value) })} />
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Valor mínimo da parcela (R$)</Label>
-          <Input type="number" step="0.01" value={form.min_installment_value} onChange={(e) => setForm({ ...form, min_installment_value: parseFloat(e.target.value) })} className="w-[200px]" />
-        </div>
+      <div className="bg-muted/50 rounded-lg p-3 text-xs">
+        <p className="font-medium">💡 Configurações financeiras</p>
+        <p className="text-muted-foreground mt-1">Parcelamento, juros e descontos agora são gerenciados exclusivamente na aba <strong>"Juros e Cartões"</strong> do menu lateral.</p>
       </div>
 
       <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">

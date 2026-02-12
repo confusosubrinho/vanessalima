@@ -12,21 +12,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { validateCPF, formatCPF, formatCEP, formatPhone, lookupCEP } from '@/lib/validators';
 import { ShippingCalculator } from '@/components/store/ShippingCalculator';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
-import { getInstallmentOptions, formatCurrency as formatPricingCurrency } from '@/lib/pricingEngine';
+import { getInstallmentOptions, formatCurrency as formatPricingCurrency, type PricingConfig } from '@/lib/pricingEngine';
 import { CouponInput } from '@/components/store/CouponInput';
 import logo from '@/assets/logo.png';
 
 type Step = 'identification' | 'shipping' | 'payment';
-
-interface PaymentConfig {
-  max_installments: number;
-  installments_without_interest: number;
-  installment_interest_rate: number;
-  min_installment_value: number;
-  pix_discount: number;
-  cash_discount: number;
-  gateway_configured: boolean;
-}
 
 function formatCardNumber(value: string) {
   const digits = value.replace(/\D/g, '').slice(0, 16);
@@ -55,15 +45,14 @@ export default function Checkout() {
   const [selectedInstallments, setSelectedInstallments] = useState(1);
   const [customerIp, setCustomerIp] = useState('0.0.0.0');
 
-  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig>({
-    max_installments: 6,
-    installments_without_interest: 3,
-    installment_interest_rate: 0,
-    min_installment_value: 30,
-    pix_discount: 5,
-    cash_discount: 5,
-    gateway_configured: false,
-  });
+  // Use central pricing config
+  const { data: pricingConfig } = usePricingConfig();
+  const pc: PricingConfig = pricingConfig || {
+    id: '', is_active: true, max_installments: 6, interest_free_installments: 3,
+    card_cash_rate: 0, pix_discount: 5, cash_discount: 5, interest_mode: 'fixed',
+    monthly_rate_fixed: 0, monthly_rate_by_installment: {}, min_installment_value: 25,
+    rounding_mode: 'adjust_last', transparent_checkout_fee_enabled: false, transparent_checkout_fee_percent: 0,
+  };
 
   const [formData, setFormData] = useState({
     email: '',
@@ -84,17 +73,8 @@ export default function Checkout() {
     cardCvv: '',
   });
 
-  // Fetch payment config from edge function
+  // Collect customer IP
   useEffect(() => {
-    supabase.functions.invoke('process-payment', {
-      body: { action: 'get_payment_config' },
-    }).then(({ data }) => {
-      if (data && !data.error) {
-        setPaymentConfig(data);
-      }
-    }).catch(() => {});
-
-    // Collect customer IP via Appmax JS or fallback
     try {
       if ((window as any).AppmaxScripts) {
         (window as any).AppmaxScripts.init(
@@ -102,7 +82,6 @@ export default function Checkout() {
           () => {}
         );
       } else {
-        // Fallback: fetch IP from public API
         fetch('https://api.ipify.org?format=json')
           .then(r => r.json())
           .then(d => { if (d?.ip) setCustomerIp(d.ip); })
@@ -197,43 +176,17 @@ export default function Checkout() {
     }
   };
 
-  // Installment calculation
-  const calculateInstallments = () => {
-    const baseAmount = subtotal - discount + shippingCost;
-    const installmentOptions: { value: number; label: string; total: number }[] = [];
+  // Use pricing engine for installments
+  const shippingCost = selectedShipping ? selectedShipping.price : 0;
+  const total = subtotal - discount + shippingCost;
+  const pixDiscount = pc.pix_discount / 100;
+  const finalTotal = formData.paymentMethod === 'pix' ? total * (1 - pixDiscount) : total;
 
-    for (let i = 1; i <= paymentConfig.max_installments; i++) {
-      let installmentTotal: number;
-      let installmentValue: number;
-
-      if (i <= paymentConfig.installments_without_interest) {
-        installmentTotal = baseAmount;
-        installmentValue = baseAmount / i;
-      } else {
-        const monthlyRate = paymentConfig.installment_interest_rate / 100;
-        if (monthlyRate > 0) {
-          installmentTotal = baseAmount * Math.pow(1 + monthlyRate, i);
-          installmentValue = installmentTotal / i;
-        } else {
-          installmentTotal = baseAmount;
-          installmentValue = baseAmount / i;
-        }
-      }
-
-      if (installmentValue < paymentConfig.min_installment_value && i > 1) break;
-
-      const suffix = i <= paymentConfig.installments_without_interest ? ' sem juros' : ` (total ${formatPrice(installmentTotal)})`;
-      installmentOptions.push({
-        value: i,
-        label: `${i}x de ${formatPrice(installmentValue)}${suffix}`,
-        total: installmentTotal,
-      });
-    }
-
-    return installmentOptions;
-  };
-
-  const installmentOptions = calculateInstallments();
+  const installmentOptions = getInstallmentOptions(total, pc).map(opt => ({
+    value: opt.n,
+    label: opt.label,
+    total: opt.total,
+  }));
 
   const handleSubmit = async () => {
     if (formData.paymentMethod === 'card') {
@@ -249,11 +202,11 @@ export default function Checkout() {
       const { data: session } = await supabase.auth.getSession();
       const userId = session?.session?.user?.id || null;
 
-      // Determine final total
+      // Determine final total using pricing engine
       let orderTotal: number;
       if (formData.paymentMethod === 'pix') {
         orderTotal = finalTotal;
-      } else if (formData.paymentMethod === 'card' && selectedInstallments > paymentConfig.installments_without_interest) {
+      } else if (formData.paymentMethod === 'card' && selectedInstallments > pc.interest_free_installments) {
         const selected = installmentOptions.find(o => o.value === selectedInstallments);
         orderTotal = selected ? selected.total : finalTotal;
       } else {
@@ -337,8 +290,6 @@ export default function Checkout() {
       };
 
       if (formData.paymentMethod === 'card') {
-        // Tokenize card via Appmax JS SDK (PCI compliant)
-        // Raw card data is NEVER sent to the edge function
         try {
           const tokenizeResponse = await supabase.functions.invoke('process-payment', {
             body: {
@@ -406,12 +357,6 @@ export default function Checkout() {
       setIsLoading(false);
     }
   };
-
-  // Use real shipping from cart context
-  const shippingCost = selectedShipping ? selectedShipping.price : 0;
-  const total = subtotal - discount + shippingCost;
-  const pixDiscount = paymentConfig.pix_discount / 100;
-  const finalTotal = formData.paymentMethod === 'pix' ? total * (1 - pixDiscount) : total;
 
   // Pre-fill CEP from cart
   useEffect(() => {
@@ -694,9 +639,9 @@ export default function Checkout() {
                         <RadioGroupItem value="pix" id="payment-pix" />
                         <Label htmlFor="payment-pix" className="cursor-pointer flex-1">
                           <span className="font-medium">PIX</span>
-                          <p className="text-sm text-muted-foreground">Pagamento instantâneo com {paymentConfig.pix_discount}% de desconto</p>
+                          <p className="text-sm text-muted-foreground">Pagamento instantâneo com {pc.pix_discount}% de desconto</p>
                         </Label>
-                        <span className="font-bold text-primary">{formatPrice(total * (1 - paymentConfig.pix_discount / 100))}</span>
+                        <span className="font-bold text-primary">{formatPrice(total * (1 - pc.pix_discount / 100))}</span>
                       </div>
                     </div>
                     <div className={`p-4 border rounded-lg cursor-pointer transition-colors ${formData.paymentMethod === 'card' ? 'border-primary bg-primary/5' : 'hover:border-primary'}`}>
@@ -705,8 +650,8 @@ export default function Checkout() {
                         <Label htmlFor="payment-card" className="cursor-pointer flex-1">
                           <span className="font-medium">Cartão de Crédito</span>
                           <p className="text-sm text-muted-foreground">
-                            Em até {paymentConfig.installments_without_interest}x sem juros
-                            {paymentConfig.max_installments > paymentConfig.installments_without_interest && ` ou até ${paymentConfig.max_installments}x`}
+                            Em até {pc.interest_free_installments}x sem juros
+                            {pc.max_installments > pc.interest_free_installments && ` ou até ${pc.max_installments}x`}
                           </p>
                         </Label>
                         <span className="font-medium">{formatPrice(total)}</span>
@@ -802,7 +747,7 @@ export default function Checkout() {
                         Processando pagamento...
                       </>
                     ) : (
-                      `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > paymentConfig.installments_without_interest
+                      `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > pc.interest_free_installments
                         ? (installmentOptions.find(o => o.value === selectedInstallments)?.total || finalTotal)
                         : finalTotal
                       )}`
@@ -892,8 +837,8 @@ export default function Checkout() {
                 </div>
                 {formData.paymentMethod === 'pix' && (
                   <div className="flex justify-between text-sm text-primary">
-                    <span>Desconto PIX ({paymentConfig.pix_discount}%)</span>
-                    <span>-{formatPrice(total * (paymentConfig.pix_discount / 100))}</span>
+                    <span>Desconto PIX ({pc.pix_discount}%)</span>
+                    <span>-{formatPrice(total * (pc.pix_discount / 100))}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">

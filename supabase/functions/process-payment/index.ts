@@ -123,11 +123,10 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Read appmax environment from store_settings
     const { data: settings, error: settingsError } = await supabase
       .from("store_settings")
-      .select(
-        "appmax_environment, max_installments, installments_without_interest, installment_interest_rate, min_installment_value, pix_discount, cash_discount"
-      )
+      .select("appmax_environment")
       .limit(1)
       .maybeSingle();
 
@@ -135,20 +134,27 @@ serve(async (req) => {
 
     const appmaxEnv = settings?.appmax_environment || "production";
 
+    // Read financial config from payment_pricing_config (single source of truth)
+    const { data: pricingConfig } = await supabase
+      .from("payment_pricing_config")
+      .select("*")
+      .eq("is_active", true)
+      .limit(1)
+      .maybeSingle();
+
     const { action, ...payload } = await req.json();
 
     // ─── Action: get_payment_config ───
     if (action === "get_payment_config") {
-      // Check if OAuth credentials exist
       const hasCredentials = !!Deno.env.get("APPMAX_CLIENT_ID") && !!Deno.env.get("APPMAX_CLIENT_SECRET");
       return new Response(
         JSON.stringify({
-          max_installments: settings?.max_installments || 6,
-          installments_without_interest: settings?.installments_without_interest || 3,
-          installment_interest_rate: settings?.installment_interest_rate || 0,
-          min_installment_value: settings?.min_installment_value || 30,
-          pix_discount: settings?.pix_discount || 0,
-          cash_discount: settings?.cash_discount || 0,
+          max_installments: pricingConfig?.max_installments || 6,
+          installments_without_interest: pricingConfig?.interest_free_installments || 3,
+          installment_interest_rate: pricingConfig?.interest_mode === "fixed" ? (pricingConfig?.monthly_rate_fixed || 0) : 0,
+          min_installment_value: pricingConfig?.min_installment_value || 30,
+          pix_discount: pricingConfig?.pix_discount || 0,
+          cash_discount: pricingConfig?.cash_discount || 0,
           gateway_configured: hasCredentials,
           gateway: "appmax",
         }),

@@ -1009,6 +1009,8 @@ export type Database = {
           monthly_rate_fixed: number | null
           pix_discount: number
           rounding_mode: string
+          transparent_checkout_fee_enabled: boolean
+          transparent_checkout_fee_percent: number
           updated_at: string
           updated_by: string | null
         }
@@ -1026,6 +1028,8 @@ export type Database = {
           monthly_rate_fixed?: number | null
           pix_discount?: number
           rounding_mode?: string
+          transparent_checkout_fee_enabled?: boolean
+          transparent_checkout_fee_percent?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -1043,6 +1047,8 @@ export type Database = {
           monthly_rate_fixed?: number | null
           pix_discount?: number
           rounding_mode?: string
+          transparent_checkout_fee_enabled?: boolean
+          transparent_checkout_fee_percent?: number
           updated_at?: string
           updated_by?: string | null
         }
