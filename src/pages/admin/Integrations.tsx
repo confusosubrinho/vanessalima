@@ -285,8 +285,8 @@ function MelhorEnvioPanel() {
 
       <Separator />
 
-      {/* Allowed shipping services */}
-      <div className="space-y-3">
+      {/* Allowed shipping services - filter */}
+      <div className="space-y-3" data-section="allowed-services">
         <h4 className="font-medium text-sm flex items-center gap-2">
           <Filter className="h-4 w-4" />
           Transportadoras Permitidas
