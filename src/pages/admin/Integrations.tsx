@@ -418,6 +418,145 @@ function MelhorEnvioPanel() {
 
 // ─── Bling ERP Panel (OAuth2) ───
 
+// ─── Bling Sync Config Panel ───
+
+interface BlingSyncConfigState {
+  sync_stock: boolean;
+  sync_titles: boolean;
+  sync_descriptions: boolean;
+  sync_images: boolean;
+  sync_prices: boolean;
+  sync_dimensions: boolean;
+  sync_sku_gtin: boolean;
+  sync_variant_active: boolean;
+  import_new_products: boolean;
+  merge_by_sku: boolean;
+  first_import_done: boolean;
+}
+
+function BlingSyncConfigPanel() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: syncConfig, isLoading } = useQuery({
+    queryKey: ['bling-sync-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('bling_sync_config').select('*').limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const [config, setConfig] = useState<BlingSyncConfigState>({
+    sync_stock: true, sync_titles: false, sync_descriptions: false, sync_images: false,
+    sync_prices: false, sync_dimensions: false, sync_sku_gtin: false, sync_variant_active: false,
+    import_new_products: true, merge_by_sku: true, first_import_done: false,
+  });
+
+  useEffect(() => {
+    if (syncConfig) {
+      setConfig({
+        sync_stock: syncConfig.sync_stock ?? true,
+        sync_titles: syncConfig.sync_titles ?? false,
+        sync_descriptions: syncConfig.sync_descriptions ?? false,
+        sync_images: syncConfig.sync_images ?? false,
+        sync_prices: syncConfig.sync_prices ?? false,
+        sync_dimensions: syncConfig.sync_dimensions ?? false,
+        sync_sku_gtin: syncConfig.sync_sku_gtin ?? false,
+        sync_variant_active: syncConfig.sync_variant_active ?? false,
+        import_new_products: syncConfig.import_new_products ?? true,
+        merge_by_sku: syncConfig.merge_by_sku ?? true,
+        first_import_done: syncConfig.first_import_done ?? false,
+      });
+    }
+  }, [syncConfig]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (syncConfig?.id) {
+        const { error } = await supabase.from('bling_sync_config').update(config as any).eq('id', syncConfig.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('bling_sync_config').insert(config as any);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bling-sync-config'] });
+      toast({ title: 'Configurações de sincronização salvas!' });
+    },
+    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+  });
+
+  const toggleItems: { key: keyof BlingSyncConfigState; label: string; description: string; group: 'sync' | 'import' }[] = [
+    { key: 'sync_stock', label: 'Estoque', description: 'Atualizar quantidade em estoque das variantes', group: 'sync' },
+    { key: 'sync_titles', label: 'Títulos', description: 'Sobrescrever nome do produto com o do Bling', group: 'sync' },
+    { key: 'sync_descriptions', label: 'Descrições', description: 'Sobrescrever descrição com a do Bling', group: 'sync' },
+    { key: 'sync_images', label: 'Imagens', description: 'Substituir fotos do produto pelas do Bling', group: 'sync' },
+    { key: 'sync_prices', label: 'Preços', description: 'Atualizar preço base e promocional', group: 'sync' },
+    { key: 'sync_dimensions', label: 'Dimensões/Peso', description: 'Atualizar peso, largura, altura e profundidade', group: 'sync' },
+    { key: 'sync_sku_gtin', label: 'SKU e GTIN', description: 'Atualizar códigos SKU e GTIN', group: 'sync' },
+    { key: 'sync_variant_active', label: 'Status de variante', description: 'Controlar ativo/inativo da variante pelo Bling', group: 'sync' },
+    { key: 'import_new_products', label: 'Importar novos produtos', description: 'Criar automaticamente produtos que não existem localmente', group: 'import' },
+    { key: 'merge_by_sku', label: 'Vincular por SKU', description: 'Se não encontrar por Bling ID, tentar vincular por SKU existente', group: 'import' },
+  ];
+
+  if (isLoading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Carregando...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-sm flex items-center gap-2">
+          <Settings2 className="h-4 w-4" />
+          O que sincronizar do Bling
+        </h4>
+        {config.first_import_done && (
+          <Badge variant="secondary" className="text-[10px]">Primeira importação concluída</Badge>
+        )}
+      </div>
+
+      <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground">
+        <p><strong>Regra padrão:</strong> Após a primeira importação, somente <strong>estoque</strong> é sincronizado. Ative os toggles abaixo para permitir que o Bling sobrescreva outros campos.</p>
+        <p className="mt-1"><strong>⚠️ Produtos inativos</strong> na loja nunca são sincronizados, mesmo com toggles ligados.</p>
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Campos de sincronização</p>
+        {toggleItems.filter(t => t.group === 'sync').map(item => (
+          <div key={item.key} className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50">
+            <div>
+              <p className="text-sm font-medium">{item.label}</p>
+              <p className="text-xs text-muted-foreground">{item.description}</p>
+            </div>
+            <Switch checked={config[item.key] as boolean} onCheckedChange={v => setConfig(prev => ({ ...prev, [item.key]: v }))} />
+          </div>
+        ))}
+      </div>
+
+      <Separator />
+
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Importação</p>
+        {toggleItems.filter(t => t.group === 'import').map(item => (
+          <div key={item.key} className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50">
+            <div>
+              <p className="text-sm font-medium">{item.label}</p>
+              <p className="text-xs text-muted-foreground">{item.description}</p>
+            </div>
+            <Switch checked={config[item.key] as boolean} onCheckedChange={v => setConfig(prev => ({ ...prev, [item.key]: v }))} />
+          </div>
+        ))}
+      </div>
+
+      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} size="sm" className="w-full">
+        {saveMutation.isPending ? 'Salvando...' : 'Salvar Configurações de Sincronização'}
+      </Button>
+    </div>
+  );
+}
+
+// ─── Bling ERP Panel (OAuth2) ───
+
 function BlingPanel() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -708,11 +847,30 @@ function BlingPanel() {
       {isConnected && (
         <>
           <Separator />
+
+          {/* Sync Config Toggles */}
+          <BlingSyncConfigPanel />
+
+          <Separator />
           
           {/* Sync Actions */}
           <div className="space-y-4">
-            <h4 className="font-medium text-sm">🔄 Sincronização</h4>
+            <h4 className="font-medium text-sm">🔄 Ações de Sincronização</h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Button
+                variant="default"
+                onClick={() => handleSync('first_import', 'Importação inicial (primeira vez)')}
+                disabled={!!syncing}
+                className="h-auto py-3 flex flex-col items-center gap-1"
+              >
+                {syncing === 'first_import' ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Package className="h-5 w-5" />
+                )}
+                <span className="text-xs font-medium">Sincronizar Tudo</span>
+                <span className="text-[10px] opacity-80">Primeira vez (sem duplicar)</span>
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => handleSync('sync_products', 'Importação completa de produtos')}
@@ -729,20 +887,6 @@ function BlingPanel() {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => handleSync('sync_products', 'Importação de novos produtos', { new_only: true })}
-                disabled={!!syncing}
-                className="h-auto py-3 flex flex-col items-center gap-1 border-primary/30"
-              >
-                {syncing === 'sync_products' ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Plus className="h-5 w-5" />
-                )}
-                <span className="text-xs font-medium">Apenas Novos</span>
-                <span className="text-[10px] text-muted-foreground">Ignora existentes</span>
-              </Button>
-              <Button
-                variant="outline"
                 onClick={() => handleSync('sync_stock', 'Sincronização de estoque')}
                 disabled={!!syncing}
                 className="h-auto py-3 flex flex-col items-center gap-1"
@@ -753,21 +897,21 @@ function BlingPanel() {
                   <ArrowUpDown className="h-5 w-5" />
                 )}
                 <span className="text-xs font-medium">Sincronizar Estoque</span>
-                <span className="text-[10px] text-muted-foreground">Bling → Loja</span>
+                <span className="text-[10px] text-muted-foreground">Apenas ativos</span>
               </Button>
               <Button
                 variant="outline"
-                onClick={() => handleSync('cleanup_variations', 'Limpeza de variações duplicadas')}
+                onClick={() => handleSync('sync_products', 'Reprocessar com erro', { retry_errors: true })}
                 disabled={!!syncing}
                 className="h-auto py-3 flex flex-col items-center gap-1"
               >
-                {syncing === 'cleanup_variations' ? (
+                {syncing === 'sync_products' ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
-                  <Filter className="h-5 w-5" />
+                  <AlertCircle className="h-5 w-5" />
                 )}
-                <span className="text-xs font-medium">Limpar Duplicados</span>
-                <span className="text-[10px] text-muted-foreground">Remove variações como produto</span>
+                <span className="text-xs font-medium">Reprocessar Erros</span>
+                <span className="text-[10px] text-muted-foreground">Apenas ativos com erro</span>
               </Button>
             </div>
             {syncResult && (
@@ -775,32 +919,38 @@ function BlingPanel() {
                 <p className="font-medium">Resultado da Sincronização:</p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {syncResult.imported != null && (
-                    <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded p-2 text-center">
-                      <p className="text-lg font-bold text-green-700 dark:text-green-400">{syncResult.imported}</p>
-                      <p className="text-[10px] text-green-600 dark:text-green-500">Importados</p>
+                    <div className="bg-primary/10 border border-primary/20 rounded p-2 text-center">
+                      <p className="text-lg font-bold text-primary">{syncResult.imported}</p>
+                      <p className="text-[10px] text-muted-foreground">Importados</p>
                     </div>
                   )}
                   {syncResult.updated != null && (
-                    <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded p-2 text-center">
-                      <p className="text-lg font-bold text-blue-700 dark:text-blue-400">{syncResult.updated}</p>
-                      <p className="text-[10px] text-blue-600 dark:text-blue-500">Atualizados</p>
+                    <div className="bg-accent/30 border border-accent/50 rounded p-2 text-center">
+                      <p className="text-lg font-bold text-accent-foreground">{syncResult.updated}</p>
+                      <p className="text-[10px] text-muted-foreground">Atualizados</p>
+                    </div>
+                  )}
+                  {syncResult.linked_sku != null && syncResult.linked_sku > 0 && (
+                    <div className="bg-secondary/30 border border-secondary/50 rounded p-2 text-center">
+                      <p className="text-lg font-bold text-secondary-foreground">{syncResult.linked_sku}</p>
+                      <p className="text-[10px] text-muted-foreground">Vinculados SKU</p>
                     </div>
                   )}
                   {syncResult.variants != null && (
-                    <div className="bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded p-2 text-center">
-                      <p className="text-lg font-bold text-purple-700 dark:text-purple-400">{syncResult.variants}</p>
-                      <p className="text-[10px] text-purple-600 dark:text-purple-500">Variações</p>
+                    <div className="bg-muted border border-border rounded p-2 text-center">
+                      <p className="text-lg font-bold">{syncResult.variants}</p>
+                      <p className="text-[10px] text-muted-foreground">Variações</p>
                     </div>
                   )}
                   {syncResult.errors != null && syncResult.errors > 0 && (
-                    <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded p-2 text-center">
-                      <p className="text-lg font-bold text-red-700 dark:text-red-400">{syncResult.errors}</p>
-                      <p className="text-[10px] text-red-600 dark:text-red-500">Erros</p>
+                    <div className="bg-destructive/10 border border-destructive/20 rounded p-2 text-center">
+                      <p className="text-lg font-bold text-destructive">{syncResult.errors}</p>
+                      <p className="text-[10px] text-muted-foreground">Erros</p>
                     </div>
                   )}
                 </div>
                 {syncResult.totalBlingListItems != null && (
-                  <p className="text-muted-foreground">Total de itens no Bling: <strong>{syncResult.totalBlingListItems}</strong> | Produtos processados: <strong>{syncResult.totalProcessed}</strong> | Ignorados (variações): <strong>{syncResult.skipped || 0}</strong> | Limpos: <strong>{syncResult.cleaned || 0}</strong></p>
+                  <p className="text-muted-foreground">Total de itens no Bling: <strong>{syncResult.totalBlingListItems}</strong> | Produtos processados: <strong>{syncResult.totalProcessed}</strong> | Ignorados: <strong>{syncResult.skipped || 0}</strong></p>
                 )}
                 {syncResult.log?.length > 0 && (
                   <div className="mt-3 space-y-2">
@@ -810,7 +960,9 @@ function BlingPanel() {
                         { key: 'all', label: 'Todos', count: syncResult.log.length },
                         { key: 'imported', label: '✅ Novos', count: syncResult.log.filter((e: any) => e.status === 'imported').length },
                         { key: 'updated', label: '🔄 Atualizados', count: syncResult.log.filter((e: any) => e.status === 'updated').length },
+                        { key: 'linked_sku', label: '🔗 Vinculados', count: syncResult.log.filter((e: any) => e.status === 'linked_sku').length },
                         { key: 'grouped', label: '🔗 Agrupados', count: syncResult.log.filter((e: any) => e.status === 'grouped').length },
+                        { key: 'ignored_inactive', label: '⛔ Inativos', count: syncResult.log.filter((e: any) => e.status === 'ignored_inactive').length },
                         { key: 'error', label: '❌ Erros', count: syncResult.log.filter((e: any) => e.status === 'error').length },
                         { key: 'skipped', label: '⏭ Ignorados', count: syncResult.log.filter((e: any) => e.status === 'skipped').length },
                       ].filter(f => f.count > 0).map(f => (
@@ -844,14 +996,20 @@ function BlingPanel() {
                             .map((entry: any, idx: number) => (
                             <React.Fragment key={idx}>
                               <tr 
-                                className={`border-t cursor-pointer hover:bg-muted/50 ${entry.status === 'error' ? 'bg-destructive/10' : entry.status === 'imported' ? 'bg-primary/5' : entry.status === 'updated' ? 'bg-accent/30' : ''}`}
+                                className={`border-t cursor-pointer hover:bg-muted/50 ${entry.status === 'error' ? 'bg-destructive/10' : entry.status === 'imported' ? 'bg-primary/5' : entry.status === 'updated' ? 'bg-accent/30' : entry.status === 'ignored_inactive' ? 'bg-muted/80' : ''}`}
                                 onClick={() => setExpandedLogRow(expandedLogRow === idx ? null : idx)}
                               >
                                 <td className="p-1.5 font-mono">{entry.bling_id}</td>
                                 <td className="p-1.5 max-w-[200px] truncate">{entry.name}</td>
                                 <td className="p-1.5">
-                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${entry.status === 'imported' ? 'bg-primary/20 text-primary' : entry.status === 'updated' ? 'bg-accent text-accent-foreground' : entry.status === 'grouped' ? 'bg-secondary text-secondary-foreground' : entry.status === 'error' ? 'bg-destructive/20 text-destructive' : 'bg-muted text-muted-foreground'}`}>
-                                    {entry.status === 'imported' ? '✅ Novo' : entry.status === 'updated' ? '🔄 Atualizado' : entry.status === 'grouped' ? '🔗 Agrupado' : entry.status === 'error' ? '❌ Erro' : '⏭ Ignorado'}
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    entry.status === 'imported' ? 'bg-primary/20 text-primary' : 
+                                    entry.status === 'updated' ? 'bg-accent text-accent-foreground' : 
+                                    entry.status === 'grouped' ? 'bg-secondary text-secondary-foreground' : 
+                                    entry.status === 'linked_sku' ? 'bg-secondary text-secondary-foreground' : 
+                                    entry.status === 'ignored_inactive' ? 'bg-muted text-muted-foreground' : 
+                                    entry.status === 'error' ? 'bg-destructive/20 text-destructive' : 'bg-muted text-muted-foreground'}`}>
+                                    {entry.status === 'imported' ? '✅ Novo' : entry.status === 'updated' ? '🔄 Atualizado' : entry.status === 'grouped' ? '🔗 Agrupado' : entry.status === 'linked_sku' ? '🔗 Vinculado SKU' : entry.status === 'ignored_inactive' ? '⛔ Inativo' : entry.status === 'error' ? '❌ Erro' : '⏭ Ignorado'}
                                   </span>
                                 </td>
                                 <td className="p-1.5 text-center">{entry.variants || '-'}</td>
@@ -885,11 +1043,11 @@ function BlingPanel() {
           {/* Webhook URL */}
           <div className="space-y-3">
             <h4 className="font-medium text-sm">🔗 Webhook (Sincronização em Tempo Real)</h4>
-            <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
-              <Check className="h-5 w-5 text-green-600" />
+            <div className="flex items-center gap-2 p-3 bg-primary/5 rounded-lg border border-primary/20">
+              <Check className="h-5 w-5 text-primary" />
               <div>
-                <span className="text-sm font-medium text-green-700 dark:text-green-400">Sincronização automática ativa</span>
-                <p className="text-xs text-green-600 dark:text-green-500">Estoque atualiza a cada 5 minutos automaticamente + webhook para tempo real</p>
+                <span className="text-sm font-medium">Sincronização automática ativa</span>
+                <p className="text-xs text-muted-foreground">Estoque atualiza a cada 5 minutos + webhook para tempo real</p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">Configure o URL abaixo como callback no Bling para atualizações instantâneas de estoque e produtos.</p>
@@ -915,8 +1073,6 @@ function BlingPanel() {
                   <Badge variant="secondary" className="text-[10px]">produto.alteracao</Badge>
                   <Badge variant="secondary" className="text-[10px]">produto.inclusao</Badge>
                 </div>
-                <p className="text-muted-foreground mt-2">4. Método: <strong>POST</strong></p>
-                <p className="text-muted-foreground">Ao alterar estoque ou produto no Bling, a loja será atualizada em segundos.</p>
               </div>
             </div>
           </div>
@@ -924,14 +1080,14 @@ function BlingPanel() {
           <Separator />
 
           <div className="space-y-2">
-            <h4 className="font-medium text-sm">✅ Funcionalidades ativas</h4>
+            <h4 className="font-medium text-sm">✅ Regras ativas</h4>
             <ul className="text-xs text-muted-foreground space-y-1">
-              <li>• Importar produtos do Bling com fotos, variantes e estoque</li>
-              <li>• Filtro por loja virtual (sincroniza apenas produtos vinculados)</li>
-              <li>• Webhook para atualização de estoque em tempo real</li>
-              <li>• Pedidos da loja são enviados automaticamente ao Bling</li>
-              <li>• NF-e é gerada e transmitida à SEFAZ automaticamente</li>
-              <li>• O token é renovado automaticamente a cada 6 horas</li>
+              <li>• <strong>Produtos inativos</strong> nunca sincronizam (estoque, campos, nada)</li>
+              <li>• Após 1ª importação, padrão = somente estoque</li>
+              <li>• Edições manuais (título, preço, imagens) são preservadas</li>
+              <li>• <code>is_active</code> só muda manualmente (exceto exclusão no Bling)</li>
+              <li>• Importação inicial vincula por SKU sem duplicar</li>
+              <li>• Token renovado automaticamente a cada 6 horas</li>
             </ul>
           </div>
         </>
