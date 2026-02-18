@@ -132,7 +132,7 @@
   }
 
   .card-product {
-    @apply bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow;
+    @apply bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all duration-200;
   }
 
   .badge-new {
@@ -140,7 +140,7 @@
   }
 
   .badge-sale {
-    @apply bg-primary text-primary-foreground text-xs font-medium px-2 py-1 rounded;
+    @apply bg-destructive text-destructive-foreground text-xs font-medium px-2 py-1 rounded;
   }
 
   .input-search {
@@ -156,11 +156,37 @@
   }
 
   .price-sale {
-    @apply text-primary font-bold;
+    @apply text-destructive font-bold;
   }
 
   .price-current {
     @apply text-foreground font-bold text-lg;
+  }
+
+  /* Microanimation: button press */
+  .btn-press {
+    @apply transition-transform duration-150 active:scale-[0.97];
+  }
+
+  /* Microanimation: card lift on hover (desktop) */
+  .card-lift {
+    @apply transition-all duration-200;
+  }
+  .card-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px hsl(var(--foreground) / 0.08);
+  }
+
+  /* Shimmer loading effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--muted-foreground) / 0.08) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
   }
 }
 
@@ -217,4 +243,13 @@
 /* Safe area for mobile bottom bar (notch devices) */
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

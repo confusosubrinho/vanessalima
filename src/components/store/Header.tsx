@@ -249,7 +249,7 @@ export function Header() {
                 <Button variant="outline" size="icon" className="relative rounded-full border-2 border-primary bg-primary text-primary-foreground hover:bg-primary/90">
                   <ShoppingBag className="h-5 w-5" />
                   {itemCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-secondary text-secondary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                    <span className="absolute -top-2 -right-2 bg-secondary text-secondary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold animate-scale-bounce" key={itemCount}>
                       {itemCount}
                     </span>
                   )}
@@ -283,9 +283,9 @@ export function Header() {
                             <p className="text-sm text-center mb-2">
                               Faltam <span className="font-bold text-primary">{formatPrice(remainingForFreeShipping)}</span> para frete grátis
                             </p>
-                            <div className="w-full bg-muted rounded-full h-2">
+                            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
                               <div
-                                className="bg-primary h-2 rounded-full transition-all"
+                                className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-out"
                                 style={{ width: `${freeShippingProgress}%` }}
                               />
                             </div>

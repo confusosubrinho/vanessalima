@@ -19,8 +19,11 @@ import { PaymentMethodsModal } from '@/components/store/PaymentMethodsModal';
 import { BuyTogether } from '@/components/store/BuyTogether';
 import { FloatingVideo } from '@/components/store/FloatingVideo';
 import { StickyAddToCart } from '@/components/store/StickyAddToCart';
+import { AddedToCartToast } from '@/components/store/AddedToCartToast';
+import { ProductDetailSkeleton } from '@/components/store/Skeletons';
 import { StockNotifyModal } from '@/components/store/StockNotifyModal';
 import { useRecentProducts, useRelatedProducts } from '@/hooks/useRecentProducts';
+import { useHaptics } from '@/hooks/useHaptics';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -29,9 +32,10 @@ export default function ProductDetail() {
   const isMobile = useIsMobile();
   const { slug } = useParams<{ slug: string }>();
   const { data: product, isLoading } = useProduct(slug || '');
-  const { addItem } = useCart();
+  const { addItem, setIsCartOpen } = useCart();
   const { toast } = useToast();
   const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
+  const haptics = useHaptics();
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -40,6 +44,7 @@ export default function ProductDetail() {
   const [showNotifyModal, setShowNotifyModal] = useState(false);
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [variantWarning, setVariantWarning] = useState('');
+  const [addedToast, setAddedToast] = useState<{ name: string; variant: string; image: string } | null>(null);
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const variantSectionRef = useRef<HTMLDivElement>(null);
   const addToCartRef = useRef<HTMLDivElement>(null);
@@ -100,19 +105,7 @@ export default function ProductDetail() {
   if (isLoading) {
     return (
       <StoreLayout>
-        <div className="container-custom py-8">
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="animate-pulse">
-              <div className="aspect-square bg-muted rounded-lg" />
-            </div>
-            <div className="animate-pulse space-y-4">
-              <div className="h-8 bg-muted rounded w-3/4" />
-              <div className="h-6 bg-muted rounded w-1/4" />
-              <div className="h-4 bg-muted rounded w-full" />
-              <div className="h-4 bg-muted rounded w-2/3" />
-            </div>
-          </div>
-        </div>
+        <ProductDetailSkeleton />
       </StoreLayout>
     );
   }
@@ -257,9 +250,14 @@ export default function ProductDetail() {
     }
 
     addItem(product, variant, quantity);
-    toast({ 
-      title: 'Produto adicionado!', 
-      description: `${product.name} - Tam. ${variant.size}${variant.color ? ' - ' + variant.color : ''}`
+    haptics.success();
+    
+    // Premium toast with product info
+    const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
+    setAddedToast({
+      name: product.name,
+      variant: `Tam. ${variant.size}${variant.color ? ' - ' + variant.color : ''}`,
+      image: primaryImage?.url || '/placeholder.svg',
     });
   };
 
@@ -682,6 +680,16 @@ export default function ProductDetail() {
         onAddToCart={handleAddToCart}
         onScrollToVariant={scrollToVariants}
         visible={showStickyBar}
+      />
+
+      {/* Premium "Added to Cart" toast */}
+      <AddedToCartToast
+        productName={addedToast?.name || ''}
+        variantInfo={addedToast?.variant || ''}
+        imageUrl={addedToast?.image || ''}
+        visible={!!addedToast}
+        onViewCart={() => { setAddedToast(null); setIsCartOpen(true); }}
+        onClose={() => setAddedToast(null)}
       />
     </StoreLayout>
   );

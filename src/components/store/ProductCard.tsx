@@ -116,7 +116,7 @@ export function ProductCard({ product }: ProductCardProps) {
     <>
       <Link
         to={`/produto/${product.slug}`}
-        className="group card-product block rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-background border border-border/40"
+        className="group card-product card-lift block rounded-lg overflow-hidden shadow-sm hover:shadow-md bg-background border border-border/40"
         id={`product-card-${product.slug}`}
       >
         <div className="relative aspect-square overflow-hidden bg-muted">
@@ -164,7 +164,7 @@ export function ProductCard({ product }: ProductCardProps) {
             <button
               id={`btn-buy-${product.slug}`}
               onClick={handleBuyClick}
-              className="absolute bottom-2 right-2 bg-primary text-primary-foreground p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-primary/90 shadow-lg"
+              className="absolute bottom-2 right-2 bg-primary text-primary-foreground p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-primary/90 shadow-lg btn-press"
               title="Comprar"
             >
               <ShoppingBag className="h-4 w-4" />

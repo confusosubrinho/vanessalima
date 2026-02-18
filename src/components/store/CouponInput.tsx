@@ -1,9 +1,10 @@
- import { useState } from 'react';
+ import { useState, useRef } from 'react';
  import { Tag, Loader2, X, Check } from 'lucide-react';
  import { Button } from '@/components/ui/button';
  import { Input } from '@/components/ui/input';
  import { useCart } from '@/contexts/CartContext';
  import { useToast } from '@/hooks/use-toast';
+ import { useHaptics } from '@/hooks/useHaptics';
  import { supabase } from '@/integrations/supabase/client';
  import { Coupon } from '@/types/database';
  
@@ -12,10 +13,13 @@
  }
  
  export function CouponInput({ compact = false }: CouponInputProps) {
-   const { appliedCoupon, applyCoupon, removeCoupon, subtotal } = useCart();
-   const { toast } = useToast();
-   const [code, setCode] = useState('');
-   const [isLoading, setIsLoading] = useState(false);
+    const { appliedCoupon, applyCoupon, removeCoupon, subtotal } = useCart();
+    const { toast } = useToast();
+    const haptics = useHaptics();
+    const [code, setCode] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [shakeError, setShakeError] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
  
    const formatPrice = (price: number) => {
      return new Intl.NumberFormat('pt-BR', {
@@ -38,13 +42,15 @@
          .single();
  
        if (error || !data) {
-         toast({
-           title: 'Cupom inválido',
-           description: 'O código inserido não existe ou está inativo.',
-           variant: 'destructive',
-         });
-         return;
-       }
+          setShakeError(true); haptics.error();
+          setTimeout(() => setShakeError(false), 500);
+          toast({
+            title: 'Cupom inválido',
+            description: 'O código inserido não existe ou está inativo.',
+            variant: 'destructive',
+          });
+          return;
+        }
  
        const coupon = data as Coupon;
  
@@ -78,6 +84,7 @@
          return;
        }
  
+       haptics.success();
        applyCoupon(coupon);
        setCode('');
        toast({
@@ -126,14 +133,15 @@
          </div>
        )}
        
-       <div className="flex gap-2">
-         <Input
-           placeholder="Código do cupom"
-           value={code}
-           onChange={(e) => setCode(e.target.value.toUpperCase())}
-           className={compact ? 'h-9 text-sm' : ''}
-           onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
-         />
+       <div className={`flex gap-2 ${shakeError ? 'animate-shake' : ''}`}>
+          <Input
+            ref={inputRef}
+            placeholder="Código do cupom"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            className={compact ? 'h-9 text-sm' : ''}
+            onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
+          />
          <Button 
            onClick={handleApplyCoupon} 
            disabled={isLoading || !code.trim()}

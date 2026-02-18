@@ -89,9 +89,9 @@ export default function Cart() {
               </span>
             )}
           </div>
-          <div className="w-full bg-muted rounded-full h-2">
+          <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
             <div
-              className="bg-primary h-2 rounded-full transition-all"
+              className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-out"
               style={{ width: `${Math.min((subtotal / freeShippingThreshold) * 100, 100)}%` }}
             />
           </div>
@@ -224,7 +224,7 @@ export default function Cart() {
                 )}
                 <div className="flex justify-between text-lg font-bold pt-2 border-t">
                   <span>Total</span>
-                  <span>{formatPrice(total)}</span>
+                  <span className="animate-price-update" key={total.toFixed(2)}>{formatPrice(total)}</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   ou {pricingConfig ? getBestHighlight(total, pricingConfig) : `até 6x sem juros`}
