@@ -125,6 +125,57 @@ export type Database = {
         }
         Relationships: []
       }
+      bling_sync_config: {
+        Row: {
+          created_at: string
+          first_import_done: boolean
+          id: string
+          import_new_products: boolean
+          merge_by_sku: boolean
+          sync_descriptions: boolean
+          sync_dimensions: boolean
+          sync_images: boolean
+          sync_prices: boolean
+          sync_sku_gtin: boolean
+          sync_stock: boolean
+          sync_titles: boolean
+          sync_variant_active: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          first_import_done?: boolean
+          id?: string
+          import_new_products?: boolean
+          merge_by_sku?: boolean
+          sync_descriptions?: boolean
+          sync_dimensions?: boolean
+          sync_images?: boolean
+          sync_prices?: boolean
+          sync_sku_gtin?: boolean
+          sync_stock?: boolean
+          sync_titles?: boolean
+          sync_variant_active?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          first_import_done?: boolean
+          id?: string
+          import_new_products?: boolean
+          merge_by_sku?: boolean
+          sync_descriptions?: boolean
+          sync_dimensions?: boolean
+          sync_images?: boolean
+          sync_prices?: boolean
+          sync_sku_gtin?: boolean
+          sync_stock?: boolean
+          sync_titles?: boolean
+          sync_variant_active?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bling_webhook_events: {
         Row: {
           bling_product_id: number | null
