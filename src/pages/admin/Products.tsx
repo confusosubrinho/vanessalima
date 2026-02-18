@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle, Store, ChevronDown, RefreshCw, Power, PowerOff, Edit3, X, AlertCircle, Clock } from 'lucide-react';
+import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle, Store, ChevronDown, RefreshCw, Power, PowerOff, Edit3, X, AlertCircle, Clock, Loader2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
@@ -89,6 +89,7 @@ export default function Products() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAllGlobal, setSelectAllGlobal] = useState(false);
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+  const [syncingProductId, setSyncingProductId] = useState<string | null>(null);
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['admin-products'],
@@ -332,6 +333,29 @@ export default function Products() {
       fields: ['bling_sync_status'],
     });
     toast({ title: `${ids.length} produtos marcados para sincronização` });
+  };
+
+  // Single product stock sync
+  const handleSyncSingleStock = async (product: Product) => {
+    if (syncingProductId) return;
+    if (!product.is_active) {
+      toast({ title: 'Produto inativo', description: 'Produtos inativos não podem ser sincronizados.', variant: 'destructive' });
+      return;
+    }
+    setSyncingProductId(product.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('bling-sync-single-stock', {
+        body: { product_id: product.id },
+      });
+      if (error) throw new Error(error.message || 'Erro na sincronização');
+      if (data && !data.success) throw new Error(data.message || 'Erro na sincronização');
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      toast({ title: 'Estoque sincronizado!', description: `${data.updated_variants} variante(s) atualizada(s)` });
+    } catch (err: any) {
+      toast({ title: 'Erro ao sincronizar', description: err.message, variant: 'destructive' });
+    } finally {
+      setSyncingProductId(null);
+    }
   };
 
   // Bling sync badge renderer
@@ -670,6 +694,13 @@ export default function Products() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => handleEdit(product)}><Pencil className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleSyncSingleStock(product)}
+                      disabled={syncingProductId === product.id || !product.is_active}
+                    >
+                      {syncingProductId === product.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                      Sincronizar estoque
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => deleteMutation.mutate(product.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Excluir</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -757,6 +788,13 @@ export default function Products() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => handleEdit(product)}><Pencil className="h-4 w-4 mr-2" /> Editar</DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSyncSingleStock(product)}
+                            disabled={syncingProductId === product.id || !product.is_active}
+                          >
+                            {syncingProductId === product.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                            Sincronizar estoque
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => deleteMutation.mutate(product.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Excluir</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
