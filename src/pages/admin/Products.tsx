@@ -28,6 +28,7 @@ import { useCategories } from '@/hooks/useProducts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { HelpHint } from '@/components/HelpHint';
+import { ProductExportDialog } from '@/components/admin/ProductExportDialog';
 
 interface Product {
   id: string;
@@ -84,6 +85,7 @@ export default function Products() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const ITEMS_PER_PAGE = 25;
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -449,16 +451,18 @@ export default function Products() {
   const [trayImporting, setTrayImporting] = useState(false);
 
   const handleExport = () => {
-    if (!products) return;
-    const exportData = products.map(p => ({
-      nome: p.name, slug: p.slug, sku: p.sku || '', preco_base: p.base_price,
-      preco_promocional: p.sale_price || '', categoria: p.category?.name || '',
-      ativo: p.is_active ? 'Sim' : 'Não', destaque: p.is_featured ? 'Sim' : 'Não',
-      novo: p.is_new ? 'Sim' : 'Não', marca: p.brand || '', material: p.material || '',
-    }));
-    exportToCSV(exportData, 'produtos');
-    toast({ title: 'Produtos exportados!' });
+    setIsExportOpen(true);
   };
+
+  const getExportProducts = (): any[] => {
+    if (effectiveCount > 0) {
+      const ids = getEffectiveIds();
+      return (products || []).filter(p => ids.includes(p.id));
+    }
+    return filteredProducts;
+  };
+
+  const exportMode = effectiveCount > 0 ? 'selected' as const : 'all' as const;
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -865,6 +869,13 @@ export default function Products() {
         selectedCount={effectiveCount}
         onApply={handleBulkEdit}
         isLoading={bulkUpdateMutation.isPending}
+      />
+      <ProductExportDialog
+        open={isExportOpen}
+        onOpenChange={setIsExportOpen}
+        products={getExportProducts()}
+        selectedCount={effectiveCount}
+        mode={exportMode}
       />
     </div>
   );
