@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Product } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
-import { ShoppingBag, Heart, Star } from 'lucide-react';
+import { ShoppingBag, Heart, Star, Eye } from 'lucide-react';
 import { VariantSelectorModal } from './VariantSelectorModal';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useToast } from '@/hooks/use-toast';
@@ -50,9 +50,13 @@ export function ProductCard({ product }: ProductCardProps) {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
   const currentPrice = Number(product.sale_price || product.base_price);
   const pixPrice = pricingConfig ? getPixPrice(currentPrice, pricingConfig) : currentPrice * (1 - pixDiscountPercent / 100);
-  const hasVariants = (product.variants?.filter(v => v.is_active)?.length || 0) > 0;
-  const sizes = product.variants
-    ?.filter(v => v.is_active)
+  const activeVariants = product.variants?.filter(v => v.is_active) || [];
+  const hasVariants = activeVariants.length > 0;
+  const totalStock = activeVariants.reduce((sum, v) => sum + (v.stock_quantity || 0), 0);
+  const isOutOfStock = hasVariants && totalStock === 0;
+  const LOW_STOCK_THRESHOLD = 3;
+  const isLowStock = hasVariants && totalStock > 0 && totalStock <= LOW_STOCK_THRESHOLD;
+  const sizes = activeVariants
     .map(v => ({ size: v.size, inStock: v.stock_quantity > 0 }))
     .filter((v, i, arr) => arr.findIndex(a => a.size === v.size) === i)
     .sort((a, b) => {
@@ -116,7 +120,7 @@ export function ProductCard({ product }: ProductCardProps) {
     <>
       <Link
         to={`/produto/${product.slug}`}
-        className="group card-product card-lift block rounded-lg overflow-hidden shadow-sm hover:shadow-md bg-background border border-border/40"
+        className={`group card-product card-lift block rounded-lg overflow-hidden shadow-sm hover:shadow-md bg-background border border-border/40 ${isOutOfStock ? 'opacity-65' : ''}`}
         id={`product-card-${product.slug}`}
       >
         <div className="relative aspect-square overflow-hidden bg-muted">
@@ -144,9 +148,11 @@ export function ProductCard({ product }: ProductCardProps) {
           )}
 
           <div className="absolute top-2 left-2 flex flex-col gap-1 max-w-[calc(100%-3rem)]">
-            {product.is_new && <Badge className="badge-new text-[10px] truncate">Lançamento</Badge>}
-            {hasDiscount && <Badge className="badge-sale text-[10px] truncate">-{discountPercentage}%</Badge>}
-            {product.is_featured && !product.is_new && !hasDiscount && (
+            {isOutOfStock && <Badge variant="secondary" className="text-[10px] truncate bg-muted-foreground text-background">Sem estoque</Badge>}
+            {isLowStock && <Badge variant="destructive" className="text-[10px] truncate">Últimas unidades</Badge>}
+            {product.is_new && !isOutOfStock && <Badge className="badge-new text-[10px] truncate">Lançamento</Badge>}
+            {hasDiscount && !isOutOfStock && <Badge className="badge-sale text-[10px] truncate">-{discountPercentage}%</Badge>}
+            {product.is_featured && !product.is_new && !hasDiscount && !isOutOfStock && (
               <Badge variant="outline" className="bg-background text-[10px] truncate">Destaque</Badge>
             )}
           </div>
@@ -165,9 +171,9 @@ export function ProductCard({ product }: ProductCardProps) {
               id={`btn-buy-${product.slug}`}
               onClick={handleBuyClick}
               className="absolute bottom-2 right-2 bg-primary text-primary-foreground p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-primary/90 shadow-lg btn-press"
-              title="Comprar"
+              title={isOutOfStock ? 'Ver produto' : 'Comprar'}
             >
-              <ShoppingBag className="h-4 w-4" />
+              {isOutOfStock ? <Eye className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
             </button>
           )}
         </div>

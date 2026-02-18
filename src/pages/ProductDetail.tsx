@@ -129,6 +129,9 @@ export default function ProductDetail() {
   // Valid variants: active AND in stock
   const validVariants = variants.filter(v => v.stock_quantity > 0);
   
+  // Low stock threshold
+  const LOW_STOCK_THRESHOLD = 3;
+  
   const sizes = [...new Set(variants.map(v => v.size))].sort((a, b) => {
     const numA = Number(a); const numB = Number(b);
     if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
@@ -243,7 +246,7 @@ export default function ProductDetail() {
     if (variant.stock_quantity < quantity) {
       toast({ 
         title: 'Estoque insuficiente', 
-        description: `Apenas ${variant.stock_quantity} unidade(s) disponível(is).`,
+        description: 'A quantidade solicitada excede o estoque disponível.',
         variant: 'destructive' 
       });
       return;
@@ -514,29 +517,38 @@ export default function ProductDetail() {
               <label className="block font-medium mb-2">Tamanho</label>
               <div className="flex flex-wrap gap-2">
                 {sizes.map((size) => {
-                  const isAvailable = availableSizes.includes(size);
-                  const variantForSize = validVariants.find(v => 
+                  const variantForSize = variants.find(v => 
                     v.size === size && (!selectedColor || v.color === selectedColor)
                   );
                   const stockQty = variantForSize?.stock_quantity || 0;
+                  const isAvailable = stockQty > 0;
+                  const isLowStock = isAvailable && stockQty <= LOW_STOCK_THRESHOLD;
+                  const isOOS = stockQty === 0;
                   return (
                     <button
                       key={size}
-                      onClick={() => isAvailable && setSelectedSize(size)}
-                      disabled={!isAvailable}
+                      onClick={() => {
+                        if (isOOS && variantForSize) {
+                          setSelectedSize(size);
+                          setShowNotifyModal(true);
+                        } else {
+                          setSelectedSize(size);
+                        }
+                      }}
                       className={`min-w-12 h-12 px-2 rounded-lg border-2 font-medium transition-colors flex flex-col items-center justify-center ${
                         selectedSize === size
                           ? 'border-primary bg-primary text-primary-foreground'
-                          : !isAvailable
-                          ? 'border-muted bg-muted text-muted-foreground cursor-not-allowed line-through'
+                          : isOOS
+                          ? 'border-border/50 text-muted-foreground opacity-60 hover:border-primary/50'
                           : 'border-border hover:border-primary'
                       }`}
                     >
-                      <span>{size}</span>
-                      {isAvailable && stockQty > 0 && stockQty < 5 && selectedSize !== size && (
-                        <span className="text-[10px] text-orange-600 leading-none">
-                          {stockQty === 1 ? 'Última!' : `${stockQty} rest.`}
-                        </span>
+                      <span className={isOOS ? 'line-through' : ''}>{size}</span>
+                      {isLowStock && selectedSize !== size && (
+                        <span className="text-[10px] text-orange-600 leading-none">Últimas un.</span>
+                      )}
+                      {isOOS && selectedSize !== size && (
+                        <span className="text-[10px] text-muted-foreground leading-none">Avise-me</span>
                       )}
                     </button>
                   );

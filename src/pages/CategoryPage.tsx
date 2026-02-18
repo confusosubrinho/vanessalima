@@ -120,6 +120,15 @@ export default function CategoryPage() {
         break;
     }
 
+    // Push out-of-stock products to the end while maintaining relative order
+    const hasStock = (p: typeof result[0]) => 
+      p.variants?.some(v => v.is_active && v.stock_quantity > 0) ?? false;
+    result.sort((a, b) => {
+      const aInStock = hasStock(a) ? 0 : 1;
+      const bInStock = hasStock(b) ? 0 : 1;
+      return aInStock - bInStock;
+    });
+
     return result;
   }, [products, filters]);
 

@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Product, ProductVariant } from '@/types/database';
 import { useCart } from '@/contexts/CartContext';
-import { ShoppingBag, Check } from 'lucide-react';
+import { ShoppingBag, Check, Bell } from 'lucide-react';
+import { StockNotifyModal } from './StockNotifyModal';
 
 interface VariantSelectorModalProps {
   product: Product;
@@ -14,6 +15,8 @@ interface VariantSelectorModalProps {
 export function VariantSelectorModal({ product, open, onOpenChange }: VariantSelectorModalProps) {
   const { addItem } = useCart();
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
+  const [notifyModalOpen, setNotifyModalOpen] = useState(false);
+  const [notifyVariant, setNotifyVariant] = useState<ProductVariant | null>(null);
 
   const activeVariants = product.variants?.filter(v => v.is_active) || [];
   const sizes = activeVariants
@@ -76,17 +79,23 @@ export function VariantSelectorModal({ product, open, onOpenChange }: VariantSel
               <button
                 key={variant.id}
                 id={`btn-variant-select-${variant.id}`}
-                disabled={!inStock}
-                onClick={() => setSelectedVariant(variant)}
+                onClick={() => {
+                  if (inStock) {
+                    setSelectedVariant(variant);
+                  } else {
+                    setNotifyVariant(variant);
+                    setNotifyModalOpen(true);
+                  }
+                }}
                 className={`h-10 rounded border text-sm font-medium transition-all ${
                   isSelected
                     ? 'border-primary bg-primary text-primary-foreground'
                     : inStock
                     ? 'border-border hover:border-primary'
-                    : 'border-border/50 text-muted-foreground/50 line-through cursor-not-allowed'
+                    : 'border-border/50 text-muted-foreground opacity-60 hover:border-primary/50'
                 }`}
               >
-                {size}
+                <span className={!inStock ? 'line-through' : ''}>{size}</span>
               </button>
             );
           })}
@@ -103,6 +112,16 @@ export function VariantSelectorModal({ product, open, onOpenChange }: VariantSel
           Adicionar ao Carrinho
         </Button>
       </DialogContent>
+
+      <StockNotifyModal
+        open={notifyModalOpen}
+        onOpenChange={setNotifyModalOpen}
+        productId={product.id}
+        productName={product.name}
+        variantId={notifyVariant?.id}
+        variantInfo={notifyVariant ? `${notifyVariant.size}${notifyVariant.color ? ' - ' + notifyVariant.color : ''}` : undefined}
+        currentPrice={currentPrice}
+      />
     </Dialog>
   );
 }
