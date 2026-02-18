@@ -6,9 +6,40 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ─── In-memory rate limiting ───
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 30;
+
+function isRateLimited(identifier: string): boolean {
+  const now = Date.now();
+  const timestamps = rateLimitMap.get(identifier) || [];
+  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  recent.push(now);
+  rateLimitMap.set(identifier, recent);
+  // Cleanup old entries periodically
+  if (rateLimitMap.size > 10000) {
+    for (const [key, vals] of rateLimitMap) {
+      const filtered = vals.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+      if (filtered.length === 0) rateLimitMap.delete(key);
+      else rateLimitMap.set(key, filtered);
+    }
+  }
+  return recent.length > RATE_LIMIT_MAX;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Rate limit by IP
+  const clientIP = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (isRateLimited(clientIP)) {
+    return new Response(
+      JSON.stringify({ error: "Muitas requisições. Tente novamente em instantes." }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {
