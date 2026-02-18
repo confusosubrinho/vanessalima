@@ -1,6 +1,6 @@
  import { useQuery } from '@tanstack/react-query';
  import { supabase } from '@/integrations/supabase/client';
-import { Package, ShoppingCart, Users, DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Package, ShoppingCart, Users, DollarSign } from 'lucide-react';
 import { HelpHint } from '@/components/HelpHint';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -92,11 +92,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
             </CardHeader>
             <CardContent className="p-3 md:p-6 pt-0 md:pt-0">
               <div className="text-lg md:text-2xl font-bold truncate">{formatPrice(stats?.revenue || 0)}</div>
-              <p className="text-[10px] md:text-xs text-muted-foreground">
-                <span className="text-green-600 flex items-center gap-1">
-                  <ArrowUpRight className="h-3 w-3" /> +12%
-                </span>
-              </p>
+              <p className="text-[10px] md:text-xs text-muted-foreground">Total de pedidos</p>
             </CardContent>
           </Card>
           <Card>

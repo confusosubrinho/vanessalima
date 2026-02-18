@@ -5,6 +5,7 @@ import { Product } from '@/types/database';
 import { ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 import { VariantSelectorModal } from './VariantSelectorModal';
+import { useStoreContact } from '@/hooks/useStoreContact';
 
 interface CartProductSuggestionsProps {
   compact?: boolean;
@@ -14,8 +15,9 @@ export function CartProductSuggestions({ compact = false }: CartProductSuggestio
   const { subtotal, items } = useCart();
   const { data: allProducts } = useProducts();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const { data: storeSettings } = useStoreContact();
 
-  const FREE_SHIPPING_THRESHOLD = 399;
+  const FREE_SHIPPING_THRESHOLD = (storeSettings as any)?.free_shipping_threshold ?? 399;
   const hasFreeShipping = subtotal >= FREE_SHIPPING_THRESHOLD;
   const remaining = FREE_SHIPPING_THRESHOLD - subtotal;
 

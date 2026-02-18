@@ -96,6 +96,8 @@ const menuItems: MenuItem[] = [
       { title: 'Integrações', url: '/admin/integracoes' },
       { title: 'Código Externo', url: '/admin/configuracoes/codigo' },
       { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes' },
+      { title: 'Logs do Sistema', url: '/admin/logs' },
+      { title: 'Saúde do Sistema', url: '/admin/saude' },
       { title: 'Central de Ajuda', url: '/admin/ajuda' },
     ]
   },

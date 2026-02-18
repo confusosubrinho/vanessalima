@@ -59,6 +59,8 @@ const PricingSettings = lazy(() => import("./pages/admin/PricingSettings"));
 const HelpEditor = lazy(() => import("./pages/admin/HelpEditor"));
 const SocialLinks = lazy(() => import("./pages/admin/SocialLinks"));
 const PagesAdmin = lazy(() => import("./pages/admin/PagesAdmin"));
+const SystemLogs = lazy(() => import("./pages/admin/SystemLogs"));
+const SystemHealth = lazy(() => import("./pages/admin/SystemHealth"));
 
 // Lazy load non-critical floating components
 const WhatsAppFloat = lazy(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat })));
@@ -155,6 +157,8 @@ const App = () => (
                 <Route path="ajuda" element={<HelpEditor />} />
                 <Route path="redes-sociais" element={<SocialLinks />} />
                 <Route path="paginas" element={<PagesAdmin />} />
+                <Route path="logs" element={<SystemLogs />} />
+                <Route path="saude" element={<SystemHealth />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />

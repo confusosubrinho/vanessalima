@@ -83,6 +83,39 @@ export type Database = {
         }
         Relationships: []
       }
+      app_logs: {
+        Row: {
+          correlation_id: string | null
+          created_at: string
+          id: string
+          level: string
+          message: string
+          meta: Json | null
+          scope: string
+          user_id: string | null
+        }
+        Insert: {
+          correlation_id?: string | null
+          created_at?: string
+          id?: string
+          level?: string
+          message: string
+          meta?: Json | null
+          scope?: string
+          user_id?: string | null
+        }
+        Update: {
+          correlation_id?: string | null
+          created_at?: string
+          id?: string
+          level?: string
+          message?: string
+          meta?: Json | null
+          scope?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       banners: {
         Row: {
           created_at: string

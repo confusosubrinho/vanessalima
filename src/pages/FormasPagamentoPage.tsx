@@ -1,7 +1,13 @@
 import { StoreLayout } from '@/components/store/StoreLayout';
 import { CreditCard, QrCode, FileText } from 'lucide-react';
+import { usePricingConfig } from '@/hooks/usePricingConfig';
 
 export default function FormasPagamentoPage() {
+  const { data: pricingConfig } = usePricingConfig();
+  const pixDiscount = pricingConfig?.pix_discount ?? 5;
+  const interestFreeInstallments = pricingConfig?.interest_free_installments ?? 3;
+  const maxInstallments = pricingConfig?.max_installments ?? 6;
+
   return (
     <StoreLayout>
       <div className="container-custom py-12">
@@ -17,10 +23,10 @@ export default function FormasPagamentoPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold">PIX</h3>
-                  <p className="text-primary font-medium">5% de desconto</p>
+                  <p className="text-primary font-medium">{pixDiscount}% de desconto</p>
                 </div>
               </div>
-              <p className="text-muted-foreground">Pagamento instantâneo com 5% de desconto. O QR Code é gerado automaticamente no checkout. Confirmação imediata!</p>
+              <p className="text-muted-foreground">Pagamento instantâneo com {pixDiscount}% de desconto. O QR Code é gerado automaticamente no checkout. Confirmação imediata!</p>
             </div>
 
             <div className="p-6 border rounded-lg">
@@ -30,10 +36,13 @@ export default function FormasPagamentoPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold">Cartão de Crédito</h3>
-                  <p className="text-primary font-medium">Até 6x sem juros</p>
+                  <p className="text-primary font-medium">Até {interestFreeInstallments}x sem juros</p>
                 </div>
               </div>
-              <p className="text-muted-foreground mb-3">Parcele suas compras em até 6x sem juros. Aceitamos as principais bandeiras:</p>
+              <p className="text-muted-foreground mb-3">
+                Parcele suas compras em até {interestFreeInstallments}x sem juros
+                {maxInstallments > interestFreeInstallments && ` ou até ${maxInstallments}x com juros`}. Aceitamos as principais bandeiras:
+              </p>
               <div className="flex gap-3 flex-wrap">
                 {['Visa', 'Mastercard', 'Elo', 'American Express', 'Hipercard'].map(brand => (
                   <span key={brand} className="px-3 py-1 bg-muted rounded-full text-sm">{brand}</span>
