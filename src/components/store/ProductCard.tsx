@@ -143,11 +143,11 @@ export function ProductCard({ product }: ProductCardProps) {
             />
           )}
 
-          <div className="absolute top-2 left-2 flex flex-col gap-1">
-            {product.is_new && <Badge className="badge-new">Lançamento</Badge>}
-            {hasDiscount && <Badge className="badge-sale">-{discountPercentage}%</Badge>}
+          <div className="absolute top-2 left-2 flex flex-col gap-1 max-w-[calc(100%-3rem)]">
+            {product.is_new && <Badge className="badge-new text-[10px] truncate">Lançamento</Badge>}
+            {hasDiscount && <Badge className="badge-sale text-[10px] truncate">-{discountPercentage}%</Badge>}
             {product.is_featured && !product.is_new && !hasDiscount && (
-              <Badge variant="outline" className="bg-background">Destaque</Badge>
+              <Badge variant="outline" className="bg-background text-[10px] truncate">Destaque</Badge>
             )}
           </div>
 
@@ -173,7 +173,7 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
 
         <div className="p-3">
-          <h3 className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-2 text-sm">
+          <h3 className="font-medium text-foreground group-hover:text-primary transition-colors line-clamp-2 text-sm leading-snug min-h-[2.5rem]">
             {product.name}
           </h3>
 
@@ -195,7 +195,7 @@ export function ProductCard({ product }: ProductCardProps) {
             {hasDiscount ? (
               <>
                 <p className="price-original text-xs">{formatPrice(Number(product.base_price))}</p>
-                <p className="price-sale text-base font-bold">{formatPrice(Number(product.sale_price))}</p>
+                <p className="text-base font-bold text-destructive">{formatPrice(Number(product.sale_price))}</p>
               </>
             ) : (
               <p className="price-current text-base font-bold">{formatPrice(Number(product.base_price))}</p>
@@ -210,7 +210,7 @@ export function ProductCard({ product }: ProductCardProps) {
                 {sizes.map(({ size, inStock }) => (
                   <span
                     key={size}
-                    className={`inline-flex items-center justify-center min-w-[26px] h-6 px-1 text-[11px] border rounded flex-shrink-0 ${
+                    className={`inline-flex items-center justify-center min-w-[28px] h-7 px-1.5 text-[11px] border rounded flex-shrink-0 ${
                       inStock
                         ? 'border-border text-foreground bg-background'
                         : 'border-border/50 text-muted-foreground/50 line-through bg-muted/50'

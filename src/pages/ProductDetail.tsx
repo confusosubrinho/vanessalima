@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck, Bell } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -18,6 +18,7 @@ import { ProductReviews } from '@/components/store/ProductReviews';
 import { PaymentMethodsModal } from '@/components/store/PaymentMethodsModal';
 import { BuyTogether } from '@/components/store/BuyTogether';
 import { FloatingVideo } from '@/components/store/FloatingVideo';
+import { StickyAddToCart } from '@/components/store/StickyAddToCart';
 import { StockNotifyModal } from '@/components/store/StockNotifyModal';
 import { useRecentProducts, useRelatedProducts } from '@/hooks/useRecentProducts';
 import { useQuery } from '@tanstack/react-query';
@@ -37,7 +38,11 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('description');
   const [showNotifyModal, setShowNotifyModal] = useState(false);
+  const [showStickyBar, setShowStickyBar] = useState(false);
+  const [variantWarning, setVariantWarning] = useState('');
   const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const variantSectionRef = useRef<HTMLDivElement>(null);
+  const addToCartRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
@@ -59,6 +64,19 @@ export default function ProductDetail() {
     setQuantity(1);
     setSelectedImage(0);
   }, [product?.id]);
+
+  // Sticky bar: show after scrolling past the add-to-cart button
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowStickyBar(window.scrollY > 300);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToVariants = useCallback(() => {
+    variantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
 
   const pixDiscountPercent = pricingConfig?.pix_discount ?? storeSettings?.pix_discount ?? 5;
 
@@ -197,10 +215,17 @@ export default function ProductDetail() {
   };
 
   const handleAddToCart = () => {
-    if (!selectedSize) {
-      toast({ title: 'Selecione um tamanho', variant: 'destructive' });
+    const hasColors = colors.length > 0;
+    if (!selectedSize || (hasColors && !selectedColor)) {
+      const missing = !selectedSize && hasColors && !selectedColor
+        ? 'cor e tamanho'
+        : !selectedSize ? 'tamanho' : 'cor';
+      setVariantWarning(`Selecione ${missing === 'cor e tamanho' ? 'a ' : 'o '}${missing}`);
+      scrollToVariants();
+      setTimeout(() => setVariantWarning(''), 4000);
       return;
     }
+    setVariantWarning('');
 
     let variant;
     if (selectedColor) {
@@ -250,12 +275,12 @@ export default function ProductDetail() {
     { label: 'Padrão', value: product.pattern },
   ].filter(c => c.value);
 
-  // Get configured buy together related products
+  // Get configured buy together related products (manual only, no auto-suggestions)
   const configuredRelatedProducts = buyTogetherProducts?.map((bt: any) => bt.related_product).filter(Boolean) || [];
   const buyTogetherDiscount = buyTogetherProducts?.[0]?.discount_percent || 5;
 
-  // Use configured products if available, otherwise fall back to related
-  const buyTogetherList = configuredRelatedProducts.length > 0 ? configuredRelatedProducts : (relatedProducts?.slice(0, 3) || []);
+  // Only show manually configured products - NO automatic fallback
+  const buyTogetherList = configuredRelatedProducts;
 
   const tabKeys = ['description', 'characteristics', 'warranty', 'payment'] as const;
   const tabLabels: Record<string, string> = { description: 'Descrição', characteristics: 'Detalhes', warranty: 'Garantia', payment: 'Pagamento' };
@@ -465,6 +490,7 @@ export default function ProductDetail() {
             </div>
 
             {/* Color Selector */}
+            <div ref={variantSectionRef}>
             {availableColors.length > 0 && (
               <div>
                 <label className="block font-medium mb-2">Cor{selectedColor && `: ${selectedColor}`}</label>
@@ -519,6 +545,7 @@ export default function ProductDetail() {
                 })}
               </div>
             </div>
+            </div>{/* close variantSectionRef */}
 
             <div>
               <label className="block font-medium mb-2">Quantidade</label>
@@ -538,9 +565,16 @@ export default function ProductDetail() {
               </div>
             </div>
 
-            <div className="flex gap-2 sm:gap-4">
+            {/* Variant warning */}
+            {variantWarning && (
+              <p className="text-sm text-destructive font-medium animate-fade-in">
+                ⚠ {variantWarning}
+              </p>
+            )}
+
+            <div ref={addToCartRef} className="flex gap-2 sm:gap-4">
               {isInStock ? (
-                <Button size="lg" className="flex-1 rounded-full text-sm sm:text-base" onClick={handleAddToCart}>
+                <Button size="lg" className="flex-1 rounded-full text-sm sm:text-base h-12" onClick={handleAddToCart}>
                   <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
                   Adicionar ao Carrinho
                 </Button>
@@ -633,6 +667,22 @@ export default function ProductDetail() {
       {recentProducts && recentProducts.length > 0 && (
         <ProductCarousel title="Lançamentos" products={recentProducts} />
       )}
+
+      {/* Bottom padding for sticky bar on mobile */}
+      <div className="h-20 md:hidden" />
+
+      {/* Sticky Add to Cart Bar - mobile only */}
+      <StickyAddToCart
+        productName={product.name}
+        currentPrice={currentPrice}
+        isInStock={validVariants.length > 0}
+        hasSelectedVariant={!!selectedVariant}
+        needsColor={colors.length > 0 && !selectedColor}
+        needsSize={!selectedSize}
+        onAddToCart={handleAddToCart}
+        onScrollToVariant={scrollToVariants}
+        visible={showStickyBar}
+      />
     </StoreLayout>
   );
 }
