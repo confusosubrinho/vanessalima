@@ -1672,6 +1672,51 @@ export type Database = {
         }
         Relationships: []
       }
+      site_theme: {
+        Row: {
+          accent_color: string
+          background_color: string
+          border_radius: string
+          font_family: string
+          font_heading: string
+          id: string
+          primary_color: string
+          primary_color_dark: string
+          primary_color_light: string
+          shadow_intensity: string
+          text_color: string
+          updated_at: string
+        }
+        Insert: {
+          accent_color?: string
+          background_color?: string
+          border_radius?: string
+          font_family?: string
+          font_heading?: string
+          id?: string
+          primary_color?: string
+          primary_color_dark?: string
+          primary_color_light?: string
+          shadow_intensity?: string
+          text_color?: string
+          updated_at?: string
+        }
+        Update: {
+          accent_color?: string
+          background_color?: string
+          border_radius?: string
+          font_family?: string
+          font_heading?: string
+          id?: string
+          primary_color?: string
+          primary_color_dark?: string
+          primary_color_light?: string
+          shadow_intensity?: string
+          text_color?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       social_links: {
         Row: {
           created_at: string

@@ -478,7 +478,10 @@ export default function ProductDetail() {
               {hasDiscount && (
                 <p className="text-muted-foreground line-through text-lg">{formatPrice(Number(product.base_price))}</p>
               )}
-              <p className="text-2xl sm:text-3xl font-bold text-foreground">{formatPrice(currentPrice)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-primary">
+                {pricingConfig ? formatCurrency(getPixPrice(currentPrice, pricingConfig)) : formatPrice(currentPrice * (1 - pixDiscountPercent / 100))}
+              </p>
+              <p className="text-sm text-muted-foreground">no Pix ({pixDiscountPercent}% off)</p>
               <p className="text-muted-foreground">ou {bestInstallment}x de {installmentPrice} sem juros</p>
               <PaymentMethodsModal
                 basePrice={currentPrice}

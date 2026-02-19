@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { ScrollToTop } from "@/components/store/ScrollToTop";
 import { VersionChecker } from "@/components/store/VersionChecker";
+import { ThemeProvider } from "@/components/store/ThemeProvider";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -61,6 +62,7 @@ const SocialLinks = lazy(() => import("./pages/admin/SocialLinks"));
 const PagesAdmin = lazy(() => import("./pages/admin/PagesAdmin"));
 const SystemLogs = lazy(() => import("./pages/admin/SystemLogs"));
 const SystemHealth = lazy(() => import("./pages/admin/SystemHealth"));
+const ThemeEditor = lazy(() => import("./pages/admin/ThemeEditor"));
 
 // Lazy load non-critical floating components
 const WhatsAppFloat = lazy(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat })));
@@ -94,6 +96,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <CartProvider>
       <TooltipProvider>
+        <ThemeProvider>
         <Suspense fallback={null}>
           <AdminErrorIndicator />
         </Suspense>
@@ -158,6 +161,7 @@ const App = () => (
                 <Route path="redes-sociais" element={<SocialLinks />} />
                 <Route path="paginas" element={<PagesAdmin />} />
                 <Route path="logs" element={<SystemLogs />} />
+                <Route path="tema" element={<ThemeEditor />} />
                 <Route path="saude" element={<SystemHealth />} />
               </Route>
               
@@ -165,6 +169,7 @@ const App = () => (
             </Routes>
           </Suspense>
         </BrowserRouter>
+        </ThemeProvider>
       </TooltipProvider>
     </CartProvider>
   </QueryClientProvider>

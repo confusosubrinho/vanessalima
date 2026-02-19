@@ -83,6 +83,7 @@ const menuItems: MenuItem[] = [
     icon: PenSquare,
     children: [
       { title: 'Personalização da Home', url: '/admin/personalizacao' },
+      { title: 'Tema Visual', url: '/admin/tema' },
       { title: 'Redes Sociais', url: '/admin/redes-sociais' },
       { title: 'Páginas Institucionais', url: '/admin/paginas' },
     ]

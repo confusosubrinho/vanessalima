@@ -149,7 +149,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
           <div className="absolute top-2 left-2 flex flex-col gap-1 max-w-[calc(100%-3rem)]">
             {isOutOfStock && <Badge variant="secondary" className="text-[10px] truncate bg-muted-foreground text-background">Sem estoque</Badge>}
-            {isLowStock && <Badge variant="destructive" className="text-[10px] truncate">Últimas unidades</Badge>}
+            {isLowStock && <Badge className="text-[10px] truncate bg-primary text-primary-foreground">Últimas unidades</Badge>}
             {product.is_new && !isOutOfStock && <Badge className="badge-new text-[10px] truncate">Lançamento</Badge>}
             {hasDiscount && !isOutOfStock && <Badge className="badge-sale text-[10px] truncate">-{discountPercentage}%</Badge>}
             {product.is_featured && !product.is_new && !hasDiscount && !isOutOfStock && (
@@ -201,12 +201,15 @@ export function ProductCard({ product }: ProductCardProps) {
             {hasDiscount ? (
               <>
                 <p className="price-original text-xs">{formatPrice(Number(product.base_price))}</p>
-                <p className="text-base font-bold text-destructive">{formatPrice(Number(product.sale_price))}</p>
+                <p className="text-base font-bold text-primary">{formatPrice(pixPrice)}</p>
+                <p className="text-[11px] text-muted-foreground">no Pix ({pixDiscountPercent}% off)</p>
               </>
             ) : (
-              <p className="price-current text-base font-bold">{formatPrice(Number(product.base_price))}</p>
+              <>
+                <p className="price-current text-base font-bold">{formatPrice(Number(product.base_price))}</p>
+                <p className="text-[11px] text-muted-foreground">{formatPrice(pixPrice)} via Pix</p>
+              </>
             )}
-            <p className="text-[11px] text-muted-foreground">{formatPrice(pixPrice)} via Pix</p>
           </div>
 
           {sizes.length > 0 && (
