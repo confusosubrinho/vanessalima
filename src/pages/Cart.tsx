@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useStoreSettings } from '@/hooks/useProducts';
 import { useQuery } from '@tanstack/react-query';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
-import { getBestHighlight, formatCurrency } from '@/lib/pricingEngine';
+import { getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { HelpHint } from '@/components/HelpHint';
 
 export default function Cart() {
@@ -226,9 +226,19 @@ export default function Cart() {
                   <span>Total</span>
                   <span className="animate-price-update" key={total.toFixed(2)}>{formatPrice(total)}</span>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  ou {pricingConfig ? getBestHighlight(total, pricingConfig) : `até 6x sem juros`}
-                </p>
+                {(() => {
+                  const display = pricingConfig ? getInstallmentDisplay(total, pricingConfig) : null;
+                  return display ? (
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium text-foreground/80">{display.primaryText}</p>
+                      {display.secondaryText && (
+                        <p className="text-xs text-muted-foreground">{display.secondaryText}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">até 6x sem juros</p>
+                  );
+                })()}
               </div>
 
               <Button asChild className="w-full" size="lg" disabled={!selectedShipping}>

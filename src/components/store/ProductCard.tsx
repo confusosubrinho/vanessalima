@@ -7,7 +7,7 @@ import { VariantSelectorModal } from './VariantSelectorModal';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useToast } from '@/hooks/use-toast';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
-import { getPixPrice, getBestHighlight, formatCurrency } from '@/lib/pricingEngine';
+import { getPixPrice, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -210,6 +210,17 @@ export function ProductCard({ product }: ProductCardProps) {
                 <p className="text-[11px] text-muted-foreground">{formatPrice(pixPrice)} via Pix</p>
               </>
             )}
+            {pricingConfig && (() => {
+              const display = getInstallmentDisplay(currentPrice, pricingConfig);
+              return (
+                <div className="pt-0.5">
+                  <p className="text-[11px] font-medium text-foreground/80">{display.primaryText}</p>
+                  {display.secondaryText && (
+                    <p className="text-[10px] text-muted-foreground">{display.secondaryText}</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {sizes.length > 0 && (

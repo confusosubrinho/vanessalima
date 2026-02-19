@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Product } from '@/types/database';
 import { useStoreSettings } from '@/hooks/useProducts';
+import { usePricingConfig } from '@/hooks/usePricingConfig';
+import { getInstallmentDisplay } from '@/lib/pricingEngine';
 import { VariantSelectorModal } from './VariantSelectorModal';
 
 interface ProductCarouselProps {
@@ -30,6 +32,7 @@ export function ProductCarousel({
 }: ProductCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { data: settings } = useStoreSettings();
+  const { data: pricingConfig } = usePricingConfig();
   const [variantProduct, setVariantProduct] = useState<Product | null>(null);
   const isDragging = useRef(false);
   const dragStartX = useRef(0);
@@ -167,7 +170,6 @@ export function ProductCarousel({
                   ? Math.round((1 - Number(product.sale_price) / Number(product.base_price)) * 100)
                   : 0;
                 const currentPrice = Number(product.sale_price || product.base_price);
-                const installmentPrice = (currentPrice / 12).toFixed(2);
 
                 return (
                   <div key={product.id} className={`flex-shrink-0 w-[200px] sm:w-[240px] md:w-[280px] lg:w-[300px] snap-start group ${cardBg ? 'bg-background rounded-xl shadow-sm hover:shadow-md transition-shadow border p-2 sm:p-3' : ''}`}>
@@ -225,9 +227,21 @@ export function ProductCarousel({
                         <p className={`text-base sm:text-xl font-bold ${isDark && !cardBg ? 'text-secondary-foreground' : 'text-foreground'}`}>
                           {formatPrice(currentPrice)}
                         </p>
-                        <p className={`text-sm ${isDark && !cardBg ? 'text-secondary-foreground/70' : 'text-muted-foreground'}`}>
-                          ou <span className="font-medium">12x</span> de <span className="font-medium">R$ {installmentPrice}</span> com juros
-                        </p>
+                        {pricingConfig && (() => {
+                          const display = getInstallmentDisplay(currentPrice, pricingConfig);
+                          return (
+                            <>
+                              <p className={`text-sm font-medium ${isDark && !cardBg ? 'text-secondary-foreground/80' : 'text-foreground/80'}`}>
+                                {display.primaryText}
+                              </p>
+                              {display.secondaryText && (
+                                <p className={`text-xs ${isDark && !cardBg ? 'text-secondary-foreground/60' : 'text-muted-foreground'}`}>
+                                  {display.secondaryText}
+                                </p>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
 
                       {/* Size variants */}
