@@ -15,6 +15,11 @@ export interface PricingConfig {
   rounding_mode: 'adjust_last' | 'truncate';
   transparent_checkout_fee_enabled: boolean;
   transparent_checkout_fee_percent: number;
+  // Gateway internal cost fields
+  gateway_fee_1x_percent: number;
+  gateway_fee_additional_per_installment_percent: number;
+  gateway_fee_starts_at_installment: number;
+  gateway_fee_mode: 'linear_per_installment' | 'price_table';
 }
 
 export interface InstallmentOption {
@@ -47,11 +52,14 @@ const DEFAULT_CONFIG: PricingConfig = {
   rounding_mode: 'adjust_last',
   transparent_checkout_fee_enabled: false,
   transparent_checkout_fee_percent: 0,
+  gateway_fee_1x_percent: 4.99,
+  gateway_fee_additional_per_installment_percent: 2.49,
+  gateway_fee_starts_at_installment: 2,
+  gateway_fee_mode: 'linear_per_installment',
 };
 
 /**
  * Single source of truth — returns active financial config.
- * Alias: getFinancialConfig
  */
 export async function getActivePricingConfig(): Promise<PricingConfig> {
   if (_cachedConfig && Date.now() - _cacheTime < CACHE_TTL) {
@@ -69,21 +77,26 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
     return { ...DEFAULT_CONFIG };
   }
 
+  const d = data as any;
   const config: PricingConfig = {
-    id: (data as any).id,
-    is_active: (data as any).is_active,
-    max_installments: (data as any).max_installments,
-    interest_free_installments: (data as any).interest_free_installments,
-    card_cash_rate: Number((data as any).card_cash_rate) || 0,
-    pix_discount: Number((data as any).pix_discount) || 0,
-    cash_discount: Number((data as any).cash_discount) || 0,
-    interest_mode: (data as any).interest_mode || 'fixed',
-    monthly_rate_fixed: Number((data as any).monthly_rate_fixed) || 0,
-    monthly_rate_by_installment: (data as any).monthly_rate_by_installment || {},
-    min_installment_value: Number((data as any).min_installment_value) || 25,
-    rounding_mode: (data as any).rounding_mode || 'adjust_last',
-    transparent_checkout_fee_enabled: (data as any).transparent_checkout_fee_enabled ?? false,
-    transparent_checkout_fee_percent: Number((data as any).transparent_checkout_fee_percent) || 0,
+    id: d.id,
+    is_active: d.is_active,
+    max_installments: d.max_installments,
+    interest_free_installments: d.interest_free_installments,
+    card_cash_rate: Number(d.card_cash_rate) || 0,
+    pix_discount: Number(d.pix_discount) || 0,
+    cash_discount: Number(d.cash_discount) || 0,
+    interest_mode: d.interest_mode || 'fixed',
+    monthly_rate_fixed: Number(d.monthly_rate_fixed) || 0,
+    monthly_rate_by_installment: d.monthly_rate_by_installment || {},
+    min_installment_value: Number(d.min_installment_value) || 25,
+    rounding_mode: d.rounding_mode || 'adjust_last',
+    transparent_checkout_fee_enabled: d.transparent_checkout_fee_enabled ?? false,
+    transparent_checkout_fee_percent: Number(d.transparent_checkout_fee_percent) || 0,
+    gateway_fee_1x_percent: Number(d.gateway_fee_1x_percent) ?? 4.99,
+    gateway_fee_additional_per_installment_percent: Number(d.gateway_fee_additional_per_installment_percent) ?? 2.49,
+    gateway_fee_starts_at_installment: Number(d.gateway_fee_starts_at_installment) || 2,
+    gateway_fee_mode: d.gateway_fee_mode || 'linear_per_installment',
   };
 
   _cachedConfig = config;
@@ -91,7 +104,7 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
   return config;
 }
 
-/** Alias for getActivePricingConfig — the single financial config function. */
+/** Alias for getActivePricingConfig */
 export const getFinancialConfig = getActivePricingConfig;
 
 export function invalidatePricingCache() {
@@ -113,7 +126,6 @@ function getMonthlyRate(config: PricingConfig, n: number): number {
 
 /**
  * Calculate installment value using Price (annuity) formula.
- * parcela = P * (i * (1+i)^n) / ((1+i)^n - 1)
  */
 function calcInstallmentRaw(price: number, monthlyRate: number, n: number): number {
   if (n === 1 || monthlyRate <= 0) return price;
@@ -123,8 +135,7 @@ function calcInstallmentRaw(price: number, monthlyRate: number, n: number): numb
 }
 
 /**
- * Apply rounding_mode = adjust_last:
- * Round each installment to 2 decimals, adjust last one so total is exact.
+ * Apply rounding_mode = adjust_last
  */
 function applyRounding(
   rawInstallment: number,
@@ -146,12 +157,12 @@ function applyRounding(
     return { installmentValue, lastInstallmentValue, total: totalRounded };
   }
 
-  // truncate mode (fallback)
   return { installmentValue, lastInstallmentValue: installmentValue, total: Math.round(installmentValue * n * 100) / 100 };
 }
 
 /**
  * Core installment calculation — used by front and back.
+ * This calculates what the CUSTOMER sees/pays.
  */
 export function calculateInstallments(
   price: number,
@@ -166,7 +177,6 @@ export function calculateInstallments(
 
   const n = requestedInstallments || 1;
 
-  // For 1x with card_cash_rate
   let basePrice = price;
   if (n === 1 && config.card_cash_rate > 0) {
     basePrice = price * (1 + config.card_cash_rate / 100);
@@ -182,11 +192,18 @@ export function calculateInstallments(
     return { installmentValue, lastInstallmentValue, total, hasInterest: false, monthlyRate: 0 };
   }
 
-  // Interest-bearing
   const rawInstallment = calcInstallmentRaw(price, monthlyRate, n);
   const totalExact = rawInstallment * n;
   const { installmentValue, lastInstallmentValue, total } = applyRounding(rawInstallment, n, totalExact, config.rounding_mode);
   return { installmentValue, lastInstallmentValue, total, hasInterest: true, monthlyRate };
+}
+
+/**
+ * Get customer-facing installment options.
+ * "sem juros" is purely visual for the customer — the gateway cost is separate.
+ */
+export function getCustomerInstallments(price: number, config: PricingConfig): InstallmentOption[] {
+  return getInstallmentOptions(price, config);
 }
 
 /**
@@ -198,11 +215,10 @@ export function getInstallmentOptions(price: number, config: PricingConfig): Ins
   for (let n = 1; n <= config.max_installments; n++) {
     const result = calculateInstallments(price, config, 'card', n);
 
-    // Check min installment value
     if (n > 1 && result.installmentValue < config.min_installment_value) break;
 
     const suffix = result.hasInterest ? ` (total ${formatCurrency(result.total)})` : ' sem juros';
-    
+
     options.push({
       n,
       installmentValue: result.installmentValue,
@@ -230,12 +246,7 @@ export interface InstallmentDisplay {
 
 /**
  * Get the unified installment display for a given price.
- * This is the ONLY function that should be used for installment text across the entire site.
- *
- * Rules:
- * - If interest-free installments exist → primary = "ou Nx de R$ Y sem juros"
- * - If max installments > best interest-free → secondary = "até Xx no cartão"
- * - If NO interest-free exists → primary = "até Xx no cartão", secondary = null
+ * This is the ONLY function for installment text across the entire site.
  */
 export function getInstallmentDisplay(price: number, config: PricingConfig): InstallmentDisplay {
   const options = getInstallmentOptions(price, config);
@@ -258,7 +269,6 @@ export function getInstallmentDisplay(price: number, config: PricingConfig): Ins
     };
   }
 
-  // No interest-free options
   const primaryText = maxInstallments > 1 ? `até ${maxInstallments}x no cartão` : formatCurrency(price);
 
   return {
@@ -271,8 +281,7 @@ export function getInstallmentDisplay(price: number, config: PricingConfig): Ins
 }
 
 /**
- * Get the best highlight for display (e.g., "3x sem juros de R$ 33,00").
- * @deprecated Use getInstallmentDisplay() instead for unified installment text.
+ * @deprecated Use getInstallmentDisplay() instead.
  */
 export function getBestHighlight(price: number, config: PricingConfig): string {
   const display = getInstallmentDisplay(price, config);
@@ -294,9 +303,55 @@ export function getTransparentCheckoutFee(orderTotal: number, config: PricingCon
   return Math.round(orderTotal * (config.transparent_checkout_fee_percent / 100) * 100) / 100;
 }
 
+// ─── GATEWAY INTERNAL COST ───────────────────────────────────────────
+
+export interface GatewayCostResult {
+  /** Effective fee percentage for this installment count */
+  gateway_fee_percent_effective: number;
+  /** Fee amount in BRL */
+  gateway_fee_amount: number;
+}
+
+/**
+ * Calculate the internal gateway (MDR) cost for a given sale.
+ * This is NOT shown to the customer — it's the merchant's cost.
+ *
+ * Linear model:
+ *   1x  → fee = fee_1x
+ *   n≥2 → fee = fee_1x + fee_additional * (n - 1)
+ */
+export function getGatewayCost(
+  price: number,
+  installments: number,
+  config: PricingConfig
+): GatewayCostResult {
+  const n = Math.max(1, installments);
+  let feePercent: number;
+
+  if (config.gateway_fee_mode === 'linear_per_installment') {
+    if (n < config.gateway_fee_starts_at_installment) {
+      feePercent = config.gateway_fee_1x_percent;
+    } else {
+      feePercent =
+        config.gateway_fee_1x_percent +
+        config.gateway_fee_additional_per_installment_percent * (n - 1);
+    }
+  } else {
+    // Fallback / price_table: use the old monthly_rate approach for internal cost
+    feePercent = config.gateway_fee_1x_percent;
+  }
+
+  const feeAmount = Math.round(price * (feePercent / 100) * 100) / 100;
+
+  return {
+    gateway_fee_percent_effective: Math.round(feePercent * 100) / 100,
+    gateway_fee_amount: feeAmount,
+  };
+}
+
 /**
  * Calculate net profit for an order considering cost, gateway fees and checkout fee.
- * This is the ONLY function that should be used for profit/margin calculations.
+ * Uses the new per-installment gateway cost model.
  */
 export function calculateNetProfit(
   revenue: number,
@@ -304,24 +359,31 @@ export function calculateNetProfit(
   config: PricingConfig,
   paymentMethod: 'pix' | 'card' = 'card',
   installments: number = 1
-): { netProfit: number; marginPercent: number; checkoutFee: number; gatewayFee: number; totalFees: number } {
+): {
+  netProfit: number;
+  marginPercent: number;
+  checkoutFee: number;
+  gatewayFee: number;
+  gatewayFeePercent: number;
+  totalFees: number;
+} {
   const checkoutFee = getTransparentCheckoutFee(revenue, config);
-  
-  // Gateway fee: for card 1x use card_cash_rate
-  // For interest-free installments the merchant absorbs the cost (card_cash_rate applied)
-  // For interest-bearing installments the customer pays interest, but there's still a base gateway fee
+
   let gatewayFee = 0;
+  let gatewayFeePercent = 0;
+
   if (paymentMethod === 'card') {
-    // The card_cash_rate represents the gateway's base fee for card transactions
-    gatewayFee = revenue * (config.card_cash_rate / 100);
+    const gw = getGatewayCost(revenue, installments, config);
+    gatewayFee = gw.gateway_fee_amount;
+    gatewayFeePercent = gw.gateway_fee_percent_effective;
   }
-  // PIX typically has no gateway fee (or a much lower one) — handled by card_cash_rate = 0 for pix
-  
+  // PIX: typically no gateway fee
+
   const totalFees = checkoutFee + gatewayFee;
   const netProfit = revenue - cost - totalFees;
   const marginPercent = revenue > 0 ? (netProfit / revenue) * 100 : 0;
-  
-  return { netProfit, marginPercent, checkoutFee, gatewayFee, totalFees };
+
+  return { netProfit, marginPercent, checkoutFee, gatewayFee, gatewayFeePercent, totalFees };
 }
 
 /**

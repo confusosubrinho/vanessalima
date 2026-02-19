@@ -1191,6 +1191,10 @@ export type Database = {
           card_cash_rate: number
           cash_discount: number
           created_at: string
+          gateway_fee_1x_percent: number
+          gateway_fee_additional_per_installment_percent: number
+          gateway_fee_mode: string
+          gateway_fee_starts_at_installment: number
           id: string
           interest_free_installments: number
           interest_mode: string
@@ -1210,6 +1214,10 @@ export type Database = {
           card_cash_rate?: number
           cash_discount?: number
           created_at?: string
+          gateway_fee_1x_percent?: number
+          gateway_fee_additional_per_installment_percent?: number
+          gateway_fee_mode?: string
+          gateway_fee_starts_at_installment?: number
           id?: string
           interest_free_installments?: number
           interest_mode?: string
@@ -1229,6 +1237,10 @@ export type Database = {
           card_cash_rate?: number
           cash_discount?: number
           created_at?: string
+          gateway_fee_1x_percent?: number
+          gateway_fee_additional_per_installment_percent?: number
+          gateway_fee_mode?: string
+          gateway_fee_starts_at_installment?: number
           id?: string
           interest_free_installments?: number
           interest_mode?: string
