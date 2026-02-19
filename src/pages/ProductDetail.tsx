@@ -11,7 +11,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { useFavorites } from '@/hooks/useFavorites';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
-import { getInstallmentOptions, getPixPrice, getBestHighlight, formatCurrency } from '@/lib/pricingEngine';
+import { getInstallmentOptions, getPixPrice, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { ShippingCalculator } from '@/components/store/ShippingCalculator';
 import { ProductCarousel } from '@/components/store/ProductCarousel';
 import { ProductReviews } from '@/components/store/ProductReviews';
@@ -188,9 +188,7 @@ export default function ProductDetail() {
           : Number(product.sale_price || product.base_price) + Number(selectedVariant.price_modifier || 0))
     : Number(product.sale_price || product.base_price);
   const installmentOptions = pricingConfig ? getInstallmentOptions(currentPrice, pricingConfig) : [];
-  const interestFreeOptions = installmentOptions.filter(o => !o.hasInterest && o.n > 1);
-  const bestInstallment = interestFreeOptions.length > 0 ? interestFreeOptions[interestFreeOptions.length - 1].n : 1;
-  const installmentPrice = bestInstallment > 1 ? formatCurrency(currentPrice / bestInstallment) : formatCurrency(currentPrice);
+  const installmentDisplay = pricingConfig ? getInstallmentDisplay(currentPrice, pricingConfig) : null;
   const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : false;
 
   const handleColorSelect = (colorName: string) => {
@@ -375,8 +373,14 @@ export default function ProductDetail() {
             </div>
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium mb-2">Cartão de Crédito</h4>
-              <p className="text-lg font-bold">até {bestInstallment}x de {installmentPrice}</p>
-              <p className="text-sm text-muted-foreground">{bestInstallment > 1 ? 'Sem juros no cartão' : ''}</p>
+              {installmentDisplay && (
+                <>
+                  <p className="text-lg font-bold">{installmentDisplay.primaryText}</p>
+                  {installmentDisplay.secondaryText && (
+                    <p className="text-sm text-muted-foreground">{installmentDisplay.secondaryText}</p>
+                  )}
+                </>
+              )}
               <div className="mt-3 pt-3 border-t">
                 <p className="text-sm text-muted-foreground mb-2">Parcelas disponíveis:</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -482,7 +486,14 @@ export default function ProductDetail() {
                 {pricingConfig ? formatCurrency(getPixPrice(currentPrice, pricingConfig)) : formatPrice(currentPrice * (1 - pixDiscountPercent / 100))}
               </p>
               <p className="text-sm text-muted-foreground">no Pix ({pixDiscountPercent}% off)</p>
-              <p className="text-muted-foreground">ou {bestInstallment}x de {installmentPrice} sem juros</p>
+              {installmentDisplay && (
+                <>
+                  <p className="text-muted-foreground font-medium">{installmentDisplay.primaryText}</p>
+                  {installmentDisplay.secondaryText && (
+                    <p className="text-sm text-muted-foreground/70">{installmentDisplay.secondaryText}</p>
+                  )}
+                </>
+              )}
               <PaymentMethodsModal
                 basePrice={currentPrice}
                 maxInstallments={pricingConfig?.max_installments ?? 6}

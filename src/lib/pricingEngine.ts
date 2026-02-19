@@ -218,25 +218,65 @@ export function getInstallmentOptions(price: number, config: PricingConfig): Ins
 }
 
 /**
- * Get the best highlight for display (e.g., "3x sem juros de R$ 33,00").
+ * Installment display result — single source of truth for the entire site.
  */
-export function getBestHighlight(price: number, config: PricingConfig): string {
+export interface InstallmentDisplay {
+  primaryText: string;
+  secondaryText: string | null;
+  bestInterestFreeInstallments: number | null;
+  maxInstallments: number;
+  bestInterestFreeInstallmentAmount: number | null;
+}
+
+/**
+ * Get the unified installment display for a given price.
+ * This is the ONLY function that should be used for installment text across the entire site.
+ *
+ * Rules:
+ * - If interest-free installments exist → primary = "ou Nx de R$ Y sem juros"
+ * - If max installments > best interest-free → secondary = "até Xx no cartão"
+ * - If NO interest-free exists → primary = "até Xx no cartão", secondary = null
+ */
+export function getInstallmentDisplay(price: number, config: PricingConfig): InstallmentDisplay {
   const options = getInstallmentOptions(price, config);
-  
-  // Find best interest-free option
+
   const interestFreeOptions = options.filter(o => !o.hasInterest && o.n > 1);
+  const maxOption = options.length > 0 ? options[options.length - 1] : null;
+  const maxInstallments = maxOption?.n ?? 1;
+
   if (interestFreeOptions.length > 0) {
     const best = interestFreeOptions[interestFreeOptions.length - 1];
-    return `${best.n}x de ${formatCurrency(best.installmentValue)} sem juros`;
+    const primaryText = `ou ${best.n}x de ${formatCurrency(best.installmentValue)} sem juros`;
+    const secondaryText = maxInstallments > best.n ? `até ${maxInstallments}x no cartão` : null;
+
+    return {
+      primaryText,
+      secondaryText,
+      bestInterestFreeInstallments: best.n,
+      maxInstallments,
+      bestInterestFreeInstallmentAmount: best.installmentValue,
+    };
   }
-  
-  // If no interest-free, show max installments
-  if (options.length > 1) {
-    const last = options[options.length - 1];
-    return `até ${last.n}x de ${formatCurrency(last.installmentValue)}`;
-  }
-  
-  return formatCurrency(price);
+
+  // No interest-free options
+  const primaryText = maxInstallments > 1 ? `até ${maxInstallments}x no cartão` : formatCurrency(price);
+
+  return {
+    primaryText,
+    secondaryText: null,
+    bestInterestFreeInstallments: null,
+    maxInstallments,
+    bestInterestFreeInstallmentAmount: null,
+  };
+}
+
+/**
+ * Get the best highlight for display (e.g., "3x sem juros de R$ 33,00").
+ * @deprecated Use getInstallmentDisplay() instead for unified installment text.
+ */
+export function getBestHighlight(price: number, config: PricingConfig): string {
+  const display = getInstallmentDisplay(price, config);
+  return display.primaryText;
 }
 
 /**
