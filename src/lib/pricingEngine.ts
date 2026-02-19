@@ -249,33 +249,32 @@ export interface InstallmentDisplay {
  * This is the ONLY function for installment text across the entire site.
  */
 export function getInstallmentDisplay(price: number, config: PricingConfig): InstallmentDisplay {
-  const options = getInstallmentOptions(price, config);
+  // Always use the configured interest_free_installments, ignoring min_installment_value.
+  // This ensures "6x sem juros" is always displayed when config says 6, regardless of product price.
+  const bestN = config.interest_free_installments;
+  const maxN = config.max_installments;
 
-  const interestFreeOptions = options.filter(o => !o.hasInterest && o.n > 1);
-  const maxOption = options.length > 0 ? options[options.length - 1] : null;
-  const maxInstallments = maxOption?.n ?? 1;
-
-  if (interestFreeOptions.length > 0) {
-    const best = interestFreeOptions[interestFreeOptions.length - 1];
-    const primaryText = `ou ${best.n}x de ${formatCurrency(best.installmentValue)} sem juros`;
-    const secondaryText = maxInstallments > best.n ? `até ${maxInstallments}x no cartão` : null;
+  if (bestN >= 2 && price > 0) {
+    const installmentAmount = Math.floor((price / bestN) * 100) / 100;
+    const primaryText = `ou ${bestN}x de ${formatCurrency(installmentAmount)} sem juros`;
+    const secondaryText = maxN > bestN ? `até ${maxN}x no cartão` : null;
 
     return {
       primaryText,
       secondaryText,
-      bestInterestFreeInstallments: best.n,
-      maxInstallments,
-      bestInterestFreeInstallmentAmount: best.installmentValue,
+      bestInterestFreeInstallments: bestN,
+      maxInstallments: maxN,
+      bestInterestFreeInstallmentAmount: installmentAmount,
     };
   }
 
-  const primaryText = maxInstallments > 1 ? `até ${maxInstallments}x no cartão` : formatCurrency(price);
+  const primaryText = maxN > 1 ? `até ${maxN}x no cartão` : formatCurrency(price);
 
   return {
     primaryText,
     secondaryText: null,
     bestInterestFreeInstallments: null,
-    maxInstallments,
+    maxInstallments: maxN,
     bestInterestFreeInstallmentAmount: null,
   };
 }
