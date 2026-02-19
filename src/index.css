@@ -140,7 +140,7 @@
   }
 
   .badge-sale {
-    @apply bg-destructive text-destructive-foreground text-xs font-medium px-2 py-1 rounded;
+    @apply bg-primary text-primary-foreground text-xs font-medium px-2 py-1 rounded;
   }
 
   .input-search {
