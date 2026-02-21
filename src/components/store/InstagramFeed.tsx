@@ -141,13 +141,21 @@ export function InstagramFeed() {
                 <div className={`relative rounded-2xl overflow-hidden bg-black ${
                   isActive ? 'aspect-[9/16] shadow-2xl' : 'aspect-[9/16]'
                 }`}>
-                  {/* Thumbnail always visible underneath */}
-                  {video.thumbnail_url && (
+                  {/* Thumbnail or paused first frame */}
+                  {video.thumbnail_url ? (
                     <img
                       src={video.thumbnail_url}
                       alt={video.username ? `@${video.username}` : 'Video'}
                       className="absolute inset-0 w-full h-full object-cover"
                       loading="lazy"
+                    />
+                  ) : (
+                    <video
+                      src={video.video_url}
+                      className={`absolute inset-0 w-full h-full object-cover ${isActive ? 'opacity-0' : 'opacity-100'}`}
+                      muted
+                      playsInline
+                      preload="metadata"
                     />
                   )}
                   <video
