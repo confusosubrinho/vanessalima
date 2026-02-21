@@ -100,7 +100,7 @@ export function StockNotifyModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {/* Honeypot - hidden from humans */}
           <div className="absolute -left-[9999px]" aria-hidden="true">
             <input
@@ -113,8 +113,8 @@ export function StockNotifyModal({
             />
           </div>
 
-          <div>
-            <Label htmlFor="notify-email" className="flex items-center gap-1.5">
+          <div className="space-y-1.5">
+            <Label htmlFor="notify-email" className="flex items-center gap-1.5 text-sm">
               <Mail className="h-3.5 w-3.5" /> E-mail
             </Label>
             <Input
@@ -124,11 +124,12 @@ export function StockNotifyModal({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               maxLength={255}
+              autoComplete="email"
             />
           </div>
 
-          <div>
-            <Label htmlFor="notify-whatsapp" className="flex items-center gap-1.5">
+          <div className="space-y-1.5">
+            <Label htmlFor="notify-whatsapp" className="flex items-center gap-1.5 text-sm">
               <MessageCircle className="h-3.5 w-3.5" /> WhatsApp (opcional)
             </Label>
             <Input
@@ -138,11 +139,12 @@ export function StockNotifyModal({
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
               maxLength={20}
+              autoComplete="tel"
             />
           </div>
 
           {currentPrice && (
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="notify-price" className="text-xs text-muted-foreground">
                 Avise-me se o preço baixar para (opcional)
               </Label>
@@ -159,7 +161,7 @@ export function StockNotifyModal({
                   className="pl-9"
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Preço atual: {formatPrice(currentPrice)}
               </p>
             </div>

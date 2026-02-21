@@ -1,19 +1,27 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 
+const COOKIE_CONSENT_KEY = 'cookie-consent-accepted';
+
 export function CookieConsent() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const accepted = localStorage.getItem('cookie-consent');
-    if (!accepted) {
-      const timer = setTimeout(() => setVisible(true), 1500);
-      return () => clearTimeout(timer);
+    try {
+      const accepted = localStorage.getItem(COOKIE_CONSENT_KEY);
+      if (!accepted) {
+        const timer = setTimeout(() => setVisible(true), 1500);
+        return () => clearTimeout(timer);
+      }
+    } catch {
+      // localStorage unavailable (e.g. private browsing on some browsers)
     }
   }, []);
 
   const accept = () => {
-    localStorage.setItem('cookie-consent', 'true');
+    try {
+      localStorage.setItem(COOKIE_CONSENT_KEY, Date.now().toString());
+    } catch {}
     setVisible(false);
   };
 
