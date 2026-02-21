@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { Product } from '@/types/database';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 interface SearchPreviewProps {
   onSearch: (query: string) => void;
@@ -126,7 +127,7 @@ export function SearchPreview({ onSearch, className }: SearchPreviewProps) {
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors"
                 >
                   <img
-                    src={primaryImage?.url || '/placeholder.svg'}
+                    src={resolveImageUrl(primaryImage?.url)}
                     alt={product.name}
                     className="w-14 h-14 rounded-lg object-cover"
                   />

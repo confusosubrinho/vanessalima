@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 interface HighlightBanner {
   id: string;
@@ -82,7 +83,7 @@ export function HighlightBanners() {
               className={`relative aspect-square overflow-hidden rounded-lg group ${index === 0 && displayBanners.length === 3 ? 'col-span-2 md:col-span-1' : ''}`}
             >
               <img
-                src={banner.image_url}
+                src={resolveImageUrl(banner.image_url)}
                 alt={banner.title || 'Banner promocional'}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />

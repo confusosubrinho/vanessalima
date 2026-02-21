@@ -246,6 +246,50 @@ async function findOrCreateCategory(supabase: any, categoryName: string): Promis
   return newCat?.id || null;
 }
 
+// ─── Download image from external URL and re-upload to Supabase Storage ───
+async function downloadAndReuploadImage(supabase: any, imageUrl: string, productId: string, index: number): Promise<string> {
+  try {
+    // If already a Supabase public URL, return as-is
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    if (imageUrl.includes(supabaseUrl) && !imageUrl.includes("Expires=")) {
+      return imageUrl;
+    }
+
+    // Download image
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      console.warn(`[sync] Failed to download image: ${response.status} - ${imageUrl.substring(0, 100)}`);
+      // Return URL without signature as fallback (will be broken but at least clean)
+      return imageUrl.split("?")[0];
+    }
+
+    const blob = await response.blob();
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+    const fileName = `bling/${productId}/${index}-${Date.now()}.${ext}`;
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from("product-media")
+      .upload(fileName, blob, { contentType, upsert: true });
+
+    if (uploadError) {
+      console.warn(`[sync] Failed to upload image to storage: ${uploadError.message}`);
+      return imageUrl.split("?")[0];
+    }
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from("product-media")
+      .getPublicUrl(fileName);
+
+    return publicUrl;
+  } catch (err: any) {
+    console.warn(`[sync] Image re-upload error: ${err.message}`);
+    return imageUrl.split("?")[0];
+  }
+}
+
 // ─── Upsert a parent product and all its variants (config-aware) ───
 async function upsertParentWithVariants(
   supabase: any, headers: any, parentDetail: any, parentBlingId: number,
@@ -318,18 +362,25 @@ async function upsertParentWithVariants(
   }
 
   // Sync images: only on first import OR if sync_images is enabled
-  if (imported && parentDetail.midia?.imagens?.internas?.length) {
+  // IMPORTANT: Download from Bling and re-upload to Supabase Storage to avoid signed URL expiration
+  if ((imported && parentDetail.midia?.imagens?.internas?.length) ||
+      (updated && config.sync_images && parentDetail.midia?.imagens?.internas?.length)) {
     await supabase.from("product_images").delete().eq("product_id", productId);
-    const images = parentDetail.midia.imagens.internas.map((img: any, idx: number) => ({
-      product_id: productId, url: img.link, is_primary: idx === 0, display_order: idx, alt_text: parentDetail.nome,
-    }));
-    await supabase.from("product_images").insert(images);
-  } else if (updated && config.sync_images && parentDetail.midia?.imagens?.internas?.length) {
-    await supabase.from("product_images").delete().eq("product_id", productId);
-    const images = parentDetail.midia.imagens.internas.map((img: any, idx: number) => ({
-      product_id: productId, url: img.link, is_primary: idx === 0, display_order: idx, alt_text: parentDetail.nome,
-    }));
-    await supabase.from("product_images").insert(images);
+    const images: any[] = [];
+    for (let idx = 0; idx < parentDetail.midia.imagens.internas.length; idx++) {
+      const img = parentDetail.midia.imagens.internas[idx];
+      const publicUrl = await downloadAndReuploadImage(supabase, img.link, productId, idx);
+      images.push({
+        product_id: productId,
+        url: publicUrl,
+        is_primary: idx === 0,
+        display_order: idx,
+        alt_text: parentDetail.nome,
+      });
+    }
+    if (images.length > 0) {
+      await supabase.from("product_images").insert(images);
+    }
   }
 
   // Sync characteristics only on first import

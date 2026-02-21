@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCategories } from '@/hooks/useProducts';
 import { useDragScroll } from '@/hooks/useDragScroll';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 export function CategoryGrid() {
   const { data: categories, isLoading } = useCategories();
@@ -72,7 +73,7 @@ export function CategoryGrid() {
               >
                 <div className="w-[90px] h-[90px] sm:w-[120px] sm:h-[120px] md:w-[150px] md:h-[150px] rounded-full overflow-hidden bg-muted mb-2 sm:mb-3 mx-auto ring-2 ring-transparent group-hover:ring-primary transition-all">
                   <img
-                    src={category.image_url || '/placeholder.svg'}
+                    src={resolveImageUrl(category.image_url)}
                     alt={category.name}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                     loading="lazy"

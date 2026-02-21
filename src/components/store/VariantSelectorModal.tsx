@@ -5,6 +5,7 @@ import { Product, ProductVariant } from '@/types/database';
 import { useCart } from '@/contexts/CartContext';
 import { ShoppingBag, Check, Bell } from 'lucide-react';
 import { StockNotifyModal } from './StockNotifyModal';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 interface VariantSelectorModalProps {
   product: Product;
@@ -52,7 +53,7 @@ export function VariantSelectorModal({ product, open, onOpenChange }: VariantSel
         </DialogHeader>
         <div className="flex gap-4 items-start">
           <img
-            src={primaryImage?.url || '/placeholder.svg'}
+            src={resolveImageUrl(primaryImage?.url)}
             alt={product.name}
             className="w-20 h-20 object-cover rounded"
           />

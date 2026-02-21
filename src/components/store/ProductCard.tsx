@@ -10,6 +10,7 @@ import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getPixPrice, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 interface ProductCardProps {
   product: Product;
@@ -125,7 +126,7 @@ export function ProductCard({ product }: ProductCardProps) {
       >
         <div className="relative aspect-square overflow-hidden bg-muted">
           <img
-            src={primaryImage?.url || '/placeholder.svg'}
+            src={resolveImageUrl(primaryImage?.url)}
             alt={product.name}
             className={`w-full h-full object-cover transition-all duration-500 ${
               secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-110'
@@ -137,7 +138,7 @@ export function ProductCard({ product }: ProductCardProps) {
           />
           {secondaryImage && (
             <img
-              src={secondaryImage.url}
+              src={resolveImageUrl(secondaryImage.url)}
               alt={`${product.name} - foto alternativa`}
               className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
               loading="lazy"

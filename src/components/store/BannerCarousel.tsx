@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBanners } from '@/hooks/useProducts';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 export function BannerCarousel() {
   const { data: banners } = useBanners();
@@ -49,9 +50,11 @@ export function BannerCarousel() {
         style={{ transform: `translateX(-${currentIndex * 100}%)` }}
       >
         {displayBanners.map((banner: any, index: number) => {
-          const imageUrl = isMobile && banner.mobile_image_url 
-            ? banner.mobile_image_url 
-            : banner.image_url;
+          const imageUrl = resolveImageUrl(
+            isMobile && banner.mobile_image_url 
+              ? banner.mobile_image_url 
+              : banner.image_url
+          );
 
           return (
             <div key={banner.id} className="w-full flex-shrink-0">

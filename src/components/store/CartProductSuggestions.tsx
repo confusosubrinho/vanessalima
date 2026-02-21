@@ -6,6 +6,7 @@ import { ShoppingBag } from 'lucide-react';
 import { useState } from 'react';
 import { VariantSelectorModal } from './VariantSelectorModal';
 import { useStoreContact } from '@/hooks/useStoreContact';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 interface CartProductSuggestionsProps {
   compact?: boolean;
@@ -79,7 +80,7 @@ export function CartProductSuggestions({ compact = false }: CartProductSuggestio
               <Link to={`/produto/${product.slug}`} className="block">
                 <div className="aspect-square overflow-hidden bg-muted">
                   <img
-                    src={img?.url || '/placeholder.svg'}
+                    src={resolveImageUrl(img?.url)}
                     alt={product.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                   />
