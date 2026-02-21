@@ -505,6 +505,54 @@ export type Database = {
           },
         ]
       }
+      cleanup_runs: {
+        Row: {
+          bytes_freed: number | null
+          created_at: string
+          details: Json | null
+          duration_ms: number | null
+          errors: string[] | null
+          finished_at: string | null
+          id: string
+          job_type: string
+          mode: string
+          records_consolidated: number | null
+          records_deleted: number | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          bytes_freed?: number | null
+          created_at?: string
+          details?: Json | null
+          duration_ms?: number | null
+          errors?: string[] | null
+          finished_at?: string | null
+          id?: string
+          job_type: string
+          mode?: string
+          records_consolidated?: number | null
+          records_deleted?: number | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          bytes_freed?: number | null
+          created_at?: string
+          details?: Json | null
+          duration_ms?: number | null
+          errors?: string[] | null
+          finished_at?: string | null
+          id?: string
+          job_type?: string
+          mode?: string
+          records_consolidated?: number | null
+          records_deleted?: number | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       coupons: {
         Row: {
           code: string
@@ -947,6 +995,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      log_daily_stats: {
+        Row: {
+          created_at: string
+          error_count: number | null
+          id: string
+          info_count: number | null
+          log_source: string
+          stat_date: string
+          total_count: number | null
+          warning_count: number | null
+        }
+        Insert: {
+          created_at?: string
+          error_count?: number | null
+          id?: string
+          info_count?: number | null
+          log_source: string
+          stat_date: string
+          total_count?: number | null
+          warning_count?: number | null
+        }
+        Update: {
+          created_at?: string
+          error_count?: number | null
+          id?: string
+          info_count?: number | null
+          log_source?: string
+          stat_date?: string
+          total_count?: number | null
+          warning_count?: number | null
+        }
+        Relationships: []
       }
       login_attempts: {
         Row: {

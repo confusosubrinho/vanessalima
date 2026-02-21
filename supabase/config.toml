@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.appmax-healthcheck]
 verify_jwt = false
+
+[functions.cleanup-logs]
+verify_jwt = false
