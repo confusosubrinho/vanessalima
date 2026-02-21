@@ -116,6 +116,75 @@ export type Database = {
         }
         Relationships: []
       }
+      appmax_installations: {
+        Row: {
+          app_id: string
+          created_at: string
+          environment: string
+          external_key: string
+          id: string
+          installation_token: string | null
+          last_error: string | null
+          merchant_client_id: string | null
+          merchant_client_secret: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          app_id: string
+          created_at?: string
+          environment?: string
+          external_key: string
+          id?: string
+          installation_token?: string | null
+          last_error?: string | null
+          merchant_client_id?: string | null
+          merchant_client_secret?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          app_id?: string
+          created_at?: string
+          environment?: string
+          external_key?: string
+          id?: string
+          installation_token?: string | null
+          last_error?: string | null
+          merchant_client_id?: string | null
+          merchant_client_secret?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      appmax_logs: {
+        Row: {
+          created_at: string
+          id: string
+          level: string
+          message: string
+          meta: Json | null
+          scope: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: string
+          message: string
+          meta?: Json | null
+          scope?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: string
+          message?: string
+          meta?: Json | null
+          scope?: string
+        }
+        Relationships: []
+      }
       banners: {
         Row: {
           created_at: string
