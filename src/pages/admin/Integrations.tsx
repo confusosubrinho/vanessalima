@@ -40,7 +40,7 @@ function AppmaxGatewayPanel() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('appmax_installations' as any)
-        .select('id, external_key, environment, status, last_error, updated_at, merchant_client_id')
+        .select('id, external_key, environment, status, last_error, updated_at, merchant_client_id, external_id')
         .eq('external_key', 'main-store')
         .eq('environment', 'sandbox')
         .maybeSingle();
@@ -88,7 +88,7 @@ function AppmaxGatewayPanel() {
     try {
       const { error } = await supabase
         .from('appmax_installations' as any)
-        .update({ status: 'disconnected', merchant_client_id: null, merchant_client_secret: null, installation_token: null, last_error: null } as any)
+        .update({ status: 'disconnected', merchant_client_id: null, merchant_client_secret: null, authorize_token: null, external_id: null, last_error: null } as any)
         .eq('id', installation.id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['appmax-installation'] });
@@ -121,11 +121,20 @@ function AppmaxGatewayPanel() {
         </div>
 
         {installStatus === 'connected' && installation?.updated_at && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Check className="h-3.5 w-3.5 text-green-600" />
-            Conectado em {format(new Date(installation.updated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Check className="h-3.5 w-3.5 text-primary" />
+              Conectado em {format(new Date(installation.updated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+            </div>
+            {installation.external_id && (
+              <p className="text-xs text-muted-foreground">
+                External ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{installation.external_id}</code>
+              </p>
+            )}
             {installation.merchant_client_id && (
-              <span className="text-muted-foreground">• Client ID: {String(installation.merchant_client_id).slice(0, 8)}...</span>
+              <p className="text-xs text-muted-foreground">
+                Merchant Client ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{String(installation.merchant_client_id).slice(0, 12)}...</code>
+              </p>
             )}
           </div>
         )}

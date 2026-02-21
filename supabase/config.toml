@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.appmax-generate-merchant-keys]
 verify_jwt = false
+
+[functions.appmax-healthcheck]
+verify_jwt = false

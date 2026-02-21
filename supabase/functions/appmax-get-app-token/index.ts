@@ -16,9 +16,7 @@ async function logAppmax(
     await supabase
       .from("appmax_logs")
       .insert({ level, scope: "appmax", message, meta: meta ?? {} });
-  } catch (_) {
-    // best effort
-  }
+  } catch (_) {}
 }
 
 Deno.serve(async (req) => {
@@ -51,17 +49,6 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-  // Check admin
-  const { data: isAdmin } = await supabase.rpc("has_role", {
-    _user_id: claimsData.claims.sub,
-    _role: "admin",
-  });
-  if (!isAdmin) {
-    return new Response(JSON.stringify({ error: "Forbidden" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
 
   try {
     const clientId = Deno.env.get("APPMAX_CLIENT_ID");
@@ -74,12 +61,12 @@ Deno.serve(async (req) => {
 
     const tokenRes = await fetch(`${authBaseUrl}/oauth/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
         grant_type: "client_credentials",
         client_id: clientId,
         client_secret: clientSecret,
-      }),
+      }).toString(),
     });
 
     const tokenData = await tokenRes.json();
@@ -87,7 +74,7 @@ Deno.serve(async (req) => {
     if (!tokenRes.ok || !tokenData.access_token) {
       await logAppmax(supabase, "error", "Falha ao obter app token", {
         status: tokenRes.status,
-        response: tokenData,
+        error: tokenData.error || tokenData.message,
       });
       throw new Error(tokenData.message || "Falha ao obter token do aplicativo");
     }

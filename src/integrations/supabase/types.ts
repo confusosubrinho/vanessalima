@@ -119,11 +119,12 @@ export type Database = {
       appmax_installations: {
         Row: {
           app_id: string
+          authorize_token: string | null
           created_at: string
           environment: string
+          external_id: string | null
           external_key: string
           id: string
-          installation_token: string | null
           last_error: string | null
           merchant_client_id: string | null
           merchant_client_secret: string | null
@@ -132,11 +133,12 @@ export type Database = {
         }
         Insert: {
           app_id: string
+          authorize_token?: string | null
           created_at?: string
           environment?: string
+          external_id?: string | null
           external_key: string
           id?: string
-          installation_token?: string | null
           last_error?: string | null
           merchant_client_id?: string | null
           merchant_client_secret?: string | null
@@ -145,11 +147,12 @@ export type Database = {
         }
         Update: {
           app_id?: string
+          authorize_token?: string | null
           created_at?: string
           environment?: string
+          external_id?: string | null
           external_key?: string
           id?: string
-          installation_token?: string | null
           last_error?: string | null
           merchant_client_id?: string | null
           merchant_client_secret?: string | null

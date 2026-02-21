@@ -26,18 +26,19 @@ async function getAppToken(supabase: any): Promise<string> {
 
   const res = await fetch(`${authBaseUrl}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
       grant_type: "client_credentials",
       client_id: clientId,
       client_secret: clientSecret,
-    }),
+    }).toString(),
   });
 
   const data = await res.json();
   if (!res.ok || !data.access_token) {
     await logAppmax(supabase, "error", "Falha ao obter app token para authorize", {
       status: res.status,
+      error: data.error || data.message,
     });
     throw new Error("Falha ao obter token do aplicativo");
   }
@@ -91,13 +92,16 @@ Deno.serve(async (req) => {
     if (!externalKey) throw new Error("external_key é obrigatório");
 
     const appId = Deno.env.get("APPMAX_APP_ID");
-    const callbackUrl = Deno.env.get("APPMAX_CALLBACK_URL");
+    if (!appId) {
+      return new Response(
+        JSON.stringify({ error: "APPMAX_APP_ID não configurado. Configure o App ID antes de conectar.", code: "missing_app_id" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const callbackUrl = Deno.env.get("APPMAX_CALLBACK_URL") || "https://vanessalima.lovable.app/admin/integrations/appmax/callback";
     const apiBaseUrl = "https://api.sandboxappmax.com.br";
     const adminBaseUrl = "https://breakingcode.sandboxappmax.com.br";
-
-    if (!appId || !callbackUrl) {
-      throw new Error("APPMAX_APP_ID ou APPMAX_CALLBACK_URL não configurados");
-    }
 
     // Check if already connected
     const { data: existing } = await supabase
@@ -109,14 +113,8 @@ Deno.serve(async (req) => {
 
     if (existing?.status === "connected") {
       return new Response(
-        JSON.stringify({
-          error: "Já conectado. Desconecte antes de reconectar.",
-          status: "already_connected",
-        }),
-        {
-          status: 409,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Já conectado. Desconecte antes de reconectar.", status: "already_connected" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -125,6 +123,13 @@ Deno.serve(async (req) => {
 
     // Call /app/authorize
     const callbackWithKey = `${callbackUrl}?external_key=${encodeURIComponent(externalKey)}`;
+    
+    await logAppmax(supabase, "info", "Chamando /app/authorize", {
+      app_id: appId,
+      external_key: externalKey,
+      url_callback: callbackWithKey,
+    });
+
     const authorizeRes = await fetch(`${apiBaseUrl}/app/authorize`, {
       method: "POST",
       headers: {
@@ -145,17 +150,21 @@ Deno.serve(async (req) => {
         status: authorizeRes.status,
         response: authorizeData,
       });
-      throw new Error(authorizeData.message || "Falha ao autorizar aplicativo");
+      throw new Error(authorizeData.message || JSON.stringify(authorizeData) || "Falha ao autorizar aplicativo");
     }
 
-    const installationToken =
-      authorizeData.token || authorizeData.data?.token || authorizeData.installation_token;
+    // Extract token/hash — Appmax may return in different shapes
+    const authorizeToken =
+      authorizeData.token ||
+      authorizeData.hash ||
+      authorizeData.data?.token ||
+      authorizeData.data?.hash;
 
-    if (!installationToken) {
-      await logAppmax(supabase, "error", "Token de instalação não retornado", {
+    if (!authorizeToken) {
+      await logAppmax(supabase, "error", "Token/hash de autorização não retornado", {
         response: authorizeData,
       });
-      throw new Error("Token de instalação não retornado pela Appmax");
+      throw new Error("Token de autorização não retornado pela Appmax");
     }
 
     // Upsert installation
@@ -163,7 +172,7 @@ Deno.serve(async (req) => {
       external_key: externalKey,
       environment: "sandbox",
       app_id: appId,
-      installation_token: installationToken,
+      authorize_token: authorizeToken,
       status: "pending",
       last_error: null,
     };
@@ -179,9 +188,10 @@ Deno.serve(async (req) => {
 
     await logAppmax(supabase, "info", "Autorização iniciada com sucesso", {
       external_key: externalKey,
+      authorize_token: authorizeToken,
     });
 
-    const redirectUrl = `${adminBaseUrl}/appstore/integration/${installationToken}`;
+    const redirectUrl = `${adminBaseUrl}/appstore/integration/${authorizeToken}`;
 
     return new Response(
       JSON.stringify({ redirect_url: redirectUrl }),
