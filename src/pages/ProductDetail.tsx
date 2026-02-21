@@ -23,6 +23,7 @@ import { AddedToCartToast } from '@/components/store/AddedToCartToast';
 import { ProductDetailSkeleton } from '@/components/store/Skeletons';
 import { StockNotifyModal } from '@/components/store/StockNotifyModal';
 import { useRecentProducts, useRelatedProducts } from '@/hooks/useRecentProducts';
+import { resolveImageUrl } from '@/lib/imageUrl';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -258,7 +259,7 @@ export default function ProductDetail() {
     setAddedToast({
       name: product.name,
       variant: `Tam. ${variant.size}${variant.color ? ' - ' + variant.color : ''}`,
-      image: primaryImage?.url || '/placeholder.svg',
+      image: resolveImageUrl(primaryImage?.url),
     });
   };
 
@@ -446,7 +447,7 @@ export default function ProductDetail() {
                 )}
               </div>
               <img
-                src={images[selectedImage]?.url || '/placeholder.svg'}
+                src={resolveImageUrl(images[selectedImage]?.url)}
                 alt={product.name}
                 className="w-full h-full object-cover"
               />
@@ -461,7 +462,7 @@ export default function ProductDetail() {
                       index === selectedImage ? 'border-primary' : 'border-transparent'
                     }`}
                   >
-                    <img src={image.url} alt={`${product.name} - ${index + 1}`} className="w-full h-full object-cover" />
+                    <img src={resolveImageUrl(image.url)} alt={`${product.name} - ${index + 1}`} className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>

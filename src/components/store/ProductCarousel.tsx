@@ -8,6 +8,7 @@ import { useStoreSettings } from '@/hooks/useProducts';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentDisplay } from '@/lib/pricingEngine';
 import { VariantSelectorModal } from './VariantSelectorModal';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 interface ProductCarouselProps {
   products: Product[];
@@ -176,7 +177,7 @@ export function ProductCarousel({
                     <Link to={`/produto/${product.slug}`} className="block">
                       <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
                         <img
-                          src={primaryImage?.url || '/placeholder.svg'}
+                          src={resolveImageUrl(primaryImage?.url)}
                           alt={primaryImage?.alt_text || product.name}
                           className={`w-full h-full object-cover transition-all duration-500 ${
                             secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-110'
@@ -188,7 +189,7 @@ export function ProductCarousel({
                         />
                         {secondaryImage && (
                           <img
-                            src={secondaryImage.url}
+                            src={resolveImageUrl(secondaryImage.url)}
                             alt={secondaryImage.alt_text || product.name}
                             className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
                             loading="lazy"

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { Product } from '@/types/database';
+import { resolveImageUrl } from '@/lib/imageUrl';
 
 interface BuyTogetherProps {
   currentProduct: Product;
@@ -85,7 +86,7 @@ export function BuyTogether({ currentProduct, relatedProducts, discountPercent =
                 }`}>
                   {isSelected ? <Check className="h-3 w-3" /> : null}
                 </div>
-                <img src={primaryImage?.url || '/placeholder.svg'} alt={product.name} className="w-14 h-14 object-cover rounded-md" />
+                <img src={resolveImageUrl(primaryImage?.url)} alt={product.name} className="w-14 h-14 object-cover rounded-md" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium line-clamp-1">{product.name}</p>
                   <p className="text-sm font-bold text-primary">{formatPrice(price)}</p>

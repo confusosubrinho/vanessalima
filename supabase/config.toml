@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.cleanup-logs]
 verify_jwt = false
+
+[functions.repair-images]
+verify_jwt = false
