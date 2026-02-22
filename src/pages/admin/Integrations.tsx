@@ -49,6 +49,22 @@ function AppmaxGatewayPanel() {
     },
   });
 
+  // Appmax settings (bootstrap state)
+  const { data: appmaxSettings } = useQuery({
+    queryKey: ['appmax-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('appmax_settings' as any)
+        .select('*')
+        .eq('environment', 'sandbox')
+        .maybeSingle();
+      if (error) throw error;
+      return data as any;
+    },
+  });
+
+  const isBootstrap = !appmaxSettings?.app_id;
+
   // Logs
   const { data: logs } = useQuery({
     queryKey: ['appmax-logs'],
@@ -115,10 +131,32 @@ function AppmaxGatewayPanel() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h4 className="font-medium text-sm">Instalação do Aplicativo (Sandbox)</h4>
-          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${currentStatus.color}`}>
-            {currentStatus.label}
-          </span>
+          <div className="flex items-center gap-2">
+            {isBootstrap && (
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-orange-100 text-orange-800">
+                Bootstrap
+              </span>
+            )}
+            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${currentStatus.color}`}>
+              {currentStatus.label}
+            </span>
+          </div>
         </div>
+
+        {isBootstrap && installStatus !== 'connected' && (
+          <div className="bg-orange-50 border border-orange-200 text-orange-800 text-xs rounded-md p-2.5">
+            <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
+            Modo Bootstrap: o App ID será definido automaticamente na primeira instalação pela Appmax.
+          </div>
+        )}
+
+        {appmaxSettings?.app_id && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              App ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono">{appmaxSettings.app_id}</code>
+            </p>
+          </div>
+        )}
 
         {installStatus === 'connected' && installation?.updated_at && (
           <div className="space-y-1">
@@ -152,7 +190,7 @@ function AppmaxGatewayPanel() {
               {connecting ? (
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Redirecionando...</>
               ) : (
-                <><Plug className="h-4 w-4 mr-2" />Conectar Appmax (Sandbox)</>
+                <><Plug className="h-4 w-4 mr-2" />{isBootstrap ? 'Iniciar Bootstrap (Sandbox)' : 'Conectar Appmax (Sandbox)'}</>
               )}
             </Button>
           ) : (
@@ -160,6 +198,17 @@ function AppmaxGatewayPanel() {
               Desconectar
             </Button>
           )}
+        </div>
+
+        {/* URLs de referência */}
+        <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
+          <p className="font-medium">🔗 URLs para cadastro no portal Appmax:</p>
+          <p className="text-muted-foreground">
+            Healthcheck: <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">https://sojrvsbqkrbxoymlwtii.supabase.co/functions/v1/appmax-healthcheck</code>
+          </p>
+          <p className="text-muted-foreground">
+            Callback: <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">{appmaxSettings?.callback_url || 'https://vanessalima.lovable.app/admin/integrations/appmax/callback'}</code>
+          </p>
         </div>
       </div>
 

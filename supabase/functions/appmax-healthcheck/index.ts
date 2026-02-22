@@ -46,27 +46,6 @@ Deno.serve(async (req) => {
       has_client_secret: !!client_secret,
     });
 
-    // Validate app_id
-    const expectedAppId = Deno.env.get("APPMAX_APP_ID");
-    if (!expectedAppId) {
-      await logAppmax(supabase, "error", "APPMAX_APP_ID não configurado no servidor");
-      return new Response(JSON.stringify({ error: "Server misconfigured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (String(app_id) !== String(expectedAppId)) {
-      await logAppmax(supabase, "error", "app_id inválido no health check", {
-        received: app_id,
-        expected: expectedAppId,
-      });
-      return new Response(JSON.stringify({ error: "Invalid app_id" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     if (!client_id || !client_secret || !external_key) {
       await logAppmax(supabase, "error", "Campos obrigatórios ausentes no health check", {
         has_client_id: !!client_id,
@@ -77,6 +56,61 @@ Deno.serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Read saved app_id from appmax_settings
+    const { data: settings } = await supabase
+      .from("appmax_settings")
+      .select("id, app_id")
+      .eq("environment", "sandbox")
+      .maybeSingle();
+
+    const savedAppId = settings?.app_id;
+
+    if (!savedAppId) {
+      // === BOOTSTRAP MODE: first installation ===
+      // No app_id saved yet — accept the incoming one and save it
+      if (!app_id) {
+        await logAppmax(supabase, "error", "Bootstrap: app_id não enviado pela Appmax");
+        return new Response(JSON.stringify({ error: "app_id is required for bootstrap" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Save the app_id as official
+      if (settings?.id) {
+        await supabase
+          .from("appmax_settings")
+          .update({ app_id: String(app_id), client_id, client_secret })
+          .eq("id", settings.id);
+      } else {
+        await supabase
+          .from("appmax_settings")
+          .insert({
+            environment: "sandbox",
+            app_id: String(app_id),
+            client_id,
+            client_secret,
+          });
+      }
+
+      await logAppmax(supabase, "info", "Bootstrap: app_id salvo como oficial", {
+        app_id,
+        external_key,
+      });
+    } else {
+      // === NORMAL MODE: validate app_id ===
+      if (String(app_id) !== String(savedAppId)) {
+        await logAppmax(supabase, "error", "app_id inválido no health check", {
+          received: app_id,
+          expected: savedAppId,
+        });
+        return new Response(JSON.stringify({ error: "Invalid app_id" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Upsert installation
@@ -110,6 +144,7 @@ Deno.serve(async (req) => {
           ...updateData,
           external_key,
           environment: "sandbox",
+          app_id: String(app_id),
         });
       if (error) throw error;
     }
@@ -118,6 +153,7 @@ Deno.serve(async (req) => {
       external_key,
       external_id: externalId,
       merchant_client_id: client_id,
+      bootstrap: !savedAppId,
     });
 
     return new Response(

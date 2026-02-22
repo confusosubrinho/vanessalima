@@ -188,6 +188,42 @@ export type Database = {
         }
         Relationships: []
       }
+      appmax_settings: {
+        Row: {
+          app_id: string | null
+          callback_url: string | null
+          client_id: string | null
+          client_secret: string | null
+          created_at: string
+          environment: string
+          healthcheck_url: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          app_id?: string | null
+          callback_url?: string | null
+          client_id?: string | null
+          client_secret?: string | null
+          created_at?: string
+          environment?: string
+          healthcheck_url?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          app_id?: string | null
+          callback_url?: string | null
+          client_id?: string | null
+          client_secret?: string | null
+          created_at?: string
+          environment?: string
+          healthcheck_url?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       banners: {
         Row: {
           created_at: string

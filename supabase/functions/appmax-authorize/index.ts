@@ -91,15 +91,17 @@ Deno.serve(async (req) => {
     const externalKey = body.external_key;
     if (!externalKey) throw new Error("external_key é obrigatório");
 
-    const appId = Deno.env.get("APPMAX_APP_ID");
-    if (!appId) {
-      return new Response(
-        JSON.stringify({ error: "APPMAX_APP_ID não configurado. Configure o App ID antes de conectar.", code: "missing_app_id" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Try to get app_id: first from appmax_settings, then from env
+    const { data: settings } = await supabase
+      .from("appmax_settings")
+      .select("app_id, callback_url")
+      .eq("environment", "sandbox")
+      .maybeSingle();
 
-    const callbackUrl = Deno.env.get("APPMAX_CALLBACK_URL") || "https://vanessalima.lovable.app/admin/integrations/appmax/callback";
+    const appId = settings?.app_id || Deno.env.get("APPMAX_APP_ID");
+    const isBootstrap = !appId;
+
+    const callbackUrl = settings?.callback_url || Deno.env.get("APPMAX_CALLBACK_URL") || "https://vanessalima.lovable.app/admin/integrations/appmax/callback";
     const apiBaseUrl = "https://api.sandboxappmax.com.br";
     const adminBaseUrl = "https://breakingcode.sandboxappmax.com.br";
 
@@ -121,13 +123,22 @@ Deno.serve(async (req) => {
     // Get app token
     const accessToken = await getAppToken(supabase);
 
-    // Call /app/authorize
+    // Build authorize payload
     const callbackWithKey = `${callbackUrl}?external_key=${encodeURIComponent(externalKey)}`;
-    
-    await logAppmax(supabase, "info", "Chamando /app/authorize", {
-      app_id: appId,
+
+    const authorizePayload: Record<string, string> = {
       external_key: externalKey,
       url_callback: callbackWithKey,
+    };
+
+    // If we have an app_id, include it; otherwise let bootstrap mode work
+    if (appId) {
+      authorizePayload.app_id = appId;
+    }
+
+    await logAppmax(supabase, "info", "Chamando /app/authorize", {
+      ...authorizePayload,
+      bootstrap: isBootstrap,
     });
 
     const authorizeRes = await fetch(`${apiBaseUrl}/app/authorize`, {
@@ -136,11 +147,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({
-        app_id: appId,
-        external_key: externalKey,
-        url_callback: callbackWithKey,
-      }),
+      body: JSON.stringify(authorizePayload),
     });
 
     const authorizeData = await authorizeRes.json();
@@ -149,11 +156,12 @@ Deno.serve(async (req) => {
       await logAppmax(supabase, "error", "Falha em /app/authorize", {
         status: authorizeRes.status,
         response: authorizeData,
+        bootstrap: isBootstrap,
       });
       throw new Error(authorizeData.message || JSON.stringify(authorizeData) || "Falha ao autorizar aplicativo");
     }
 
-    // Extract token/hash — Appmax may return in different shapes
+    // Extract token/hash
     const authorizeToken =
       authorizeData.token ||
       authorizeData.hash ||
@@ -171,7 +179,7 @@ Deno.serve(async (req) => {
     const upsertData = {
       external_key: externalKey,
       environment: "sandbox",
-      app_id: appId,
+      app_id: appId || "bootstrap-pending",
       authorize_token: authorizeToken,
       status: "pending",
       last_error: null,
@@ -189,12 +197,13 @@ Deno.serve(async (req) => {
     await logAppmax(supabase, "info", "Autorização iniciada com sucesso", {
       external_key: externalKey,
       authorize_token: authorizeToken,
+      bootstrap: isBootstrap,
     });
 
     const redirectUrl = `${adminBaseUrl}/appstore/integration/${authorizeToken}`;
 
     return new Response(
-      JSON.stringify({ redirect_url: redirectUrl }),
+      JSON.stringify({ redirect_url: redirectUrl, bootstrap: isBootstrap }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
