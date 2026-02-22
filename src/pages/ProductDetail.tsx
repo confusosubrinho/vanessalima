@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck, Bell } from 'lucide-react';
+import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck, Bell, Star } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StoreLayout } from '@/components/store/StoreLayout';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,23 @@ export default function ProductDetail() {
   const { data: relatedProducts } = useRelatedProducts(product?.category_id, product?.id);
   const { data: storeSettings } = useStoreSettings();
   const { data: pricingConfig } = usePricingConfig();
+
+  // Fetch review stats
+  const { data: reviewStats } = useQuery({
+    queryKey: ['product-review-stats', product?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('product_reviews')
+        .select('rating')
+        .eq('product_id', product!.id)
+        .eq('is_approved', true);
+      if (error || !data || data.length === 0) return { avg: 0, count: 0 };
+      const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
+      return { avg, count: data.length };
+    },
+    enabled: !!product?.id,
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Auto-select first available variant when product loads
   useEffect(() => {
@@ -477,6 +494,23 @@ export default function ProductDetail() {
             <div>
               {product.sku && <p className="text-sm text-muted-foreground mb-1">SKU: {product.sku}</p>}
               <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">{product.name}</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`h-4 w-4 ${
+                        star <= Math.round(reviewStats?.avg || 0)
+                          ? 'fill-primary text-primary'
+                          : 'fill-muted text-muted-foreground/30'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  ({reviewStats?.count || 0})
+                </span>
+              </div>
             </div>
 
             <div className="space-y-1">
