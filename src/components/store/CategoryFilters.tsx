@@ -259,9 +259,6 @@ export function CategoryFilters({
           </SheetContent>
         </Sheet>
 
-        <span className="text-sm text-muted-foreground">
-          {productCount} produto{productCount !== 1 ? 's' : ''}
-        </span>
       </div>
 
       <Select
