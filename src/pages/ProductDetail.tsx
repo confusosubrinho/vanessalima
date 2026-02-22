@@ -434,16 +434,16 @@ export default function ProductDetail() {
         <div className="grid md:grid-cols-2 gap-8">
           {/* Images */}
           <div className="space-y-4">
-            <div className="aspect-square rounded-lg overflow-hidden bg-muted relative">
+            <div className="aspect-square rounded-lg overflow-hidden bg-muted relative max-h-[calc(100vh-120px)] md:max-h-none">
               <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
                 {product.is_new && (
                   <Badge className="bg-primary text-primary-foreground border-0 px-3 py-1">Lançamento</Badge>
                 )}
                 {hasDiscount && (
-                  <Badge className="bg-destructive text-destructive-foreground border-0 px-3 py-1">-{discountPercentage}% OFF</Badge>
+                  <Badge className="bg-primary text-primary-foreground border-0 px-3 py-1">-{discountPercentage}% OFF</Badge>
                 )}
                 {product.is_featured && !product.is_new && !hasDiscount && (
-                  <Badge className="bg-warning text-warning-foreground border-0 px-3 py-1">Destaque</Badge>
+                  <Badge className="bg-primary text-primary-foreground border-0 px-3 py-1">Destaque</Badge>
                 )}
               </div>
               <img
@@ -572,7 +572,7 @@ export default function ProductDetail() {
             </div>
             </div>{/* close variantSectionRef */}
 
-            <div>
+            <div className="hidden md:block">
               <label className="block font-medium mb-2">Quantidade</label>
               <div className="flex items-center gap-4">
                 <div className="flex items-center border rounded-lg">
