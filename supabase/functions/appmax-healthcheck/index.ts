@@ -3,6 +3,7 @@ import {
   getServiceClient,
   getActiveSettings,
   getSettingsByEnv,
+  getAppToken,
   logAppmax,
   logHandshake,
   extractSafeHeaders,
@@ -198,6 +199,64 @@ Deno.serve(async (req) => {
           app_id: String(app_id || savedAppId || "unknown"),
         });
       if (error) throw error;
+    }
+
+    // If no credentials came with the healthcheck, try to generate them now
+    const resolvedExternalKey = external_key;
+    if (!client_id || !client_secret) {
+      const { data: installData } = await supabase
+        .from("appmax_installations")
+        .select("authorize_token")
+        .eq("external_key", resolvedExternalKey)
+        .eq("environment", env)
+        .maybeSingle();
+
+      if (installData?.authorize_token) {
+        try {
+          const generateUrl = `${settings.base_api_url}/app/client/generate`;
+          const accessToken = await getAppToken(supabase, settings);
+
+          const genRes = await fetch(generateUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ token: installData.authorize_token }),
+          });
+
+          const genData = await genRes.json();
+          const merchantClientId =
+            genData?.data?.client?.client_id || genData?.data?.client_id || null;
+          const merchantClientSecret =
+            genData?.data?.client?.client_secret || genData?.data?.client_secret || null;
+
+          if (merchantClientId && merchantClientSecret) {
+            const encryptedSecret = await encrypt(merchantClientSecret);
+            await supabase
+              .from("appmax_installations")
+              .update({
+                merchant_client_id: merchantClientId,
+                merchant_client_secret_encrypted: encryptedSecret,
+                last_error: null,
+              })
+              .eq("external_key", resolvedExternalKey)
+              .eq("environment", env);
+
+            await logAppmax(supabase, "info", `Generate automático OK após healthcheck (${env})`, {
+              merchant_client_id: merchantClientId,
+            }, requestId);
+          } else {
+            await logAppmax(supabase, "warn", `Generate automático sem credenciais (${env})`, {
+              gen_status: genRes.status,
+              gen_keys: Object.keys(genData?.data || {}),
+            }, requestId);
+          }
+        } catch (genErr: any) {
+          await logAppmax(supabase, "warn", `Generate automático falhou (${env}): ${genErr.message}`, {}, requestId);
+          // Não falha o healthcheck por causa do generate
+        }
+      }
     }
 
     // Log success
