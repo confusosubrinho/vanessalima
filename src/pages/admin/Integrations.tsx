@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi } from 'lucide-react';
+import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi, Eye, EyeOff, Save, Copy } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -28,24 +28,283 @@ interface ShippingRegion {
   enabled: boolean;
 }
 
+// ─── Appmax Settings Form ───
+
+const APPMAX_DEFAULTS: Record<string, { base_api_url: string; base_auth_url: string; base_portal_url: string }> = {
+  sandbox: {
+    base_api_url: 'https://sandbox.appmax.com.br/api/v1',
+    base_auth_url: 'https://sandbox.appmax.com.br/oauth',
+    base_portal_url: 'https://sandbox.appmax.com.br',
+  },
+  production: {
+    base_api_url: 'https://api.appmax.com.br/api/v1',
+    base_auth_url: 'https://admin.appmax.com.br/oauth',
+    base_portal_url: 'https://admin.appmax.com.br',
+  },
+};
+
+function AppmaxSettingsForm({ env, settings, onSaved }: {
+  env: 'sandbox' | 'production';
+  settings: Record<string, unknown> | null;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const envLabel = env === 'sandbox' ? 'Sandbox' : 'Produção';
+  const defaults = APPMAX_DEFAULTS[env];
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
+  const functionsBase = projectId ? `https://${projectId}.supabase.co/functions/v1` : '';
+
+  const [form, setForm] = useState({
+    app_id: '',
+    client_id: '',
+    client_secret: '',
+    base_api_url: '',
+    base_auth_url: '',
+    base_portal_url: '',
+    callback_url: '',
+    healthcheck_url: '',
+  });
+  const [showSecret, setShowSecret] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      const s = settings as Record<string, string | null>;
+      setForm({
+        app_id: s.app_id || '',
+        client_id: s.client_id || '',
+        client_secret: s.client_secret || '',
+        base_api_url: s.base_api_url || defaults.base_api_url,
+        base_auth_url: s.base_auth_url || defaults.base_auth_url,
+        base_portal_url: s.base_portal_url || defaults.base_portal_url,
+        callback_url: s.callback_url || (functionsBase ? `${functionsBase}/appmax-authorize` : ''),
+        healthcheck_url: s.healthcheck_url || (functionsBase ? `${functionsBase}/appmax-healthcheck` : ''),
+      });
+    }
+  }, [settings, defaults, functionsBase]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        app_id: form.app_id || null,
+        client_id: form.client_id || null,
+        base_api_url: form.base_api_url || null,
+        base_auth_url: form.base_auth_url || null,
+        base_portal_url: form.base_portal_url || null,
+        callback_url: form.callback_url || null,
+        healthcheck_url: form.healthcheck_url || null,
+        updated_at: new Date().toISOString(),
+      };
+      // Only update client_secret if it was changed (non-empty and different)
+      if (form.client_secret && form.client_secret !== (settings as Record<string, string | null>)?.client_secret) {
+        payload.client_secret = form.client_secret;
+      }
+
+      if (settings && (settings as Record<string, unknown>).id) {
+        const { error } = await supabase
+          .from('appmax_settings')
+          .update(payload)
+          .eq('id', (settings as Record<string, string>).id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('appmax_settings')
+          .insert({ ...payload, environment: env } as Record<string, unknown>);
+        if (error) throw error;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['appmax-settings', env] });
+      onSaved();
+      toast({ title: `Configurações ${envLabel} salvas!` });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro ao salvar', description: message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: `${label} copiada!`, description: text });
+  };
+
+  const fillDefaults = () => {
+    setForm(prev => ({
+      ...prev,
+      base_api_url: defaults.base_api_url,
+      base_auth_url: defaults.base_auth_url,
+      base_portal_url: defaults.base_portal_url,
+      callback_url: functionsBase ? `${functionsBase}/appmax-authorize` : prev.callback_url,
+      healthcheck_url: functionsBase ? `${functionsBase}/appmax-healthcheck` : prev.healthcheck_url,
+    }));
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-sm flex items-center gap-2">
+          <Settings2 className="h-4 w-4" />
+          Configurações do App ({envLabel})
+        </h4>
+        <Button variant="ghost" size="sm" onClick={fillDefaults} className="text-xs h-7">
+          Preencher padrões
+        </Button>
+      </div>
+
+      {/* Credenciais */}
+      <div className="grid gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">App ID</Label>
+          <Input
+            value={form.app_id}
+            onChange={e => setForm(prev => ({ ...prev, app_id: e.target.value }))}
+            placeholder="ID do aplicativo na Appmax"
+            className="text-xs h-8"
+          />
+          <p className="text-[10px] text-muted-foreground">Preenchido automaticamente no modo Bootstrap, ou cole o ID fornecido pela Appmax.</p>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Client ID</Label>
+          <Input
+            value={form.client_id}
+            onChange={e => setForm(prev => ({ ...prev, client_id: e.target.value }))}
+            placeholder="client_id do OAuth"
+            className="text-xs h-8"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Client Secret</Label>
+          <div className="relative">
+            <Input
+              type={showSecret ? 'text' : 'password'}
+              value={form.client_secret}
+              onChange={e => setForm(prev => ({ ...prev, client_secret: e.target.value }))}
+              placeholder="client_secret do OAuth"
+              className="text-xs h-8 pr-8"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSecret(!showSecret)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showSecret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Deixe vazio para manter o valor atual.</p>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* URLs base */}
+      <div className="grid gap-3">
+        <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">URLs da API</h5>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Base API URL</Label>
+          <Input
+            value={form.base_api_url}
+            onChange={e => setForm(prev => ({ ...prev, base_api_url: e.target.value }))}
+            placeholder={defaults.base_api_url}
+            className="text-xs h-8 font-mono"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Base Auth URL</Label>
+          <Input
+            value={form.base_auth_url}
+            onChange={e => setForm(prev => ({ ...prev, base_auth_url: e.target.value }))}
+            placeholder={defaults.base_auth_url}
+            className="text-xs h-8 font-mono"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Base Portal URL</Label>
+          <Input
+            value={form.base_portal_url}
+            onChange={e => setForm(prev => ({ ...prev, base_portal_url: e.target.value }))}
+            placeholder={defaults.base_portal_url}
+            className="text-xs h-8 font-mono"
+          />
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* URLs de callback */}
+      <div className="grid gap-3">
+        <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">URLs de Integração</h5>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Callback URL</Label>
+          <div className="flex gap-1">
+            <Input
+              value={form.callback_url}
+              onChange={e => setForm(prev => ({ ...prev, callback_url: e.target.value }))}
+              placeholder="URL de callback OAuth"
+              className="text-xs h-8 font-mono flex-1"
+            />
+            {form.callback_url && (
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => copyToClipboard(form.callback_url, 'Callback URL')}>
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground">Cadastre esta URL no portal Appmax como URL de callback.</p>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Healthcheck URL</Label>
+          <div className="flex gap-1">
+            <Input
+              value={form.healthcheck_url}
+              onChange={e => setForm(prev => ({ ...prev, healthcheck_url: e.target.value }))}
+              placeholder="URL de healthcheck"
+              className="text-xs h-8 font-mono flex-1"
+            />
+            {form.healthcheck_url && (
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => copyToClipboard(form.healthcheck_url, 'Healthcheck URL')}>
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground">Cadastre esta URL no portal Appmax como URL de healthcheck.</p>
+        </div>
+      </div>
+
+      <Button onClick={handleSave} disabled={saving} className="w-full" size="sm">
+        {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</> : <><Save className="h-4 w-4 mr-2" />Salvar Configurações ({envLabel})</>}
+      </Button>
+    </div>
+  );
+}
+
 // ─── Appmax Environment Tab ───
 
 function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const envLabel = env === 'sandbox' ? 'Sandbox' : 'Produção';
+  const [showSettings, setShowSettings] = useState(false);
 
   const { data: installation, isLoading: installLoading } = useQuery({
     queryKey: ['appmax-installation', env],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('appmax_installations' as any)
+        .from('appmax_installations')
         .select('id, external_key, environment, status, last_error, updated_at, merchant_client_id, external_id')
         .eq('external_key', 'main-store')
         .eq('environment', env)
         .maybeSingle();
       if (error) throw error;
-      return data as any;
+      return data;
     },
   });
 
@@ -53,12 +312,12 @@ function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
     queryKey: ['appmax-settings', env],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('appmax_settings' as any)
+        .from('appmax_settings')
         .select('*')
         .eq('environment', env)
         .maybeSingle();
       if (error) throw error;
-      return data as any;
+      return data;
     },
   });
 
@@ -77,8 +336,9 @@ function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
       if (data?.redirect_url) {
         window.location.href = data.redirect_url;
       }
-    } catch (err: any) {
-      toast({ title: 'Erro ao conectar', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro ao conectar', description: message, variant: 'destructive' });
       setConnecting(false);
     }
   };
@@ -87,26 +347,27 @@ function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
     if (!installation?.id) return;
     try {
       const { error } = await supabase
-        .from('appmax_installations' as any)
-        .update({ status: 'disconnected', merchant_client_id: null, merchant_client_secret: null, authorize_token: null, external_id: null, last_error: null } as any)
+        .from('appmax_installations')
+        .update({ status: 'disconnected', merchant_client_id: null, merchant_client_secret: null, authorize_token: null, external_id: null, last_error: null })
         .eq('id', installation.id);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ['appmax-installation', env] });
       toast({ title: `Appmax ${envLabel} desconectada` });
-    } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro', description: message, variant: 'destructive' });
     }
   };
 
   const handleActivate = async () => {
     try {
-      // Deactivate all first, then activate this one
-      await supabase.from('appmax_settings' as any).update({ is_active: false } as any).neq('environment', '___');
-      await supabase.from('appmax_settings' as any).update({ is_active: true } as any).eq('environment', env);
+      await supabase.from('appmax_settings').update({ is_active: false }).neq('environment', '___');
+      await supabase.from('appmax_settings').update({ is_active: true }).eq('environment', env);
       queryClient.invalidateQueries({ queryKey: ['appmax-settings'] });
       toast({ title: `Ambiente ${envLabel} ativado` });
-    } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      toast({ title: 'Erro', description: message, variant: 'destructive' });
     }
   };
 
@@ -122,6 +383,7 @@ function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
 
   return (
     <div className="space-y-4">
+      {/* Status header */}
       <div className="flex items-center justify-between">
         <h4 className="font-medium text-sm">Instalação ({envLabel})</h4>
         <div className="flex items-center gap-2">
@@ -185,6 +447,7 @@ function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
         </div>
       )}
 
+      {/* Action buttons */}
       <div className="flex gap-2">
         {installStatus !== 'connected' ? (
           <Button onClick={handleConnect} disabled={connecting || installLoading} className="flex-1">
@@ -201,16 +464,25 @@ function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
         )}
       </div>
 
-      {/* URLs de referência */}
-      <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
-        <p className="font-medium">🔗 URLs para cadastro no portal Appmax ({envLabel}):</p>
-        <p className="text-muted-foreground">
-          Healthcheck: <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">{appmaxSettings?.healthcheck_url || 'Não configurado'}</code>
-        </p>
-        <p className="text-muted-foreground">
-          Callback: <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">{appmaxSettings?.callback_url || 'Não configurado'}</code>
-        </p>
-      </div>
+      <Separator />
+
+      {/* Expandable settings form */}
+      <button
+        onClick={() => setShowSettings(!showSettings)}
+        className="flex items-center gap-2 text-sm font-medium w-full text-left"
+      >
+        <Settings2 className="h-4 w-4" />
+        Configurações avançadas
+        {showSettings ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+      </button>
+
+      {showSettings && (
+        <AppmaxSettingsForm
+          env={env}
+          settings={appmaxSettings as Record<string, unknown> | null}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['appmax-settings', env] })}
+        />
+      )}
     </div>
   );
 }
@@ -224,12 +496,12 @@ function AppmaxGatewayPanel() {
     queryKey: ['appmax-logs'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('appmax_logs' as any)
+        .from('appmax_logs')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(20);
       if (error) throw error;
-      return data as any[];
+      return data;
     },
   });
 
@@ -258,9 +530,10 @@ function AppmaxGatewayPanel() {
       <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
         <p className="font-medium">Como funciona:</p>
         <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
-          <li>Selecione o ambiente (Sandbox ou Produção)</li>
-          <li>Clique em "Conectar" para iniciar a autorização</li>
-          <li>Após autorizar na Appmax, as credenciais serão salvas automaticamente</li>
+          <li>Configure as credenciais do App em "Configurações avançadas"</li>
+          <li>Preencha App ID, Client ID e Client Secret fornecidos pela Appmax</li>
+          <li>Verifique se as URLs de callback e healthcheck estão corretas</li>
+          <li>Clique em "Conectar" para iniciar a autorização OAuth</li>
           <li>Ative o ambiente desejado para transações reais</li>
         </ol>
       </div>
@@ -277,7 +550,7 @@ function AppmaxGatewayPanel() {
         {showLogs && (
           <div className="mt-3 max-h-60 overflow-y-auto space-y-1.5">
             {!logs?.length && <p className="text-xs text-muted-foreground">Nenhum log encontrado.</p>}
-            {logs?.map((log: any) => (
+            {logs?.map((log) => (
               <div key={log.id} className="text-xs border rounded-md p-2 flex items-start gap-2">
                 <span className={`shrink-0 mt-0.5 h-2 w-2 rounded-full ${
                   log.level === 'error' ? 'bg-destructive' : log.level === 'warn' ? 'bg-yellow-500' : 'bg-green-500'
