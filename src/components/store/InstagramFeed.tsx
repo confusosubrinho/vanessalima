@@ -122,8 +122,8 @@ export function InstagramFeed() {
         {/* Carousel */}
         <div
           ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory justify-center"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', paddingLeft: 'max(2rem, calc(50% - 600px))', paddingRight: 'max(2rem, calc(50% - 600px))' }}
+          className="flex gap-4 overflow-x-auto scrollbar-hide"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', paddingLeft: 'calc(50% - 140px)', paddingRight: 'calc(50% - 140px)' }}
         >
           {videos.map((video, index) => {
             const isActive = index === activeIndex;
