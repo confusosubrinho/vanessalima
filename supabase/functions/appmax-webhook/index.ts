@@ -1,11 +1,8 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import {
+  corsHeaders,
+  getServiceClient,
+  logAppmax,
+} from "../_shared/appmax.ts";
 
 async function sha256(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -34,35 +31,30 @@ function mapEventToStatus(eventType: string): string | null {
   return map[eventType] || null;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const supabase = getServiceClient();
 
   try {
     // Validate webhook secret token from URL
     const url = new URL(req.url);
     const webhookSecret = Deno.env.get("APPMAX_WEBHOOK_SECRET");
 
-    // #5: Webhook secret is MANDATORY
     if (!webhookSecret) {
-      console.error("[webhook] APPMAX_WEBHOOK_SECRET not configured - rejecting request");
+      await logAppmax(supabase, "error", "APPMAX_WEBHOOK_SECRET não configurado — rejeitando request");
       return new Response("Webhook secret not configured", { status: 500 });
     }
     const urlToken = url.searchParams.get("token");
     if (urlToken !== webhookSecret) {
-      console.warn("[webhook] Invalid token received");
+      await logAppmax(supabase, "warn", "Webhook token inválido recebido");
       return new Response("Unauthorized", { status: 401 });
     }
 
     const payload = await req.json();
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceRole);
-
-    // Extract event info from payload
-    // Appmax may send events in different formats
     const eventType = payload?.type || payload?.event || payload?.event_type || "unknown";
     const appmaxOrderId =
       payload?.data?.order_id?.toString() ||
@@ -71,7 +63,9 @@ serve(async (req) => {
       null;
 
     if (!appmaxOrderId) {
-      console.warn("[webhook] No order_id in payload:", JSON.stringify(payload).slice(0, 200));
+      await logAppmax(supabase, "warn", "Webhook sem order_id no payload", {
+        preview: JSON.stringify(payload).slice(0, 200),
+      });
       return new Response("OK", { status: 200 });
     }
 
@@ -79,7 +73,6 @@ serve(async (req) => {
     const raw = JSON.stringify(payload);
     const eventHash = await sha256(`${eventType}:${appmaxOrderId}:${raw}`);
 
-    // Try to insert (unique constraint on event_hash prevents duplicates)
     const { error: insertError } = await supabase.from("order_events").insert({
       appmax_order_id: appmaxOrderId,
       event_type: eventType,
@@ -88,8 +81,9 @@ serve(async (req) => {
     });
 
     if (insertError) {
-      // Likely duplicate event - return OK to stop retries
-      console.log("[webhook] Duplicate event ignored:", eventType, appmaxOrderId);
+      await logAppmax(supabase, "info", `Webhook evento duplicado ignorado: ${eventType}`, {
+        appmax_order_id: appmaxOrderId,
+      });
       return new Response("OK", { status: 200 });
     }
 
@@ -97,7 +91,6 @@ serve(async (req) => {
     const newStatus = mapEventToStatus(eventType);
 
     if (newStatus && appmaxOrderId) {
-      // Find internal order by appmax_order_id
       const { data: order } = await supabase
         .from("orders")
         .select("id, status")
@@ -105,48 +98,34 @@ serve(async (req) => {
         .maybeSingle();
 
       if (order) {
-        // Prevent backward status transitions
         const statusWeight: Record<string, number> = {
-          pending: 1,
-          processing: 2,
-          shipped: 3,
-          delivered: 4,
-          cancelled: 5,
+          pending: 1, processing: 2, shipped: 3, delivered: 4, cancelled: 5,
         };
-
         const currentWeight = statusWeight[order.status] || 0;
         const newWeight = statusWeight[newStatus] || 0;
 
-        // Allow forward transitions and cancellations
         if (newWeight > currentWeight || newStatus === "cancelled") {
-          await supabase
-            .from("orders")
-            .update({
-              status: newStatus,
-              last_webhook_event: eventType,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", order.id);
+          await supabase.from("orders").update({
+            status: newStatus,
+            last_webhook_event: eventType,
+            updated_at: new Date().toISOString(),
+          }).eq("id", order.id);
 
-          // Also link order_event to the order
-          await supabase
-            .from("order_events")
-            .update({ order_id: order.id })
-            .eq("event_hash", eventHash);
+          await supabase.from("order_events").update({ order_id: order.id }).eq("event_hash", eventHash);
 
-          console.log(`[webhook] Order ${order.id} status: ${order.status} → ${newStatus} (${eventType})`);
-        } else {
-          console.log(`[webhook] Skipping backward transition: ${order.status} → ${newStatus}`);
+          await logAppmax(supabase, "info", `Pedido ${order.id}: ${order.status} → ${newStatus}`, {
+            event_type: eventType,
+            appmax_order_id: appmaxOrderId,
+          });
         }
       } else {
-        console.warn(`[webhook] No internal order found for appmax_order_id: ${appmaxOrderId}`);
+        await logAppmax(supabase, "warn", `Pedido interno não encontrado para appmax_order_id: ${appmaxOrderId}`);
       }
     }
 
     return new Response("OK", { status: 200 });
   } catch (error: any) {
-    console.error("[webhook] Error:", error.message);
-    // Return 200 to prevent Appmax from retrying on our errors
+    await logAppmax(supabase, "error", `Erro no webhook: ${error.message}`);
     return new Response("OK", { status: 200 });
   }
 });
