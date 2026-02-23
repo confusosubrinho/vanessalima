@@ -32,7 +32,7 @@ export function AddedToCartToast({
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 right-4 left-4 md:left-auto md:w-[360px] z-[45] animate-slide-up">
+    <div className="fixed bottom-32 md:bottom-6 right-4 left-4 md:left-auto md:w-[360px] z-[60] animate-slide-up">
       <div className="bg-background border border-border rounded-lg shadow-xl p-3 flex items-center gap-3">
         <img
           src={imageUrl || '/placeholder.svg'}

@@ -90,7 +90,7 @@ const queryClient = new QueryClient({
 // Minimal page loading fallback
 function PageFallback() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="flex items-center justify-center py-20">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
     </div>
   );
