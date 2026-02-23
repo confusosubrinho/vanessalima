@@ -23,6 +23,18 @@ export default function AppmaxCallbackPage() {
   const connectedRef = useRef(false);
 
   const externalKey = searchParams.get('external_key') || 'main-store';
+  const [savedToken, setSavedToken] = useState('');
+
+  useEffect(() => {
+    supabase
+      .from('appmax_installations' as any)
+      .select('authorize_token')
+      .eq('external_key', externalKey)
+      .maybeSingle()
+      .then(({ data }: any) => {
+        if (data?.authorize_token) setSavedToken(data.authorize_token);
+      });
+  }, [externalKey]);
 
   const checkStatus = useCallback(async (): Promise<boolean> => {
     if (connectedRef.current) return true;
@@ -98,6 +110,7 @@ export default function AppmaxCallbackPage() {
       searchParams.get('token') ||
       searchParams.get('install_token') ||
       searchParams.get('hash') ||
+      savedToken ||
       '';
 
     if (!installToken) {
@@ -167,7 +180,8 @@ export default function AppmaxCallbackPage() {
   const hasInstallToken = !!(
     searchParams.get('token') ||
     searchParams.get('install_token') ||
-    searchParams.get('hash')
+    searchParams.get('hash') ||
+    savedToken
   );
 
   return (
