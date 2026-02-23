@@ -12,27 +12,32 @@ export default function AppmaxCallbackPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [checking, setChecking] = useState(false);
   const [externalId, setExternalId] = useState('');
+  const [detectedEnv, setDetectedEnv] = useState<string>('');
 
   const externalKey = searchParams.get('external_key') || 'main-store';
 
   const checkStatus = useCallback(async () => {
     setChecking(true);
     try {
+      // Check both environments for the matching external_key
       const { data, error } = await supabase
         .from('appmax_installations' as any)
-        .select('status, external_id, last_error')
+        .select('status, external_id, last_error, environment')
         .eq('external_key', externalKey)
-        .eq('environment', 'sandbox')
+        .in('status', ['connected', 'error', 'pending'])
+        .order('updated_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (error) throw new Error(error.message);
       if (!data) {
-        setStatus('error');
-        setErrorMsg('Instalação não encontrada.');
+        // No installation found yet, keep waiting
         return;
       }
 
       const d = data as any;
+      setDetectedEnv(d.environment || '');
+
       if (d.status === 'connected') {
         setStatus('connected');
         setExternalId(d.external_id || '');
@@ -40,7 +45,7 @@ export default function AppmaxCallbackPage() {
         setStatus('error');
         setErrorMsg(d.last_error || 'Erro desconhecido.');
       }
-      // else still waiting
+      // else still pending/waiting
     } catch (err: any) {
       setStatus('error');
       setErrorMsg(err.message);
@@ -49,18 +54,21 @@ export default function AppmaxCallbackPage() {
     }
   }, [externalKey]);
 
-  // Auto-check on load and periodically
   useEffect(() => {
     checkStatus();
     const interval = setInterval(checkStatus, 5000);
     return () => clearInterval(interval);
   }, [checkStatus]);
 
+  const envLabel = detectedEnv === 'production' ? 'Produção' : detectedEnv === 'sandbox' ? 'Sandbox' : '';
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-center">Conexão Appmax</CardTitle>
+          <CardTitle className="text-center">
+            Conexão Appmax {envLabel && <span className="text-sm font-normal text-muted-foreground">({envLabel})</span>}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {status === 'waiting' && (
@@ -94,6 +102,11 @@ export default function AppmaxCallbackPage() {
               <p className="text-sm text-muted-foreground text-center">
                 Credenciais do merchant foram recebidas e salvas com segurança.
               </p>
+              {envLabel && (
+                <p className="text-xs text-muted-foreground">
+                  Ambiente: <code className="bg-muted px-1.5 py-0.5 rounded">{envLabel}</code>
+                </p>
+              )}
               {externalId && (
                 <p className="text-xs text-muted-foreground">
                   External ID: <code className="bg-muted px-1.5 py-0.5 rounded">{externalId}</code>
