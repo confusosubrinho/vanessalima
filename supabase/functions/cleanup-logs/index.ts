@@ -17,6 +17,10 @@ const RETENTION: Record<string, { days: number; dateCol: string }> = {
   error_logs:            { days: 30, dateCol: "created_at" },
   traffic_sessions:      { days: 30, dateCol: "created_at" },
   abandoned_carts:       { days: 90, dateCol: "created_at" },
+  order_events:          { days: 90, dateCol: "received_at" },
+  bling_webhook_events:  { days: 60, dateCol: "created_at" },
+  product_change_log:    { days: 180, dateCol: "changed_at" },
+  payment_pricing_audit_log: { days: 180, dateCol: "changed_at" },
 };
 
 const MAX_DELETE_PER_TABLE = 5000;

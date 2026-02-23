@@ -75,72 +75,76 @@ import { logApiError } from '@/lib/errorLogger';
    });
  }
  
- export function useFeaturedProducts() {
-   return useQuery({
-     queryKey: ['products', 'featured'],
-     queryFn: async () => {
-       const { data, error } = await supabase
-         .from('products')
-         .select(`
-           *,
-           category:categories(*),
-           images:product_images(*),
-           variants:product_variants(*)
-         `)
-         .eq('is_active', true)
-         .eq('is_featured', true)
-         .order('created_at', { ascending: false })
-         .limit(20);
-       
-       if (error) throw error;
-       return (data as Product[]) || [];
-     },
-   });
- }
+  export function useFeaturedProducts() {
+    return useQuery({
+      queryKey: ['products', 'featured'],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('products')
+          .select(`
+            *,
+            category:categories(*),
+            images:product_images(*),
+            variants:product_variants(*)
+          `)
+          .eq('is_active', true)
+          .eq('is_featured', true)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        
+        if (error) throw error;
+        return (data as Product[]) || [];
+      },
+      staleTime: 1000 * 60 * 5,
+    });
+  }
  
- export function useCategories() {
-   return useQuery({
-     queryKey: ['categories'],
-     queryFn: async () => {
-       const { data, error } = await supabase
-         .from('categories')
-         .select('*')
-         .eq('is_active', true)
-         .order('display_order', { ascending: true });
-       
-       if (error) throw error;
-       return data as Category[];
-     },
-   });
- }
+  export function useCategories() {
+    return useQuery({
+      queryKey: ['categories'],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('is_active', true)
+          .order('display_order', { ascending: true });
+        
+        if (error) throw error;
+        return data as Category[];
+      },
+      staleTime: 1000 * 60 * 10,
+    });
+  }
  
- export function useBanners() {
-   return useQuery({
-     queryKey: ['banners'],
-     queryFn: async () => {
-       const { data, error } = await supabase
-         .from('banners')
-         .select('*')
-         .eq('is_active', true)
-         .order('display_order', { ascending: true });
-       
-       if (error) throw error;
-       return data as Banner[];
-     },
-   });
- }
+  export function useBanners() {
+    return useQuery({
+      queryKey: ['banners'],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('banners')
+          .select('*')
+          .eq('is_active', true)
+          .order('display_order', { ascending: true });
+        
+        if (error) throw error;
+        return data as Banner[];
+      },
+      staleTime: 1000 * 60 * 5,
+    });
+  }
  
- export function useStoreSettings() {
-   return useQuery({
-     queryKey: ['store-settings'],
-     queryFn: async () => {
-       const { data, error } = await supabase
-         .from('store_settings')
-         .select('*')
-         .single();
-       
-       if (error) throw error;
-       return data as StoreSettings;
-     },
-   });
- }
+  export function useStoreSettings() {
+    return useQuery({
+      queryKey: ['store-settings'],
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from('store_settings')
+          .select('*')
+          .single();
+        
+        if (error) throw error;
+        return data as StoreSettings;
+      },
+      staleTime: 1000 * 60 * 10,
+    });
+  }
