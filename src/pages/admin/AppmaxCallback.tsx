@@ -10,13 +10,12 @@ const HEALTHCHECK_TIMEOUT_MS = 15_000;
 export default function AppmaxCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<'generating' | 'polling' | 'connected' | 'error'>('generating');
+  const [status, setStatus] = useState<'generating' | 'polling' | 'connected' | 'error'>('polling');
   const [errorMsg, setErrorMsg] = useState('');
   const [errorDetail, setErrorDetail] = useState('');
   const [checking, setChecking] = useState(false);
   const [externalId, setExternalId] = useState('');
   const [detectedEnv, setDetectedEnv] = useState<string>('');
-  const generatedRef = useRef(false);
   const fallbackTriedRef = useRef(false);
 
   const externalKey = searchParams.get('external_key') || 'main-store';
@@ -37,44 +36,33 @@ export default function AppmaxCallbackPage() {
     return (data as any)?.environment || 'sandbox';
   }, [externalKey]);
 
-  // Call generate-merchant-keys with install_token
-  const generateMerchantKeys = useCallback(async () => {
-    if (!installToken) return false;
+  const loadLastCallbackDiagnostic = useCallback(async (env?: string) => {
+    const effectiveEnv = env || detectedEnv || (await detectEnv());
 
-    try {
-      const env = await detectEnv();
-      setDetectedEnv(env);
+    const { data } = await supabase
+      .from('appmax_handshake_logs' as any)
+      .select('created_at, http_status, message, payload, request_id')
+      .eq('stage', 'callback')
+      .eq('external_key', externalKey)
+      .eq('environment', effectiveEnv)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-      const { data, error } = await supabase.functions.invoke('appmax-generate-merchant-keys', {
-        body: {
-          external_key: externalKey,
-          token: installToken,
-          environment: env,
-        },
-      });
+    if (!data) return;
 
-      if (error) {
-        throw new Error(error.message || 'Erro na chamada da função');
-      }
+    const diag = data as any;
+    const formatted = [
+      `Request ID: ${diag.request_id || '-'}`,
+      `HTTP: ${diag.http_status || '-'}`,
+      `Mensagem: ${diag.message || '-'}`,
+      diag.payload ? `Detalhes:\n${JSON.stringify(diag.payload, null, 2)}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
 
-      if (data?.error) {
-        throw new Error(data.error);
-      }
-
-      if (data?.status === 'connected') {
-        setStatus('connected');
-        return true;
-      }
-
-      return false;
-    } catch (err: any) {
-      console.error('[AppmaxCallback] generate-merchant-keys failed:', err);
-      setErrorMsg(err.message);
-      setErrorDetail(`Função: appmax-generate-merchant-keys\nToken: ${installToken ? installToken.slice(0, 8) + '...' : 'vazio'}\nExternal key: ${externalKey}`);
-      setStatus('error');
-      return false;
-    }
-  }, [externalKey, installToken, detectEnv]);
+    setErrorDetail(formatted);
+  }, [detectEnv, detectedEnv, externalKey]);
 
   // Check installation status in DB
   const checkStatus = useCallback(async (): Promise<boolean> => {
@@ -99,14 +87,14 @@ export default function AppmaxCallbackPage() {
         setStatus('connected');
         setExternalId(d.external_id || '');
         return true;
-      } else if (d.status === 'error') {
-        setStatus('error');
-        setErrorMsg(d.last_error || 'Erro desconhecido.');
-        return false;
       }
+
+      if (d.status === 'error') {
+        setErrorMsg(d.last_error || 'Falha na integração.');
+      }
+
       return false;
     } catch (err: any) {
-      setStatus('error');
       setErrorMsg(err.message);
       return false;
     } finally {
@@ -114,55 +102,62 @@ export default function AppmaxCallbackPage() {
     }
   }, [externalKey]);
 
-  // Main flow on mount
-  useEffect(() => {
-    if (generatedRef.current) return;
-    generatedRef.current = true;
+  // Generate merchant keys only as fallback after timeout
+  const generateMerchantKeys = useCallback(async () => {
+    if (!installToken) return false;
 
-    (async () => {
-      // Step 1: Try generate-merchant-keys immediately if we have a token
-      if (installToken) {
-        setStatus('generating');
-        const success = await generateMerchantKeys();
-        if (success) return;
-        // If it failed with error status, don't continue to polling
-        // The error is already shown
-        return;
+    try {
+      setStatus('generating');
+      const env = detectedEnv || (await detectEnv());
+      setDetectedEnv(env);
+
+      const { data, error } = await supabase.functions.invoke('appmax-generate-merchant-keys', {
+        body: {
+          external_key: externalKey,
+          token: installToken,
+          environment: env,
+        },
+      });
+
+      if (error) {
+        await loadLastCallbackDiagnostic(env);
+        throw new Error(error.message || 'Falha ao chamar a função de geração de credenciais');
       }
 
-      // Step 2: No token — go to polling mode, wait for healthcheck
-      setStatus('polling');
-    })();
-  }, [generateMerchantKeys, installToken]);
+      if (data?.status === 'connected') {
+        setStatus('connected');
+        await checkStatus();
+        return true;
+      }
 
-  // Polling mode: check every 5s, with 15s timeout fallback
+      await loadLastCallbackDiagnostic(env);
+      throw new Error(data?.error || 'Falha ao gerar credenciais do merchant');
+    } catch (err: any) {
+      setErrorMsg(err.message);
+      setStatus('error');
+      return false;
+    }
+  }, [checkStatus, detectEnv, detectedEnv, externalKey, installToken, loadLastCallbackDiagnostic]);
+
+  // Poll healthcheck confirmation first; fallback to generate after timeout
   useEffect(() => {
     if (status !== 'polling') return;
 
     checkStatus();
     const interval = setInterval(checkStatus, 5000);
 
-    // After 15s, if still polling and we have a token, try generate-merchant-keys as fallback
     const timeout = setTimeout(async () => {
       if (fallbackTriedRef.current) return;
       fallbackTriedRef.current = true;
 
-      // Check one more time
       const connected = await checkStatus();
       if (connected) return;
 
-      // Fallback: try generate-merchant-keys if we have an install token
       if (installToken) {
-        setStatus('generating');
         await generateMerchantKeys();
       } else {
         setStatus('error');
-        setErrorMsg('Healthcheck não recebido após 15 segundos. A Appmax pode não estar chamando o endpoint de healthcheck.');
-        setErrorDetail(
-          `External key: ${externalKey}\n` +
-          `Token na URL: ${installToken ? 'sim' : 'não'}\n` +
-          `Verifique se a URL do healthcheck está correta no portal Appmax.`
-        );
+        setErrorMsg('Healthcheck não confirmado em 15s e nenhum install_token foi encontrado na URL.');
       }
     }, HEALTHCHECK_TIMEOUT_MS);
 
@@ -170,21 +165,16 @@ export default function AppmaxCallbackPage() {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [status, checkStatus, installToken, externalKey, generateMerchantKeys]);
+  }, [status, checkStatus, installToken, generateMerchantKeys]);
 
   const envLabel = detectedEnv === 'production' ? 'Produção' : detectedEnv === 'sandbox' ? 'Sandbox' : '';
 
-  const handleRetry = () => {
-    generatedRef.current = false;
+  const handleRetry = async () => {
     fallbackTriedRef.current = false;
     setErrorMsg('');
     setErrorDetail('');
-    if (installToken) {
-      setStatus('generating');
-      generateMerchantKeys();
-    } else {
-      setStatus('polling');
-    }
+    setStatus('polling');
+    await checkStatus();
   };
 
   return (
@@ -201,10 +191,11 @@ export default function AppmaxCallbackPage() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="font-medium">Gerando credenciais do merchant...</p>
               <p className="text-sm text-muted-foreground text-center">
-                Chamando <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/app/client/generate</code> com o token de instalação.
+                Healthcheck não confirmou em 15s. Executando fallback em <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/app/client/generate</code>.
               </p>
             </div>
           )}
+
           {status === 'polling' && (
             <div className="flex flex-col items-center gap-3 py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -213,7 +204,7 @@ export default function AppmaxCallbackPage() {
                 Aguardando healthcheck da Appmax (timeout: 15s).
               </p>
               <p className="text-xs text-muted-foreground">
-                Se não receber confirmação, tentaremos gerar credenciais automaticamente.
+                Sem confirmação, o fallback de geração será executado automaticamente.
               </p>
               <Button
                 variant="outline"
@@ -227,6 +218,7 @@ export default function AppmaxCallbackPage() {
               </Button>
             </div>
           )}
+
           {status === 'connected' && (
             <div className="flex flex-col items-center gap-3 py-8">
               <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
@@ -251,6 +243,7 @@ export default function AppmaxCallbackPage() {
               </Button>
             </div>
           )}
+
           {status === 'error' && (
             <div className="flex flex-col items-center gap-3 py-8">
               <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">

@@ -13,6 +13,43 @@ import {
   jsonResponse,
 } from "../_shared/appmax.ts";
 
+type ContentType = "json" | "form";
+type TokenSource = "request" | "installation";
+
+interface GenerateAttempt {
+  name: string;
+  payload: Record<string, string>;
+  contentType: ContentType;
+  tokenSource: TokenSource;
+}
+
+function normalizePayload(payload: Record<string, string | null | undefined>) {
+  return Object.fromEntries(
+    Object.entries(payload)
+      .filter(([, value]) => typeof value === "string" && value.trim().length > 0)
+      .map(([key, value]) => [key, String(value)])
+  ) as Record<string, string>;
+}
+
+function extractApiErrorMessage(response: any): string {
+  const rawMessage =
+    response?.errors?.message ??
+    response?.message ??
+    response?.error ??
+    response?.error_description ??
+    null;
+
+  if (!rawMessage) return "Falha ao gerar credenciais";
+  if (typeof rawMessage === "string") return rawMessage;
+  if (Array.isArray(rawMessage)) return rawMessage.join(", ");
+
+  try {
+    return JSON.stringify(rawMessage);
+  } catch {
+    return "Falha ao gerar credenciais";
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -46,37 +83,118 @@ Deno.serve(async (req) => {
 
     // Get app token
     const accessToken = await getAppToken(supabase, settings);
-
-    // Try multiple payload formats for /app/client/generate
     const generateUrl = `${settings.base_api_url}/app/client/generate`;
 
-    // Attempt 1: { token }
-    // Attempt 2: { install_token }
-    // Attempt 3: { hash }
-    // Attempt 4: { token, external_key }
-    // Attempt 5: { token, app_id, external_key }
-    const payloadAttempts = [
-      { token },
-      { install_token: token },
-      { hash: token },
-      { token, external_key },
-      { token, app_id: settings.app_id, external_key },
-    ];
+    // Fallback token source: installation.authorize_token
+    const { data: installation } = await supabase
+      .from("appmax_installations")
+      .select("authorize_token")
+      .eq("external_key", external_key)
+      .eq("environment", env)
+      .maybeSingle();
+
+    const candidateTokens = Array.from(
+      new Set(
+        [token, installation?.authorize_token]
+          .filter((value) => typeof value === "string" && value.trim().length > 0)
+          .map((value) => value.trim())
+      )
+    ) as string[];
+
+    if (candidateTokens.length === 0) {
+      return errorResponse("Nenhum token válido disponível para gerar credenciais", 400);
+    }
+
+    const attempts: GenerateAttempt[] = [];
+    for (const candidate of candidateTokens) {
+      const tokenSource: TokenSource = candidate === token ? "request" : "installation";
+
+      attempts.push(
+        {
+          name: "token_json",
+          payload: normalizePayload({ token: candidate }),
+          contentType: "json",
+          tokenSource,
+        },
+        {
+          name: "token_form",
+          payload: normalizePayload({ token: candidate }),
+          contentType: "form",
+          tokenSource,
+        },
+        {
+          name: "token_external_key_json",
+          payload: normalizePayload({ token: candidate, external_key }),
+          contentType: "json",
+          tokenSource,
+        },
+        {
+          name: "token_external_key_form",
+          payload: normalizePayload({ token: candidate, external_key }),
+          contentType: "form",
+          tokenSource,
+        },
+        {
+          name: "token_app_id_json",
+          payload: normalizePayload({ token: candidate, app_id: settings.app_id }),
+          contentType: "json",
+          tokenSource,
+        },
+        {
+          name: "token_app_id_external_key_json",
+          payload: normalizePayload({ token: candidate, app_id: settings.app_id, external_key }),
+          contentType: "json",
+          tokenSource,
+        },
+        {
+          name: "install_token_json",
+          payload: normalizePayload({ install_token: candidate }),
+          contentType: "json",
+          tokenSource,
+        },
+        {
+          name: "hash_json",
+          payload: normalizePayload({ hash: candidate }),
+          contentType: "json",
+          tokenSource,
+        }
+      );
+    }
+
+    let successData:
+      | {
+          merchantClientId: string;
+          merchantClientSecret: string;
+          payloadKeys: string[];
+          attemptName: string;
+          tokenSource: TokenSource;
+          externalId: string | null;
+        }
+      | null = null;
 
     let lastResponse: any = null;
     let lastRawText = "";
     let lastStatus = 0;
-    let successData: any = null;
 
-    for (const payload of payloadAttempts) {
+    const attemptResults: Array<Record<string, unknown>> = [];
+
+    for (const attempt of attempts) {
       try {
+        const bodyPayload =
+          attempt.contentType === "form"
+            ? new URLSearchParams(attempt.payload).toString()
+            : JSON.stringify(attempt.payload);
+
         const generateRes = await fetch(generateUrl, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken}`,
+            "Content-Type":
+              attempt.contentType === "form"
+                ? "application/x-www-form-urlencoded"
+                : "application/json",
           },
-          body: JSON.stringify(payload),
+          body: bodyPayload,
         });
 
         lastStatus = generateRes.status;
@@ -86,56 +204,102 @@ Deno.serve(async (req) => {
         try {
           parsed = JSON.parse(lastRawText);
         } catch {
-          parsed = { raw: lastRawText.slice(0, 500) };
+          parsed = { raw: lastRawText.slice(0, 1000) };
         }
-
         lastResponse = parsed;
 
-        await logAppmax(supabase, "info", `generate attempt: ${JSON.stringify(Object.keys(payload))}`, {
+        const attemptResult = {
+          name: attempt.name,
+          token_source: attempt.tokenSource,
+          content_type: attempt.contentType,
+          payload_keys: Object.keys(attempt.payload),
           status: generateRes.status,
           ok: generateRes.ok,
-          response_keys: typeof parsed === 'object' ? Object.keys(parsed) : [],
           response_preview: lastRawText.slice(0, 300),
-          payload_keys: Object.keys(payload),
-        }, requestId);
+        };
+        attemptResults.push(attemptResult);
 
-        if (generateRes.ok) {
-          const merchantClientId = parsed.client_id || parsed.data?.client_id;
-          const merchantClientSecret = parsed.client_secret || parsed.data?.client_secret;
-
-          if (merchantClientId && merchantClientSecret) {
-            successData = { merchantClientId, merchantClientSecret, payload };
-            break;
+        await logAppmax(
+          supabase,
+          "info",
+          `generate attempt: ${attempt.name}`,
+          {
+            ...attemptResult,
+            request_id: requestId,
           }
+        );
+
+        if (!generateRes.ok) {
+          continue;
         }
 
-        // If 400, try next payload format
-        if (generateRes.status === 400) continue;
+        const merchantClientId =
+          parsed?.client_id || parsed?.data?.client_id || parsed?.merchant_client_id || parsed?.data?.merchant_client_id;
+        const merchantClientSecret =
+          parsed?.client_secret || parsed?.data?.client_secret || parsed?.merchant_client_secret || parsed?.data?.merchant_client_secret;
+        const externalId = parsed?.external_id || parsed?.data?.external_id || null;
 
-        // If non-400 error, stop trying
-        if (!generateRes.ok) break;
+        if (merchantClientId && merchantClientSecret) {
+          successData = {
+            merchantClientId,
+            merchantClientSecret,
+            payloadKeys: Object.keys(attempt.payload),
+            attemptName: attempt.name,
+            tokenSource: attempt.tokenSource,
+            externalId,
+          };
+          break;
+        }
       } catch (fetchErr: any) {
-        await logAppmax(supabase, "error", `generate fetch error: ${fetchErr.message}`, {
-          payload_keys: Object.keys(payload),
-        }, requestId);
+        const fetchMessage = fetchErr?.message || "Erro de rede ao gerar credenciais";
+        attemptResults.push({
+          name: attempt.name,
+          token_source: attempt.tokenSource,
+          content_type: attempt.contentType,
+          payload_keys: Object.keys(attempt.payload),
+          ok: false,
+          status: 0,
+          response_preview: fetchMessage,
+        });
+
+        await logAppmax(
+          supabase,
+          "error",
+          `generate attempt fetch error: ${attempt.name}`,
+          {
+            request_id: requestId,
+            message: fetchMessage,
+            payload_keys: Object.keys(attempt.payload),
+            token_source: attempt.tokenSource,
+          }
+        );
       }
     }
 
     if (successData) {
-      // Success! Save credentials
       const encryptedSecret = await encrypt(successData.merchantClientSecret);
 
-      await supabase
+      const updatePayload: Record<string, unknown> = {
+        merchant_client_id: successData.merchantClientId,
+        merchant_client_secret: null,
+        merchant_client_secret_encrypted: encryptedSecret,
+        status: "connected",
+        last_error: null,
+      };
+
+      if (successData.externalId) {
+        updatePayload.external_id = successData.externalId;
+      }
+
+      const { error: updateError } = await supabase
         .from("appmax_installations")
-        .update({
-          merchant_client_id: successData.merchantClientId,
-          merchant_client_secret: null,
-          merchant_client_secret_encrypted: encryptedSecret,
-          status: "connected",
-          last_error: null,
-        })
+        .update(updatePayload)
         .eq("external_key", external_key)
         .eq("environment", env);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
 
       await logHandshake(supabase, {
         environment: env,
@@ -147,7 +311,10 @@ Deno.serve(async (req) => {
         message: `Credenciais geradas com sucesso (${env})`,
         payload: {
           merchant_client_id: successData.merchantClientId,
-          used_payload_keys: Object.keys(successData.payload),
+          attempt_name: successData.attemptName,
+          used_payload_keys: successData.payloadKeys,
+          token_source: successData.tokenSource,
+          total_attempts: attemptResults.length,
         },
         headers: safeHeaders,
       });
@@ -155,14 +322,15 @@ Deno.serve(async (req) => {
       return jsonResponse({ success: true, status: "connected", environment: env });
     }
 
-    // All attempts failed — log full diagnostic
-    const errMsg = lastResponse?.message || lastResponse?.error || lastResponse?.error_description || "Falha ao gerar credenciais";
+    const errMsg = extractApiErrorMessage(lastResponse);
     const fullDiag = {
       api_status: lastStatus,
-      api_response: typeof lastResponse === 'object' ? lastResponse : { raw: lastRawText.slice(0, 500) },
-      attempted_payload_formats: payloadAttempts.map(p => Object.keys(p)),
+      api_response: typeof lastResponse === "object" ? lastResponse : { raw: lastRawText.slice(0, 1000) },
       generate_url: generateUrl,
       token_preview: maskSecret(token),
+      candidate_token_count: candidateTokens.length,
+      attempted_count: attemptResults.length,
+      attempt_results: attemptResults,
     };
 
     await logHandshake(supabase, {
@@ -171,7 +339,7 @@ Deno.serve(async (req) => {
       external_key,
       request_id: requestId,
       ok: false,
-      http_status: lastStatus,
+      http_status: lastStatus || 500,
       message: `Todas as tentativas falharam em /app/client/generate: ${errMsg}`,
       payload: fullDiag,
       headers: safeHeaders,
@@ -183,12 +351,12 @@ Deno.serve(async (req) => {
       .from("appmax_installations")
       .update({
         status: "error",
-        last_error: `HTTP ${lastStatus}: ${errMsg}`,
+        last_error: `HTTP ${lastStatus || 500}: ${errMsg}`,
       })
       .eq("external_key", external_key)
       .eq("environment", env);
 
-    return errorResponse(`${errMsg} (HTTP ${lastStatus}). Verifique os logs de diagnóstico.`);
+    return errorResponse(`HTTP ${lastStatus || 500}: ${errMsg}`);
   } catch (err: any) {
     await logHandshake(supabase, {
       environment: "unknown",
