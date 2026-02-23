@@ -228,7 +228,10 @@ export async function getAppToken(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(`${authUrl}/oauth/token`, {
+      const tokenUrl = `${authUrl}/oauth2/token`;
+      console.log(`[getAppToken] Attempt ${attempt}: POST ${tokenUrl} with client_id=${maskSecret(clientId)}`);
+      
+      const res = await fetch(tokenUrl, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -238,7 +241,17 @@ export async function getAppToken(
         }).toString(),
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      console.log(`[getAppToken] Response status=${res.status}, body length=${rawText.length}, preview=${rawText.slice(0, 200)}`);
+
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(
+          `Resposta não-JSON do servidor de autenticação (${env}): HTTP ${res.status} — ${rawText.slice(0, 300)}`
+        );
+      }
 
       if (res.ok && data.access_token) {
         // Cache the token encrypted
@@ -276,7 +289,7 @@ export async function getAppToken(
 
       // Non-retryable error
       throw new Error(
-        `Falha ao obter token (${env}): ${data.message || data.error || res.status}`
+        `Falha ao obter token (${env}): ${data.message || data.error_description || data.error || res.status}`
       );
     } catch (err: any) {
       lastError = err;
