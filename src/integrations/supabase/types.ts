@@ -971,6 +971,42 @@ export type Database = {
         }
         Relationships: []
       }
+      home_page_sections: {
+        Row: {
+          config: Json
+          created_at: string
+          display_order: number
+          id: string
+          is_active: boolean
+          label: string
+          section_key: string
+          section_type: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          label: string
+          section_key: string
+          section_type: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          label?: string
+          section_key?: string
+          section_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       home_sections: {
         Row: {
           card_bg: boolean | null
