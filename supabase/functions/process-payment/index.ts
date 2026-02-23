@@ -206,6 +206,74 @@ Deno.serve(async (req) => {
         validatedCouponId = coupon.id;
       }
 
+      // ── BUG #3: Server-side price validation ──
+      let serverSubtotal = 0;
+      const priceErrors: string[] = [];
+
+      for (const product of products) {
+        if (!product.variant_id) continue;
+
+        const { data: variantData } = await supabase
+          .from("product_variants")
+          .select(`
+            id, price_modifier, sale_price, base_price,
+            products!inner(id, base_price, sale_price, is_active)
+          `)
+          .eq("id", product.variant_id)
+          .single();
+
+        if (!variantData) {
+          priceErrors.push(`Variante ${product.variant_id} não encontrada`);
+          continue;
+        }
+
+        const productData = variantData.products as any;
+        if (!productData?.is_active) {
+          priceErrors.push(`Produto "${product.name}" não está mais disponível`);
+          continue;
+        }
+
+        let realUnitPrice: number;
+        if (variantData.sale_price && Number(variantData.sale_price) > 0) {
+          realUnitPrice = Number(variantData.sale_price);
+        } else if (variantData.base_price && Number(variantData.base_price) > 0) {
+          realUnitPrice = Number(variantData.base_price);
+        } else {
+          const productPrice = Number(productData.sale_price || productData.base_price);
+          realUnitPrice = productPrice + Number(variantData.price_modifier || 0);
+        }
+
+        serverSubtotal += realUnitPrice * (product.quantity || 1);
+      }
+
+      if (priceErrors.length > 0) {
+        return errorResponse(priceErrors.join("; "), 400);
+      }
+
+      // Calculate server total
+      const serverDiscount = validatedCouponId ? validatedDiscount : 0;
+      const clientShippingCost = Math.max(0, amount - (serverSubtotal - serverDiscount));
+      let serverTotal: number;
+
+      if (payment_method === "pix") {
+        const pixDiscountPct = Number(pricingConfig?.pix_discount || 0) / 100;
+        serverTotal = (serverSubtotal - serverDiscount) * (1 - pixDiscountPct) + clientShippingCost;
+      } else {
+        serverTotal = serverSubtotal - serverDiscount + clientShippingCost;
+      }
+
+      // Allow 1% tolerance for rounding
+      const tolerance = Math.max(0.10, serverTotal * 0.01);
+      if (Math.abs(serverTotal - amount) > tolerance) {
+        await logAppmax(supabase, "warn", `Divergência de valor: cliente=${amount}, servidor=${serverTotal}`, {
+          order_id, products: products.map((p: any) => p.variant_id),
+        });
+        return errorResponse("Valor do pedido divergente. Recarregue a página e tente novamente.", 400);
+      }
+
+      // Use serverTotal as authoritative amount
+      const authorizedAmount = serverTotal;
+
       // ── Stock validation + atomic decrement ──
       const stockDecrements: { variant_id: string; quantity: number; name: string }[] = [];
       for (const product of products) {
@@ -269,7 +337,7 @@ Deno.serve(async (req) => {
             qty: p.quantity || 1,
             price: p.price || 0,
           }))
-        : [{ sku: "ORDER", name: "Pedido", qty: 1, price: amount }];
+        : [{ sku: "ORDER", name: "Pedido", qty: 1, price: authorizedAmount }];
 
       const orderData = await appmaxFetch(baseApiUrl, token, "orders", {
         customer_id: appmaxCustomerId,
@@ -277,6 +345,20 @@ Deno.serve(async (req) => {
       });
       const appmaxOrderId = orderData?.data?.id || orderData?.id;
       if (!appmaxOrderId) throw new Error("Falha ao criar pedido na Appmax");
+
+      // ── BUG #8: Dynamic soft_descriptor from store_settings ──
+      const { data: storeSettings } = await supabase
+        .from("store_settings")
+        .select("store_name")
+        .limit(1)
+        .maybeSingle();
+
+      const storeName = storeSettings?.store_name || "LOJA";
+      const softDescriptor = storeName
+        .toUpperCase()
+        .replace(/[^A-Z0-9 ]/g, "")
+        .slice(0, 13)
+        .trim() || "LOJA";
 
       // ── Step 3: Process payment (v1) ──
       let paymentEndpoint: string;
@@ -295,7 +377,7 @@ Deno.serve(async (req) => {
             token: card_token,
             document_number: (customer_cpf || "").replace(/\D/g, ""),
             installments,
-            soft_descriptor: "VANESSALIMA",
+            soft_descriptor: softDescriptor,
           },
         };
       } else {
@@ -335,7 +417,7 @@ Deno.serve(async (req) => {
             dbCustomerId = existingCustomer.id;
             await supabase.from("customers").update({
               total_orders: (existingCustomer.total_orders || 0) + 1,
-              total_spent: (existingCustomer.total_spent || 0) + amount,
+              total_spent: (existingCustomer.total_spent || 0) + authorizedAmount,
               full_name: customer_name || "Cliente",
               phone: customer_phone || null,
             }).eq("id", existingCustomer.id);
@@ -345,7 +427,7 @@ Deno.serve(async (req) => {
               full_name: customer_name || "Cliente",
               phone: customer_phone || null,
               total_orders: 1,
-              total_spent: amount,
+              total_spent: authorizedAmount,
             }).select("id").single();
             dbCustomerId = newCustomer?.id || "";
           }

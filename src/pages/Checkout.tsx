@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Check, ChevronRight, Truck, CreditCard, MapPin, ArrowLeft, Plus, Minus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,17 +34,41 @@ function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// IMPROVEMENT #4: Luhn algorithm
+function luhnCheck(num: string): boolean {
+  let sum = 0;
+  let shouldDouble = false;
+  for (let i = num.length - 1; i >= 0; i--) {
+    let digit = parseInt(num[i]);
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+  return sum % 10 === 0;
+}
+
 export default function Checkout() {
   const navigate = useNavigate();
   const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon } = useCart();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState<Step>('identification');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false); // BUG #9
   const [cepLoading, setCepLoading] = useState(false);
   const [cpfError, setCpfError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [selectedInstallments, setSelectedInstallments] = useState(1);
   const [customerIp, setCustomerIp] = useState('0.0.0.0');
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID()); // BUG #9
+
+  // IMPROVEMENT #5: Payment error state
+  const [paymentError, setPaymentError] = useState<{
+    message: string;
+    suggestion: string;
+  } | null>(null);
 
   // Use central pricing config
   const { data: pricingConfig } = usePricingConfig();
@@ -192,18 +216,67 @@ export default function Checkout() {
   }));
 
   const handleSubmit = async () => {
+    if (isLoading || isSubmitted) return; // BUG #9: double guard
+
+    // IMPROVEMENT #4: Enhanced card validation
     if (formData.paymentMethod === 'card') {
       const cardDigits = formData.cardNumber.replace(/\s/g, '');
-      if (cardDigits.length < 13 || !formData.cardHolder || !formData.cardExpiry || formData.cardCvv.length < 3) {
-        toast({ title: 'Preencha todos os dados do cartão', variant: 'destructive' });
+
+      if (cardDigits.length < 15) {
+        toast({ title: 'Número de cartão inválido', variant: 'destructive' });
+        return;
+      }
+
+      if (!luhnCheck(cardDigits)) {
+        toast({ title: 'Número de cartão inválido', description: 'Verifique os dados digitados.', variant: 'destructive' });
+        return;
+      }
+
+      const [expMonth, expYear] = formData.cardExpiry.split('/');
+      const now = new Date();
+      const expDate = new Date(2000 + parseInt(expYear || '0'), parseInt(expMonth || '0') - 1);
+      if (expDate < now) {
+        toast({ title: 'Cartão expirado', description: 'Verifique a data de validade.', variant: 'destructive' });
+        return;
+      }
+
+      if (!formData.cardHolder || formData.cardHolder.trim().length < 3) {
+        toast({ title: 'Nome do titular inválido', variant: 'destructive' });
+        return;
+      }
+
+      if (formData.cardCvv.length < 3) {
+        toast({ title: 'CVV inválido', variant: 'destructive' });
         return;
       }
     }
 
     setIsLoading(true);
+    setPaymentError(null);
+
     try {
       const { data: session } = await supabase.auth.getSession();
       const userId = session?.session?.user?.id || null;
+      const idempotencyKey = idempotencyKeyRef.current;
+
+      // BUG #9: Check for existing order with this idempotency key
+      const { data: existingOrder } = await supabase
+        .from('orders')
+        .select('id, order_number')
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle();
+
+      if (existingOrder) {
+        setIsSubmitted(true);
+        navigate(`/pedido-confirmado/${existingOrder.id}`, {
+          state: { orderId: existingOrder.id, orderNumber: existingOrder.order_number },
+          replace: true,
+        });
+        return;
+      }
+
+      // BUG #6: Generate guest access token
+      const guestToken = userId ? null : crypto.randomUUID();
 
       // Determine final total using pricing engine
       let orderTotal: number;
@@ -216,7 +289,7 @@ export default function Checkout() {
         orderTotal = finalTotal;
       }
 
-      // 1. Create order
+      // 1. Create order — BUG #7: dedicated PII columns, BUG #9: idempotency_key, BUG #6: access_token
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -234,8 +307,12 @@ export default function Checkout() {
           shipping_zip: formData.cep,
           shipping_phone: formData.phone,
           coupon_code: appliedCoupon?.code || null,
-          notes: `CPF: ${formData.cpf} | Email: ${formData.email} | Pagamento: ${formData.paymentMethod}`,
-        })
+          customer_email: formData.email.toLowerCase(),
+          customer_cpf: formData.cpf,
+          idempotency_key: idempotencyKey,
+          access_token: guestToken,
+          notes: null,
+        } as any)
         .select()
         .single();
 
@@ -314,28 +391,29 @@ export default function Checkout() {
         paymentPayload.installments = selectedInstallments;
       }
 
-      const { data: paymentResult, error: paymentError } = await supabase.functions.invoke(
+      const { data: paymentResult, error: pmtError } = await supabase.functions.invoke(
         'process-payment',
         { body: paymentPayload }
       );
 
-      if (paymentError) {
+      if (pmtError) {
         await supabase.from('orders').update({
-          notes: `${order.notes || ''} | ERRO PAGAMENTO: ${paymentError.message}`,
+          notes: `ERRO PAGAMENTO: ${pmtError.message}`,
         }).eq('id', order.id);
-        throw new Error(paymentError.message || 'Erro ao processar pagamento');
+        throw new Error(pmtError.message || 'Erro ao processar pagamento');
       }
 
       if (paymentResult?.error) {
         await supabase.from('orders').update({
-          notes: `${order.notes || ''} | ERRO APPMAX: ${paymentResult.error}`,
+          notes: `ERRO APPMAX: ${paymentResult.error}`,
         }).eq('id', order.id);
         throw new Error(paymentResult.error);
       }
 
+      // BUG #7: Only store Appmax reference in notes (no PII)
       if (paymentResult?.appmax_order_id || paymentResult?.pay_reference) {
         await supabase.from('orders').update({
-          notes: `CPF: ${formData.cpf} | Email: ${formData.email} | Appmax Order: ${paymentResult.appmax_order_id || 'N/A'} | Ref: ${paymentResult.pay_reference || 'N/A'}`,
+          notes: `Appmax Order: ${paymentResult.appmax_order_id || 'N/A'} | Ref: ${paymentResult.pay_reference || 'N/A'}`,
         }).eq('id', order.id);
       }
 
@@ -344,18 +422,43 @@ export default function Checkout() {
         body: { action: 'order_to_nfe', order_id: order.id },
       }).catch(() => {});
 
+      setIsSubmitted(true);
       clearCart();
-      navigate('/pedido-confirmado', {
+
+      // BUG #4: Navigate with orderId in URL + full state including PIX expiration
+      navigate(`/pedido-confirmado/${order.id}`, {
         state: {
           orderId: order.id,
           orderNumber: order.order_number,
           paymentMethod: formData.paymentMethod,
           pixQrcode: paymentResult?.pix_qrcode,
           pixEmv: paymentResult?.pix_emv,
+          pixExpirationDate: paymentResult?.pix_expiration_date,
+          customerEmail: formData.email,
+          guestToken: guestToken,
         },
+        replace: true,
       });
     } catch (err: any) {
-      toast({ title: 'Erro ao processar pedido', description: err?.message || 'Tente novamente.', variant: 'destructive' });
+      console.error('Checkout error:', err);
+      const msg = err?.message || 'Erro desconhecido';
+
+      // IMPROVEMENT #5: Rich payment error
+      let suggestion = 'Tente novamente ou use outro método de pagamento.';
+      if (msg.includes('recusado') || msg.includes('denied') || msg.includes('declined')) {
+        suggestion = 'Seu banco recusou o cartão. Verifique o limite disponível ou tente outro cartão.';
+      } else if (msg.includes('estoque') || msg.includes('stock')) {
+        suggestion = 'Um item do seu carrinho ficou sem estoque durante o pagamento. Atualize o carrinho.';
+      } else if (msg.includes('token') || msg.includes('cartão')) {
+        suggestion = 'Verifique os dados do cartão e tente novamente.';
+      } else if (msg.includes('CPF') || msg.includes('documento')) {
+        suggestion = 'Verifique se o CPF informado é válido.';
+      } else if (msg.includes('divergente') || msg.includes('Recarregue')) {
+        suggestion = 'Os preços podem ter sido atualizados. Recarregue a página e tente novamente.';
+      }
+
+      setPaymentError({ message: msg, suggestion });
+      toast({ title: 'Pagamento não realizado', description: msg, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -368,7 +471,7 @@ export default function Checkout() {
     }
   }, [shippingZip]);
 
-  if (items.length === 0) {
+  if (items.length === 0 && !isSubmitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-muted/30">
         <div className="text-center">
@@ -637,6 +740,7 @@ export default function Checkout() {
                     onValueChange={(value) => {
                       setFormData(prev => ({ ...prev, paymentMethod: value }));
                       setSelectedInstallments(1);
+                      setPaymentError(null);
                     }}
                     className="space-y-4"
                   >
@@ -746,8 +850,16 @@ export default function Checkout() {
                     </div>
                   )}
 
-                  <Button onClick={handleSubmit} className="w-full" size="lg" disabled={isLoading} id="btn-checkout-finalize">
-                    {isLoading ? (
+                  <Button
+                    onClick={handleSubmit}
+                    className="w-full"
+                    size="lg"
+                    disabled={isLoading || isSubmitted}
+                    id="btn-checkout-finalize"
+                  >
+                    {isSubmitted && !isLoading ? (
+                      'Pedido Enviado ✓'
+                    ) : isLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         Processando pagamento...
@@ -759,6 +871,27 @@ export default function Checkout() {
                       )}`
                     )}
                   </Button>
+
+                  {/* IMPROVEMENT #5: Payment error details */}
+                  {paymentError && (
+                    <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg space-y-2">
+                      <p className="font-medium text-destructive text-sm">❌ {paymentError.message}</p>
+                      <p className="text-sm text-muted-foreground">{paymentError.suggestion}</p>
+                      <div className="flex gap-2 pt-1">
+                        <Button size="sm" variant="outline" onClick={() => setPaymentError(null)}>
+                          Tentar novamente
+                        </Button>
+                        {formData.paymentMethod === 'card' && (
+                          <Button size="sm" variant="ghost" onClick={() => {
+                            setPaymentError(null);
+                            setFormData(prev => ({ ...prev, paymentMethod: 'pix' }));
+                          }}>
+                            Pagar com PIX
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -849,7 +982,10 @@ export default function Checkout() {
                 )}
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">
                   <span>Total</span>
-                  <span>{formatPrice(finalTotal)}</span>
+                  {/* IMPROVEMENT #3: Animate total change */}
+                  <span key={finalTotal.toFixed(2)} className="animate-fade-in">
+                    {formatPrice(finalTotal)}
+                  </span>
                 </div>
               </div>
             </div>

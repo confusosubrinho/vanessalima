@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { CheckCircle, Package, ArrowRight, Copy, Clock, Loader2 } from 'lucide-react';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { CheckCircle, Package, ArrowRight, Copy, Clock, Loader2, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,59 +34,185 @@ const statusLabels: Record<string, { label: string; description: string; color: 
   },
 };
 
+// BUG #5: PIX countdown hook
+function usePixCountdown(expirationDate: string | null) {
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    if (!expirationDate) return;
+    const expiry = new Date(expirationDate).getTime();
+    const tick = () => {
+      const remaining = Math.max(0, expiry - Date.now());
+      setTimeLeft(remaining);
+      if (remaining === 0) setIsExpired(true);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [expirationDate]);
+
+  if (timeLeft === null) return { display: null, isExpired: false, isUrgent: false };
+
+  const minutes = Math.floor(timeLeft / 60000);
+  const seconds = Math.floor((timeLeft % 60000) / 1000);
+  return {
+    display: `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+    isExpired,
+    isUrgent: timeLeft < 5 * 60 * 1000,
+  };
+}
+
 export default function OrderConfirmation() {
   const location = useLocation();
+  const { orderId: urlOrderId } = useParams<{ orderId: string }>();
   const { toast } = useToast();
-  const orderNumber = location.state?.orderNumber || 'N/A';
-  const orderId = location.state?.orderId;
-  const paymentMethod = location.state?.paymentMethod || 'pix';
-  const pixQrcode = location.state?.pixQrcode;
-  const pixEmv = location.state?.pixEmv;
 
+  // BUG #4: Persist state in sessionStorage
+  const SESSION_KEY = `order_confirm_${urlOrderId || 'unknown'}`;
+
+  const getInitialState = () => {
+    // 1. location.state (fresh navigation)
+    if (location.state?.orderId) {
+      const s = {
+        orderId: location.state.orderId,
+        orderNumber: location.state.orderNumber,
+        paymentMethod: location.state.paymentMethod || 'pix',
+        pixQrcode: location.state.pixQrcode || null,
+        pixEmv: location.state.pixEmv || null,
+        pixExpirationDate: location.state.pixExpirationDate || null,
+        customerEmail: location.state.customerEmail || null,
+        guestToken: location.state.guestToken || null,
+      };
+      try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch {}
+      return s;
+    }
+    // 2. sessionStorage (refresh)
+    try {
+      const stored = sessionStorage.getItem(SESSION_KEY);
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    // 3. Fallback
+    return {
+      orderId: urlOrderId || null,
+      orderNumber: null,
+      paymentMethod: 'pix',
+      pixQrcode: null,
+      pixEmv: null,
+      pixExpirationDate: null,
+      customerEmail: null,
+      guestToken: null,
+    };
+  };
+
+  const [confirmState] = useState(getInitialState);
+  const [orderData, setOrderData] = useState<any>(null);
   const [orderStatus, setOrderStatus] = useState('pending');
+  const [isLoading, setIsLoading] = useState(false);
+  const [whatsappNumber, setWhatsappNumber] = useState<string | null>(null);
 
-  // Subscribe to Realtime order status updates
+  // Fetch store whatsapp
   useEffect(() => {
-    if (!orderId) return;
+    supabase.from('store_settings').select('contact_whatsapp').limit(1).maybeSingle()
+      .then(({ data }) => { if (data?.contact_whatsapp) setWhatsappNumber(data.contact_whatsapp.replace(/\D/g, '')); });
+  }, []);
 
-    // Fetch initial status
-    supabase
-      .from('orders')
-      .select('status')
-      .eq('id', orderId)
-      .single()
-      .then(({ data }) => {
-        if (data?.status) setOrderStatus(data.status);
-      });
+  // Fetch order data from DB (recovery on refresh)
+  useEffect(() => {
+    const id = confirmState.orderId || urlOrderId;
+    if (!id) return;
+    setIsLoading(true);
+    const fetchOrder = async () => {
+      try {
+        const { data } = await supabase
+          .from('orders')
+          .select('id, order_number, status, payment_method, total_amount, created_at')
+          .eq('id', id)
+          .single();
+        if (data) {
+          setOrderData(data);
+          setOrderStatus(data.status);
+          if (!confirmState.orderNumber && data.order_number) {
+            try {
+              const stored = sessionStorage.getItem(SESSION_KEY);
+              if (stored) {
+                const parsed = JSON.parse(stored);
+                parsed.orderNumber = data.order_number;
+                sessionStorage.setItem(SESSION_KEY, JSON.stringify(parsed));
+              }
+            } catch {}
+          }
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchOrder();
+  }, [confirmState.orderId, urlOrderId]);
 
-    // Listen for real-time changes
+  // BUG #6: Realtime for logged-in users, polling for guests
+  useEffect(() => {
+    const id = confirmState.orderId || urlOrderId;
+    if (!id) return;
+
+    const guestToken = confirmState.guestToken;
+
+    if (guestToken) {
+      // Guest: poll every 10s since realtime won't work without RLS match
+      const poll = async () => {
+        const { data } = await supabase
+          .from('orders')
+          .select('status')
+          .eq('id', id)
+          .eq('access_token', guestToken)
+          .single();
+        if (data?.status && data.status !== orderStatus) {
+          setOrderStatus(data.status);
+          const info = statusLabels[data.status];
+          if (info) toast({ title: info.label, description: info.description });
+        }
+      };
+      poll();
+      const interval = setInterval(poll, 10000);
+      return () => clearInterval(interval);
+    }
+
+    // Logged-in user: use Realtime
     const channel = supabase
-      .channel(`order-${orderId}`)
+      .channel(`order-${id}`)
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-          filter: `id=eq.${orderId}`,
-        },
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${id}` },
         (payload) => {
           const newStatus = payload.new?.status;
           if (newStatus && newStatus !== orderStatus) {
             setOrderStatus(newStatus);
             const info = statusLabels[newStatus];
-            if (info) {
-              toast({ title: info.label, description: info.description });
-            }
+            if (info) toast({ title: info.label, description: info.description });
           }
         }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [orderId]);
+    return () => { supabase.removeChannel(channel); };
+  }, [confirmState.orderId, urlOrderId, confirmState.guestToken]);
+
+  const orderNumber = confirmState.orderNumber || orderData?.order_number || (isLoading ? 'Carregando...' : 'N/A');
+  const paymentMethod = confirmState.paymentMethod || orderData?.payment_method || 'pix';
+  const pixQrcode = confirmState.pixQrcode;
+  const pixEmv = confirmState.pixEmv;
+  const pixExpirationDate = confirmState.pixExpirationDate;
+
+  const pixCountdown = usePixCountdown(pixExpirationDate);
+
+  const currentStatusInfo = statusLabels[orderStatus] || statusLabels.pending;
+
+  const copyPixCode = () => {
+    if (pixEmv) {
+      navigator.clipboard.writeText(pixEmv);
+      toast({ title: 'Código PIX copiado!' });
+    }
+  };
 
   const paymentInfo: Record<string, { title: string; description: string }> = {
     pix: {
@@ -102,14 +228,6 @@ export default function OrderConfirmation() {
   };
 
   const info = paymentInfo[paymentMethod] || paymentInfo.pix;
-  const currentStatusInfo = statusLabels[orderStatus] || statusLabels.pending;
-
-  const copyPixCode = () => {
-    if (pixEmv) {
-      navigator.clipboard.writeText(pixEmv);
-      toast({ title: 'Código PIX copiado!' });
-    }
-  };
 
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col">
@@ -160,19 +278,47 @@ export default function OrderConfirmation() {
             <p className="text-sm text-muted-foreground">{info.description}</p>
           </div>
 
-          {/* PIX QR Code */}
-          {paymentMethod === 'pix' && pixQrcode && orderStatus === 'pending' && (
+          {/* PIX QR Code with countdown */}
+          {paymentMethod === 'pix' && orderStatus === 'pending' && (
             <div className="space-y-3">
-              <img src={pixQrcode} alt="QR Code PIX" className="mx-auto w-48 h-48" />
-              {pixEmv && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground break-all bg-muted/50 p-2 rounded text-left font-mono">
-                    {pixEmv}
+              {pixQrcode && !pixCountdown.isExpired && (
+                <>
+                  <img src={pixQrcode} alt="QR Code PIX" className="mx-auto w-48 h-48" />
+                  {pixCountdown.display && (
+                    <div className={`text-center text-sm font-mono font-bold ${
+                      pixCountdown.isUrgent ? 'text-destructive animate-pulse' : 'text-muted-foreground'
+                    }`}>
+                      ⏱ Expira em {pixCountdown.display}
+                    </div>
+                  )}
+                  {pixEmv && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground break-all bg-muted/50 p-2 rounded text-left font-mono">
+                        {pixEmv}
+                      </p>
+                      <Button variant="outline" size="sm" onClick={copyPixCode} className="gap-2">
+                        <Copy className="h-3 w-3" />
+                        Copiar código PIX
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {pixCountdown.isExpired && (
+                <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-center">
+                  <p className="font-medium text-destructive">QR Code PIX expirado</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Infelizmente o código PIX expirou. Entre em contato pelo WhatsApp para reagendar o pagamento.
                   </p>
-                  <Button variant="outline" size="sm" onClick={copyPixCode} className="gap-2">
-                    <Copy className="h-3 w-3" />
-                    Copiar código PIX
-                  </Button>
+                  {whatsappNumber && (
+                    <Button variant="outline" size="sm" className="mt-3 gap-2" asChild>
+                      <a href={`https://wa.me/${whatsappNumber}`} target="_blank" rel="noopener noreferrer">
+                        <MessageCircle className="h-3 w-3" />
+                        Falar no WhatsApp
+                      </a>
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
