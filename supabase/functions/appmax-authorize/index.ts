@@ -11,6 +11,32 @@ import {
   jsonResponse,
 } from "../_shared/appmax.ts";
 
+// ── Dynamic callback URL helpers ──
+
+function normalizeBaseUrl(url: string) {
+  return url.trim().replace(/\/$/, "");
+}
+
+function safeOrigin(origin: string | null) {
+  if (!origin || origin === "null") return null;
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== "https:" && u.hostname !== "localhost") return null;
+    return normalizeBaseUrl(u.toString());
+  } catch {
+    return null;
+  }
+}
+
+async function getSetting(supabase: any, key: string) {
+  const { data } = await supabase
+    .from("store_settings")
+    .select(key)
+    .limit(1)
+    .maybeSingle();
+  return data?.[key] as string | undefined;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -41,15 +67,34 @@ Deno.serve(async (req) => {
     const env = settings.environment;
     const appId = settings.app_id;
     const isBootstrap = !appId;
-    const callbackUrl =
-      settings.callback_url ||
-      Deno.env.get("APPMAX_CALLBACK_URL") ||
-      "https://vanessalima.lovable.app/admin/integrations/appmax/callback";
-    const portalUrl = settings.base_portal_url;
 
     if (!settings.base_api_url) {
       return errorResponse(`base_api_url não configurado para ${env}`, 400);
     }
+
+    // ── Dynamic callback URL resolution ──
+    const originHeader = req.headers.get("origin");
+    const configuredBase = await getSetting(supabase, "public_base_url");
+    const callbackPath =
+      (await getSetting(supabase, "appmax_callback_path")) ||
+      "/admin/integrations/appmax/callback";
+
+    const baseUrl = configuredBase
+      ? normalizeBaseUrl(configuredBase)
+      : safeOrigin(originHeader);
+
+    // Fallback chain: DB setting > Origin header > appmax_settings.callback_url > env var > hardcoded
+    let callbackUrl: string;
+    if (baseUrl) {
+      callbackUrl = `${baseUrl}${callbackPath.startsWith("/") ? "" : "/"}${callbackPath}`;
+    } else {
+      callbackUrl =
+        settings.callback_url ||
+        Deno.env.get("APPMAX_CALLBACK_URL") ||
+        "https://vanessalima.lovable.app/admin/integrations/appmax/callback";
+    }
+
+    const portalUrl = settings.base_portal_url;
 
     // Check if already connected
     const { data: existing } = await supabase
@@ -78,6 +123,7 @@ Deno.serve(async (req) => {
       external_key: externalKey,
       bootstrap: isBootstrap,
       environment: env,
+      callback_url: callbackUrl,
     });
 
     // Use appmaxRequest helper (with retry)

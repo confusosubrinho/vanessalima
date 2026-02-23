@@ -48,10 +48,12 @@ Deno.serve(async (req) => {
       return errorResponse("Missing required fields", 400);
     }
 
+    // Validate app_id against configured APPMAX_APP_ID env var
+    const envAppId = Deno.env.get("APPMAX_APP_ID");
+
     // Try to detect environment from external_key or installations
     let settings: any = null;
 
-    // Check both environments for a matching installation/external_key
     for (const env of ["sandbox", "production"]) {
       const { data: inst } = await supabase
         .from("appmax_installations")
@@ -77,7 +79,7 @@ Deno.serve(async (req) => {
     }
 
     const env = settings.environment;
-    const savedAppId = settings.app_id;
+    const savedAppId = settings.app_id || envAppId;
 
     if (!savedAppId) {
       // === BOOTSTRAP MODE ===
@@ -113,7 +115,6 @@ Deno.serve(async (req) => {
       encryptedClientSecret = await encrypt(client_secret);
     } catch (encErr: any) {
       await logAppmax(supabase, "warn", `Falha ao criptografar secret: ${encErr.message}`, {}, requestId);
-      // Store masked if encryption fails (shouldn't happen in prod)
     }
 
     // Upsert installation
@@ -166,6 +167,7 @@ Deno.serve(async (req) => {
       requestId
     );
 
+    // Appmax requires external_id in the response
     return jsonResponse({ external_id: externalId });
   } catch (err: any) {
     await logAppmax(supabase, "error", `Erro no health check: ${err.message}`, {}, requestId);

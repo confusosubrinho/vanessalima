@@ -487,10 +487,133 @@ function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
   );
 }
 
+// ─── Domain & URL Settings (dynamic callback) ───
+
+function DomainSettings() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [baseUrl, setBaseUrl] = useState('');
+  const [callbackPath, setCallbackPath] = useState('/admin/integrations/appmax/callback');
+  const [saving, setSaving] = useState(false);
+
+  const { data: storeSettings } = useQuery({
+    queryKey: ['store-settings-domain'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('store_settings')
+        .select('id, public_base_url, appmax_callback_path')
+        .limit(1)
+        .maybeSingle();
+      return data as any;
+    },
+  });
+
+  useEffect(() => {
+    if (storeSettings) {
+      setBaseUrl(storeSettings.public_base_url || '');
+      setCallbackPath(storeSettings.appmax_callback_path || '/admin/integrations/appmax/callback');
+    }
+  }, [storeSettings]);
+
+  const callbackUrl = useMemo(() => {
+    if (!baseUrl) return '';
+    const normalized = baseUrl.replace(/\/$/, '');
+    const path = callbackPath.startsWith('/') ? callbackPath : '/' + callbackPath;
+    return `${normalized}${path}`;
+  }, [baseUrl, callbackPath]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const normalized = baseUrl.trim().replace(/\/$/, '');
+      const payload: Record<string, any> = {
+        public_base_url: normalized || null,
+        appmax_callback_path: callbackPath || '/admin/integrations/appmax/callback',
+      };
+      if (storeSettings?.id) {
+        await supabase.from('store_settings').update(payload as any).eq('id', storeSettings.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ['store-settings-domain'] });
+      toast({ title: 'URLs salvas!' });
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUseCurrentDomain = async () => {
+    const origin = window.location.origin;
+    setBaseUrl(origin);
+    setSaving(true);
+    try {
+      if (storeSettings?.id) {
+        await supabase.from('store_settings').update({ public_base_url: origin } as any).eq('id', storeSettings.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ['store-settings-domain'] });
+      toast({ title: 'Domínio atualizado!', description: origin });
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <h4 className="font-medium text-sm flex items-center gap-2">
+        <Link2 className="h-4 w-4" />
+        Domínio & URLs
+      </h4>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Base URL pública do site</Label>
+        <div className="flex gap-1">
+          <Input
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://seusite.lovable.app"
+            className="text-xs h-8 font-mono flex-1"
+          />
+          <Button variant="outline" size="sm" className="h-8 text-xs whitespace-nowrap" onClick={handleUseCurrentDomain}>
+            Usar domínio atual
+          </Button>
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Quando trocar para .com.br, acesse o admin pelo novo domínio e clique em "Usar domínio atual".
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Callback path (Appmax)</Label>
+        <Input
+          value={callbackPath}
+          onChange={(e) => setCallbackPath(e.target.value)}
+          className="text-xs h-8 font-mono"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">Callback URL (calculado)</p>
+        <div className="bg-muted rounded-md p-2 text-xs font-mono break-all">
+          {callbackUrl || '— configure a Base URL acima —'}
+        </div>
+      </div>
+
+      <Button onClick={handleSave} disabled={saving} size="sm" className="w-full">
+        {saving ? 'Salvando...' : 'Salvar URLs'}
+      </Button>
+    </div>
+  );
+}
+
 // ─── Appmax Gateway Panel ───
 
 function AppmaxGatewayPanel() {
   const [showLogs, setShowLogs] = useState(false);
+  const [showDomain, setShowDomain] = useState(false);
+  const { toast } = useToast();
+  const [testingApi, setTestingApi] = useState(false);
 
   const { data: logs } = useQuery({
     queryKey: ['appmax-logs'],
@@ -504,6 +627,20 @@ function AppmaxGatewayPanel() {
       return data;
     },
   });
+
+  const handleTestApi = async () => {
+    setTestingApi(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('appmax-get-app-token', {});
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      toast({ title: 'API OK!', description: `Token obtido para ambiente ${data.environment}` });
+    } catch (err: any) {
+      toast({ title: 'Erro na API', description: err.message, variant: 'destructive' });
+    } finally {
+      setTestingApi(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -519,6 +656,32 @@ function AppmaxGatewayPanel() {
           <AppmaxEnvTab env="production" />
         </TabsContent>
       </Tabs>
+
+      <Separator />
+
+      {/* Domain & URL Settings */}
+      <div>
+        <button onClick={() => setShowDomain(!showDomain)} className="flex items-center gap-2 text-sm font-medium w-full">
+          <Link2 className="h-4 w-4" />
+          Domínio & URLs
+          {showDomain ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+        </button>
+        {showDomain && (
+          <div className="mt-3">
+            <DomainSettings />
+          </div>
+        )}
+      </div>
+
+      <Separator />
+
+      {/* Quick Actions */}
+      <div className="space-y-2">
+        <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Diagnóstico</h5>
+        <Button variant="outline" size="sm" className="w-full text-xs" onClick={handleTestApi} disabled={testingApi}>
+          {testingApi ? <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />Testando...</> : <><Wifi className="h-3.5 w-3.5 mr-2" />Testar conexão API (Token OAuth)</>}
+        </Button>
+      </div>
 
       <Separator />
 
