@@ -5,25 +5,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Check, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 
+const HEALTHCHECK_TIMEOUT_MS = 15_000;
+
 export default function AppmaxCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'generating' | 'polling' | 'connected' | 'error'>('generating');
   const [errorMsg, setErrorMsg] = useState('');
+  const [errorDetail, setErrorDetail] = useState('');
   const [checking, setChecking] = useState(false);
   const [externalId, setExternalId] = useState('');
   const [detectedEnv, setDetectedEnv] = useState<string>('');
   const generatedRef = useRef(false);
+  const fallbackTriedRef = useRef(false);
 
   const externalKey = searchParams.get('external_key') || 'main-store';
-  // Appmax may return the install token as "token", "install_token", or "hash"
   const installToken =
     searchParams.get('token') ||
     searchParams.get('install_token') ||
     searchParams.get('hash') ||
     '';
 
-  // Detect environment from the installation record
   const detectEnv = useCallback(async (): Promise<string> => {
     const { data } = await supabase
       .from('appmax_installations' as any)
@@ -35,19 +37,11 @@ export default function AppmaxCallbackPage() {
     return (data as any)?.environment || 'sandbox';
   }, [externalKey]);
 
-  // Step 1: Call appmax-generate-merchant-keys with the install_token
+  // Call generate-merchant-keys with install_token
   const generateMerchantKeys = useCallback(async () => {
-    if (generatedRef.current) return;
-    generatedRef.current = true;
-
-    if (!installToken) {
-      // No token in URL — fall back to polling (healthcheck-dependent)
-      setStatus('polling');
-      return;
-    }
+    if (!installToken) return false;
 
     try {
-      setStatus('generating');
       const env = await detectEnv();
       setDetectedEnv(env);
 
@@ -59,26 +53,31 @@ export default function AppmaxCallbackPage() {
         },
       });
 
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        throw new Error(error.message || 'Erro na chamada da função');
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
 
       if (data?.status === 'connected') {
         setStatus('connected');
-        return;
+        return true;
       }
 
-      // Unexpected response — fall back to polling
-      setStatus('polling');
+      return false;
     } catch (err: any) {
       console.error('[AppmaxCallback] generate-merchant-keys failed:', err);
-      // Set error but also try polling as fallback
       setErrorMsg(err.message);
+      setErrorDetail(`Função: appmax-generate-merchant-keys\nToken: ${installToken ? installToken.slice(0, 8) + '...' : 'vazio'}\nExternal key: ${externalKey}`);
       setStatus('error');
+      return false;
     }
   }, [externalKey, installToken, detectEnv]);
 
-  // Step 2 (fallback): Poll installation status for healthcheck-based completion
-  const checkStatus = useCallback(async () => {
+  // Check installation status in DB
+  const checkStatus = useCallback(async (): Promise<boolean> => {
     setChecking(true);
     try {
       const { data, error } = await supabase
@@ -91,7 +90,7 @@ export default function AppmaxCallbackPage() {
         .maybeSingle();
 
       if (error) throw new Error(error.message);
-      if (!data) return;
+      if (!data) return false;
 
       const d = data as any;
       setDetectedEnv(d.environment || '');
@@ -99,32 +98,94 @@ export default function AppmaxCallbackPage() {
       if (d.status === 'connected') {
         setStatus('connected');
         setExternalId(d.external_id || '');
+        return true;
       } else if (d.status === 'error') {
         setStatus('error');
         setErrorMsg(d.last_error || 'Erro desconhecido.');
+        return false;
       }
+      return false;
     } catch (err: any) {
       setStatus('error');
       setErrorMsg(err.message);
+      return false;
     } finally {
       setChecking(false);
     }
   }, [externalKey]);
 
-  // On mount: try to generate keys automatically
+  // Main flow on mount
   useEffect(() => {
-    generateMerchantKeys();
-  }, [generateMerchantKeys]);
+    if (generatedRef.current) return;
+    generatedRef.current = true;
 
-  // If in polling mode, poll every 5s
+    (async () => {
+      // Step 1: Try generate-merchant-keys immediately if we have a token
+      if (installToken) {
+        setStatus('generating');
+        const success = await generateMerchantKeys();
+        if (success) return;
+        // If it failed with error status, don't continue to polling
+        // The error is already shown
+        return;
+      }
+
+      // Step 2: No token — go to polling mode, wait for healthcheck
+      setStatus('polling');
+    })();
+  }, [generateMerchantKeys, installToken]);
+
+  // Polling mode: check every 5s, with 15s timeout fallback
   useEffect(() => {
     if (status !== 'polling') return;
+
     checkStatus();
     const interval = setInterval(checkStatus, 5000);
-    return () => clearInterval(interval);
-  }, [status, checkStatus]);
+
+    // After 15s, if still polling and we have a token, try generate-merchant-keys as fallback
+    const timeout = setTimeout(async () => {
+      if (fallbackTriedRef.current) return;
+      fallbackTriedRef.current = true;
+
+      // Check one more time
+      const connected = await checkStatus();
+      if (connected) return;
+
+      // Fallback: try generate-merchant-keys if we have an install token
+      if (installToken) {
+        setStatus('generating');
+        await generateMerchantKeys();
+      } else {
+        setStatus('error');
+        setErrorMsg('Healthcheck não recebido após 15 segundos. A Appmax pode não estar chamando o endpoint de healthcheck.');
+        setErrorDetail(
+          `External key: ${externalKey}\n` +
+          `Token na URL: ${installToken ? 'sim' : 'não'}\n` +
+          `Verifique se a URL do healthcheck está correta no portal Appmax.`
+        );
+      }
+    }, HEALTHCHECK_TIMEOUT_MS);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [status, checkStatus, installToken, externalKey, generateMerchantKeys]);
 
   const envLabel = detectedEnv === 'production' ? 'Produção' : detectedEnv === 'sandbox' ? 'Sandbox' : '';
+
+  const handleRetry = () => {
+    generatedRef.current = false;
+    fallbackTriedRef.current = false;
+    setErrorMsg('');
+    setErrorDetail('');
+    if (installToken) {
+      setStatus('generating');
+      generateMerchantKeys();
+    } else {
+      setStatus('polling');
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -147,14 +208,12 @@ export default function AppmaxCallbackPage() {
           {status === 'polling' && (
             <div className="flex flex-col items-center gap-3 py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <p className="font-medium">Autorização realizada</p>
+              <p className="font-medium">Aguardando confirmação...</p>
               <p className="text-sm text-muted-foreground text-center">
-                {installToken
-                  ? 'Token não reconhecido. Aguardando validação via healthcheck...'
-                  : 'Nenhum token retornado na URL. Aguardando healthcheck da Appmax...'}
+                Aguardando healthcheck da Appmax (timeout: 15s).
               </p>
               <p className="text-xs text-muted-foreground">
-                O status será atualizado automaticamente.
+                Se não receber confirmação, tentaremos gerar credenciais automaticamente.
               </p>
               <Button
                 variant="outline"
@@ -199,16 +258,13 @@ export default function AppmaxCallbackPage() {
               </div>
               <p className="font-medium text-destructive">Erro na conexão</p>
               <p className="text-sm text-muted-foreground text-center">{errorMsg}</p>
+              {errorDetail && (
+                <pre className="text-xs bg-muted p-3 rounded w-full overflow-x-auto whitespace-pre-wrap text-muted-foreground mt-1">
+                  {errorDetail}
+                </pre>
+              )}
               <div className="flex gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    generatedRef.current = false;
-                    setErrorMsg('');
-                    generateMerchantKeys();
-                  }}
-                >
+                <Button variant="outline" size="sm" onClick={handleRetry}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Tentar novamente
                 </Button>
