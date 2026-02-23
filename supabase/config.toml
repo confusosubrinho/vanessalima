@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.repair-images]
 verify_jwt = false
+
+[functions.sitemap]
+verify_jwt = false
+
+[functions.robots]
+verify_jwt = false

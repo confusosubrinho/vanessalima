@@ -83,6 +83,90 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_audit_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: string
+          ip_address: string | null
+          new_values: Json | null
+          old_values: Json | null
+          resource_id: string | null
+          resource_name: string | null
+          resource_type: string
+          user_agent: string | null
+          user_email: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: string
+          ip_address?: string | null
+          new_values?: Json | null
+          old_values?: Json | null
+          resource_id?: string | null
+          resource_name?: string | null
+          resource_type: string
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: string
+          ip_address?: string | null
+          new_values?: Json | null
+          old_values?: Json | null
+          resource_id?: string | null
+          resource_name?: string | null
+          resource_type?: string
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      admin_members: {
+        Row: {
+          created_at: string | null
+          email: string
+          full_name: string | null
+          id: string
+          invited_at: string | null
+          invited_by: string | null
+          is_active: boolean | null
+          last_access: string | null
+          role: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          full_name?: string | null
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_active?: boolean | null
+          last_access?: string | null
+          role?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          invited_at?: string | null
+          invited_by?: string | null
+          is_active?: boolean | null
+          last_access?: string | null
+          role?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       admin_notifications: {
         Row: {
           created_at: string | null
@@ -714,6 +798,9 @@ export type Database = {
       }
       coupons: {
         Row: {
+          applicable_category_id: string | null
+          bulk_count: number | null
+          bulk_prefix: string | null
           code: string
           created_at: string
           discount_type: Database["public"]["Enums"]["discount_type"]
@@ -721,12 +808,17 @@ export type Database = {
           expiry_date: string | null
           id: string
           is_active: boolean | null
+          is_bulk: boolean | null
           max_uses: number | null
           min_purchase_amount: number | null
+          type: string | null
           updated_at: string
           uses_count: number | null
         }
         Insert: {
+          applicable_category_id?: string | null
+          bulk_count?: number | null
+          bulk_prefix?: string | null
           code: string
           created_at?: string
           discount_type: Database["public"]["Enums"]["discount_type"]
@@ -734,12 +826,17 @@ export type Database = {
           expiry_date?: string | null
           id?: string
           is_active?: boolean | null
+          is_bulk?: boolean | null
           max_uses?: number | null
           min_purchase_amount?: number | null
+          type?: string | null
           updated_at?: string
           uses_count?: number | null
         }
         Update: {
+          applicable_category_id?: string | null
+          bulk_count?: number | null
+          bulk_prefix?: string | null
           code?: string
           created_at?: string
           discount_type?: Database["public"]["Enums"]["discount_type"]
@@ -747,12 +844,22 @@ export type Database = {
           expiry_date?: string | null
           id?: string
           is_active?: boolean | null
+          is_bulk?: boolean | null
           max_uses?: number | null
           min_purchase_amount?: number | null
+          type?: string | null
           updated_at?: string
           uses_count?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "coupons_applicable_category_id_fkey"
+            columns: ["applicable_category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       customers: {
         Row: {

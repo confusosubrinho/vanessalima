@@ -14,6 +14,9 @@ import {
   Menu,
   Store,
   Star,
+  Search,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -40,18 +43,23 @@ import logoFallback from '@/assets/logo.png';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery } from '@tanstack/react-query';
+import { useAdminRole } from '@/hooks/useAdminRole';
+import { useDarkMode } from '@/hooks/useDarkMode';
+import { hasPermission } from '@/lib/permissions';
 
 const SetupWizard = lazy(() => import('@/components/admin/SetupWizard').then(m => ({ default: m.SetupWizard })));
 import { NotificationBell } from '@/components/admin/NotificationBell';
+import { GlobalSearch } from '@/components/admin/GlobalSearch';
 
 interface MenuItem {
   title: string;
   url?: string;
   icon: any;
-  children?: { title: string; url: string }[];
+  permission?: string; // required permission
+  children?: { title: string; url: string; permission?: string }[];
 }
 
-const menuItems: MenuItem[] = [
+const allMenuItems: MenuItem[] = [
   { title: 'Dashboard', url: '/admin', icon: LayoutDashboard },
   { 
     title: 'Catálogo', 
@@ -59,15 +67,16 @@ const menuItems: MenuItem[] = [
     children: [
       { title: 'Produtos', url: '/admin/produtos' },
       { title: 'Categorias', url: '/admin/categorias' },
-      { title: 'Avaliações', url: '/admin/avaliacoes' },
+      { title: 'Avaliações', url: '/admin/avaliacoes', permission: 'reviews.read' },
       { title: 'Galeria de Mídia', url: '/admin/galeria' },
     ]
   },
-  { title: 'Pedidos', url: '/admin/pedidos', icon: ShoppingCart },
-  { title: 'Clientes', url: '/admin/clientes', icon: Users },
+  { title: 'Pedidos', url: '/admin/pedidos', icon: ShoppingCart, permission: 'orders.read' },
+  { title: 'Clientes', url: '/admin/clientes', icon: Users, permission: 'customers.read' },
   {
     title: 'Vendas & Analytics',
     icon: BarChart3,
+    permission: 'analytics.read',
     children: [
       { title: 'Análise de Vendas', url: '/admin/vendas' },
       { title: 'Tráfego & UTM', url: '/admin/trafego' },
@@ -78,6 +87,7 @@ const menuItems: MenuItem[] = [
   { 
     title: 'Marketing', 
     icon: Tags,
+    permission: 'coupons.read',
     children: [
       { title: 'Cupons', url: '/admin/cupons' },
       { title: 'Email Automações', url: '/admin/email-automations' },
@@ -86,6 +96,7 @@ const menuItems: MenuItem[] = [
   { 
     title: 'Aparência', 
     icon: PenSquare,
+    permission: 'personalization.read',
     children: [
       { title: 'Personalização da Home', url: '/admin/personalizacao' },
       { title: 'Tema Visual', url: '/admin/tema' },
@@ -97,15 +108,17 @@ const menuItems: MenuItem[] = [
     title: 'Configurações', 
     icon: Settings,
     children: [
-      { title: 'Loja', url: '/admin/configuracoes' },
-      { title: 'Juros e Cartões', url: '/admin/precos' },
-      { title: 'Integrações', url: '/admin/integracoes' },
+      { title: 'Loja', url: '/admin/configuracoes', permission: 'settings.read' },
+      { title: 'Juros e Cartões', url: '/admin/precos', permission: 'settings.read' },
+      { title: 'Integrações', url: '/admin/integracoes', permission: 'settings.read' },
       { title: 'Notificações', url: '/admin/notificacoes' },
-      { title: 'Código Externo', url: '/admin/configuracoes/codigo' },
-      { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes' },
-      { title: 'Logs do Sistema', url: '/admin/logs' },
-      { title: 'Saúde do Sistema', url: '/admin/saude' },
-      { title: 'Otimização & Limpeza', url: '/admin/otimizacao' },
+      { title: 'Equipe & Acessos', url: '/admin/equipe', permission: 'team.read' },
+      { title: 'Log de Auditoria', url: '/admin/logs/auditoria', permission: 'settings.read' },
+      { title: 'Código Externo', url: '/admin/configuracoes/codigo', permission: 'settings.read' },
+      { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes', permission: 'settings.read' },
+      { title: 'Logs do Sistema', url: '/admin/logs', permission: 'settings.read' },
+      { title: 'Saúde do Sistema', url: '/admin/saude', permission: 'settings.read' },
+      { title: 'Otimização & Limpeza', url: '/admin/otimizacao', permission: 'settings.read' },
       { title: 'Central de Ajuda', url: '/admin/ajuda' },
     ]
   },
@@ -134,6 +147,32 @@ function useStoreLogo() {
   });
 }
 
+function useFilteredMenu() {
+  const { role, can } = useAdminRole();
+
+  return allMenuItems.reduce<MenuItem[]>((acc, item) => {
+    // Check top-level permission
+    if (item.permission && !can(item.permission)) return acc;
+
+    if (item.children) {
+      const filteredChildren = item.children.filter(child => {
+        if (!child.permission) return true;
+        // Special: team.read only for owner
+        if (child.permission === 'team.read') return role === 'owner';
+        // Settings only for owner/manager
+        if (child.permission === 'settings.read') return role === 'owner' || role === 'manager';
+        return can(child.permission);
+      });
+      if (filteredChildren.length > 0) {
+        acc.push({ ...item, children: filteredChildren });
+      }
+    } else {
+      acc.push(item);
+    }
+    return acc;
+  }, []);
+}
+
 function AdminSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -142,6 +181,7 @@ function AdminSidebar() {
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const { data: storeSettings } = useStoreLogo();
   const logoSrc = storeSettings?.header_logo_url || storeSettings?.logo_url || logoFallback;
+  const menuItems = useFilteredMenu();
 
   useEffect(() => {
     const groupsToOpen: string[] = [];
@@ -262,9 +302,9 @@ function MobileMenuSheet() {
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const { data: storeSettings } = useStoreLogo();
   const logoSrc = storeSettings?.header_logo_url || storeSettings?.logo_url || logoFallback;
+  const menuItems = useFilteredMenu();
 
   useEffect(() => {
-    // Auto-expand active group
     menuItems.forEach(item => {
       if (item.children?.some(child => location.pathname === child.url)) {
         setOpenGroups(prev => prev.includes(item.title) ? prev : [...prev, item.title]);
@@ -272,7 +312,6 @@ function MobileMenuSheet() {
     });
   }, [location.pathname]);
 
-  // Close sheet on navigation
   useEffect(() => {
     setOpen(false);
   }, [location.pathname]);
@@ -405,7 +444,7 @@ function MobileBottomBar() {
 
 // Get current page title for mobile header
 function getPageTitle(pathname: string): string {
-  for (const item of menuItems) {
+  for (const item of allMenuItems) {
     if (item.url === pathname) return item.title;
     if (item.children) {
       const child = item.children.find(c => c.url === pathname);
@@ -417,24 +456,43 @@ function getPageTitle(pathname: string): string {
 
 const ADMIN_SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 
+function DarkModeToggle({ isDark, toggle }: { isDark: boolean; toggle: () => void }) {
+  return (
+    <Button variant="ghost" size="icon" onClick={toggle} className="h-8 w-8">
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </Button>
+  );
+}
+
+function SearchButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="outline" size="sm" className="hidden md:flex items-center gap-2 text-muted-foreground h-8 px-3" onClick={onClick}>
+      <Search className="h-3.5 w-3.5" />
+      <span className="text-xs">Buscar...</span>
+      <kbd className="text-[10px] bg-muted px-1.5 py-0.5 rounded ml-2">⌘K</kbd>
+    </Button>
+  );
+}
+
 export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const { isDark, toggle: toggleDark } = useDarkMode();
 
   const { data: setupData } = useQuery({
     queryKey: ['store-setup'],
     queryFn: async () => {
-      const { data } = await supabase.from('store_setup').select('*').limit(1).maybeSingle();
+      const { data } = await supabase.from('store_setup' as any).select('*').limit(1).maybeSingle();
       return data;
     },
     enabled: isAdmin === true,
   });
 
   useEffect(() => {
-    if (setupData && !setupData.setup_completed) {
+    if (setupData && !(setupData as any).setup_completed) {
       setShowWizard(true);
     }
   }, [setupData]);
@@ -497,12 +555,14 @@ export default function AdminLayout() {
   // Mobile layout: top header + content + bottom tab bar
   if (isMobile) {
     return (
-      <>
+      <div className={isDark ? 'dark' : ''}>
         {wizardOverlay}
-        <div className="min-h-screen flex flex-col bg-background">
+        <GlobalSearch />
+        <div className="min-h-screen flex flex-col bg-background text-foreground">
           <header className="sticky top-0 z-40 h-12 border-b bg-background flex items-center px-3 gap-2">
             <MobileMenuSheet />
             <h1 className="text-sm font-semibold flex-1 truncate">{getPageTitle(location.pathname)}</h1>
+            <DarkModeToggle isDark={isDark} toggle={toggleDark} />
             <NotificationBell />
             <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
               <Link to="/" target="_blank">
@@ -516,21 +576,26 @@ export default function AdminLayout() {
           </main>
           <MobileBottomBar />
         </div>
-      </>
+      </div>
     );
   }
 
   // Desktop layout: sidebar + content
   return (
-    <>
+    <div className={isDark ? 'dark' : ''}>
       {wizardOverlay}
+      <GlobalSearch />
       <SidebarProvider>
-        <div className="min-h-screen flex w-full">
+        <div className="min-h-screen flex w-full bg-background text-foreground">
           <AdminSidebar />
           <div className="flex-1 flex flex-col">
             <header className="h-14 border-b bg-background flex items-center px-4 gap-4">
               <SidebarTrigger />
+              <SearchButton onClick={() => {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+              }} />
               <div className="flex-1" />
+              <DarkModeToggle isDark={isDark} toggle={toggleDark} />
               <NotificationBell />
               <Button variant="outline" size="sm" asChild>
                 <Link to="/" target="_blank">Ver Loja</Link>
@@ -542,6 +607,6 @@ export default function AdminLayout() {
           </div>
         </div>
       </SidebarProvider>
-    </>
+    </div>
   );
 }

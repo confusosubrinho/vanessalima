@@ -132,8 +132,19 @@ export default function CategoryPage() {
     return result;
   }, [products, filters]);
 
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vanessalima.lovable.app/" },
+      { "@type": "ListItem", "position": 2, "name": category?.name || 'Produtos' },
+    ],
+  };
+
   return (
     <StoreLayout>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
+
       {/* Breadcrumb */}
       <div className="bg-muted/30 py-3">
         <div className="container-custom">

@@ -421,8 +421,72 @@ export default function ProductDetail() {
     </Tabs>
   );
 
+  // SEO: Build JSON-LD and OG meta tags
+  const storeName = storeSettings?.store_name || 'Loja';
+  const primaryImage = images.find(img => img.is_primary) || images[0];
+  const ogImage = primaryImage ? resolveImageUrl(primaryImage.url) : '';
+  const productUrl = `https://vanessalima.lovable.app/produto/${product.slug}`;
+  const totalStock = variants.reduce((sum, v) => sum + (v.stock_quantity || 0), 0);
+  const availability = totalStock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": product.name,
+    "description": product.description || '',
+    "image": images.map(img => resolveImageUrl(img.url)),
+    "brand": { "@type": "Brand", "name": product.brand || storeName },
+    "sku": product.sku || undefined,
+    "offers": {
+      "@type": "Offer",
+      "price": String(currentPrice),
+      "priceCurrency": "BRL",
+      "availability": availability,
+      "seller": { "@type": "Organization", "name": storeName },
+    },
+    ...(reviewStats && reviewStats.count > 0 ? {
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": String(reviewStats.avg.toFixed(1)),
+        "reviewCount": String(reviewStats.count),
+      }
+    } : {}),
+  };
+
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vanessalima.lovable.app/" },
+      ...(product.category ? [{ "@type": "ListItem", "position": 2, "name": product.category.name, "item": `https://vanessalima.lovable.app/categoria/${product.category.slug}` }] : []),
+      { "@type": "ListItem", "position": product.category ? 3 : 2, "name": product.name },
+    ],
+  };
+
   return (
     <StoreLayout>
+      {/* SEO: JSON-LD */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
+
+      {/* SEO: OG Meta Tags */}
+      {typeof document !== 'undefined' && (() => {
+        const setMeta = (property: string, content: string) => {
+          let el = document.querySelector(`meta[property="${property}"]`);
+          if (!el) { el = document.createElement('meta'); el.setAttribute('property', property); document.head.appendChild(el); }
+          el.setAttribute('content', content);
+        };
+        setMeta('og:title', product.seo_title || product.name);
+        setMeta('og:description', product.seo_description || product.description?.slice(0, 160) || '');
+        setMeta('og:image', ogImage);
+        setMeta('og:url', productUrl);
+        setMeta('og:type', 'product');
+        setMeta('product:price:amount', String(currentPrice));
+        setMeta('product:price:currency', 'BRL');
+        document.title = (product.seo_title || product.name) + ' | ' + storeName;
+        return null;
+      })()}
+
       {/* Floating Video */}
       {(product as any).video_url && (
         <FloatingVideo videoUrl={(product as any).video_url} productName={product.name} />
