@@ -116,9 +116,15 @@ Deno.serve(async (req) => {
 
     // Build authorize payload
     const callbackWithKey = `${callbackUrl}?external_key=${encodeURIComponent(externalKey)}`;
+
+    const healthcheckUrl =
+      settings.healthcheck_url ||
+      `${Deno.env.get("SUPABASE_URL")}/functions/v1/appmax-healthcheck`;
+
     const authorizePayload: Record<string, string> = {
       external_key: externalKey,
       url_callback: callbackWithKey,
+      healthcheck_url: healthcheckUrl,
     };
     if (appId) authorizePayload.app_id = appId;
 
