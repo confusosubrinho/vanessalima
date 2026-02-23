@@ -128,6 +128,7 @@ export type Database = {
           last_error: string | null
           merchant_client_id: string | null
           merchant_client_secret: string | null
+          merchant_client_secret_encrypted: string | null
           status: string
           updated_at: string
         }
@@ -142,6 +143,7 @@ export type Database = {
           last_error?: string | null
           merchant_client_id?: string | null
           merchant_client_secret?: string | null
+          merchant_client_secret_encrypted?: string | null
           status?: string
           updated_at?: string
         }
@@ -156,6 +158,7 @@ export type Database = {
           last_error?: string | null
           merchant_client_id?: string | null
           merchant_client_secret?: string | null
+          merchant_client_secret_encrypted?: string | null
           status?: string
           updated_at?: string
         }
@@ -191,34 +194,76 @@ export type Database = {
       appmax_settings: {
         Row: {
           app_id: string | null
+          base_api_url: string | null
+          base_auth_url: string | null
+          base_portal_url: string | null
           callback_url: string | null
           client_id: string | null
           client_secret: string | null
+          client_secret_encrypted: string | null
           created_at: string
           environment: string
           healthcheck_url: string | null
           id: string
+          is_active: boolean
           updated_at: string
         }
         Insert: {
           app_id?: string | null
+          base_api_url?: string | null
+          base_auth_url?: string | null
+          base_portal_url?: string | null
           callback_url?: string | null
           client_id?: string | null
           client_secret?: string | null
+          client_secret_encrypted?: string | null
           created_at?: string
           environment?: string
           healthcheck_url?: string | null
           id?: string
+          is_active?: boolean
           updated_at?: string
         }
         Update: {
           app_id?: string | null
+          base_api_url?: string | null
+          base_auth_url?: string | null
+          base_portal_url?: string | null
           callback_url?: string | null
           client_id?: string | null
           client_secret?: string | null
+          client_secret_encrypted?: string | null
           created_at?: string
           environment?: string
           healthcheck_url?: string | null
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      appmax_tokens_cache: {
+        Row: {
+          access_token_encrypted: string | null
+          created_at: string
+          environment: string
+          expires_at: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          access_token_encrypted?: string | null
+          created_at?: string
+          environment: string
+          expires_at?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          access_token_encrypted?: string | null
+          created_at?: string
+          environment?: string
+          expires_at?: string | null
           id?: string
           updated_at?: string
         }
