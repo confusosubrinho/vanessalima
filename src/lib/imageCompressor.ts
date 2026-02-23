@@ -91,6 +91,50 @@ export async function compressImageToWebP(
 }
 
 /**
+ * Compress an image to a 100×100 square avatar (center crop, WebP).
+ */
+export async function compressToAvatar(
+  file: File
+): Promise<{ file: File; fileName: string }> {
+  if (!file.type.startsWith('image/')) {
+    return { file, fileName: file.name };
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      img.onload = () => {
+        const size = 100;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('Canvas context error')); return; }
+
+        const srcSize = Math.min(img.naturalWidth, img.naturalHeight);
+        const srcX = (img.naturalWidth - srcSize) / 2;
+        const srcY = (img.naturalHeight - srcSize) / 2;
+
+        ctx.drawImage(img, srcX, srcY, srcSize, srcSize, 0, 0, size, size);
+
+        canvas.toBlob((blob) => {
+          if (!blob) { reject(new Error('Compression failed')); return; }
+          const fileName = `testimonials/avatar-${Date.now()}.webp`;
+          const compressedFile = new File([blob], fileName, { type: 'image/webp' });
+          resolve({ file: compressedFile, fileName });
+        }, 'image/webp', 0.75);
+      };
+      img.onerror = () => reject(new Error('Image load error'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('File read error'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
  * Generate a thumbnail version of an image (400px max).
  */
 export async function generateThumbnail(

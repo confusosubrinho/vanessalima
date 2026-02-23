@@ -1082,6 +1082,8 @@ export type Database = {
           display_order: number
           id: string
           is_active: boolean
+          photo_url: string | null
+          product_id: string | null
           rating: number
           testimonial: string
           updated_at: string
@@ -1092,6 +1094,8 @@ export type Database = {
           display_order?: number
           id?: string
           is_active?: boolean
+          photo_url?: string | null
+          product_id?: string | null
           rating?: number
           testimonial: string
           updated_at?: string
@@ -1102,11 +1106,21 @@ export type Database = {
           display_order?: number
           id?: string
           is_active?: boolean
+          photo_url?: string | null
+          product_id?: string | null
           rating?: number
           testimonial?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "homepage_testimonials_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       homepage_testimonials_config: {
         Row: {
