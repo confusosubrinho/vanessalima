@@ -1,116 +1,119 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
-
-async function logAppmax(
-  supabase: any,
-  level: string,
-  message: string,
-  meta?: Record<string, unknown>
-) {
-  try {
-    await supabase
-      .from("appmax_logs")
-      .insert({ level, scope: "appmax", message, meta: meta ?? {} });
-  } catch (_) {}
-}
+import {
+  corsHeaders,
+  getServiceClient,
+  getActiveSettings,
+  getSettingsByEnv,
+  logAppmax,
+  encrypt,
+  errorResponse,
+  jsonResponse,
+  maskSecret,
+} from "../_shared/appmax.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
+  const supabase = getServiceClient();
+  const requestId = crypto.randomUUID();
 
   try {
     if (req.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Method not allowed" }), {
-        status: 405,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return errorResponse("Method not allowed", 405);
     }
 
     const body = await req.json();
     const { app_id, client_id, client_secret, external_key } = body;
 
-    await logAppmax(supabase, "info", "Health check recebido", {
-      app_id,
-      external_key,
-      has_client_id: !!client_id,
-      has_client_secret: !!client_secret,
-    });
+    await logAppmax(
+      supabase,
+      "info",
+      "Health check recebido",
+      {
+        app_id,
+        external_key,
+        has_client_id: !!client_id,
+        has_client_secret: !!client_secret,
+      },
+      requestId
+    );
 
     if (!client_id || !client_secret || !external_key) {
       await logAppmax(supabase, "error", "Campos obrigatórios ausentes no health check", {
         has_client_id: !!client_id,
         has_client_secret: !!client_secret,
         has_external_key: !!external_key,
-      });
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      }, requestId);
+      return errorResponse("Missing required fields", 400);
     }
 
-    // Read saved app_id from appmax_settings
-    const { data: settings } = await supabase
-      .from("appmax_settings")
-      .select("id, app_id")
-      .eq("environment", "sandbox")
-      .maybeSingle();
+    // Try to detect environment from external_key or installations
+    let settings: any = null;
 
-    const savedAppId = settings?.app_id;
+    // Check both environments for a matching installation/external_key
+    for (const env of ["sandbox", "production"]) {
+      const { data: inst } = await supabase
+        .from("appmax_installations")
+        .select("environment")
+        .eq("external_key", external_key)
+        .eq("environment", env)
+        .maybeSingle();
+
+      if (inst) {
+        settings = await getSettingsByEnv(supabase, env);
+        break;
+      }
+    }
+
+    // Fallback: use active environment
+    if (!settings) {
+      settings = await getActiveSettings(supabase);
+    }
+
+    if (!settings) {
+      await logAppmax(supabase, "error", "Nenhum ambiente configurado para healthcheck", {}, requestId);
+      return errorResponse("No environment configured", 500);
+    }
+
+    const env = settings.environment;
+    const savedAppId = settings.app_id;
 
     if (!savedAppId) {
-      // === BOOTSTRAP MODE: first installation ===
-      // No app_id saved yet — accept the incoming one and save it
+      // === BOOTSTRAP MODE ===
       if (!app_id) {
-        await logAppmax(supabase, "error", "Bootstrap: app_id não enviado pela Appmax");
-        return new Response(JSON.stringify({ error: "app_id is required for bootstrap" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        await logAppmax(supabase, "error", "Bootstrap: app_id não enviado", {}, requestId);
+        return errorResponse("app_id is required for bootstrap", 400);
       }
 
       // Save the app_id as official
-      if (settings?.id) {
-        await supabase
-          .from("appmax_settings")
-          .update({ app_id: String(app_id), client_id, client_secret })
-          .eq("id", settings.id);
-      } else {
-        await supabase
-          .from("appmax_settings")
-          .insert({
-            environment: "sandbox",
-            app_id: String(app_id),
-            client_id,
-            client_secret,
-          });
-      }
+      await supabase
+        .from("appmax_settings")
+        .update({ app_id: String(app_id) })
+        .eq("id", settings.id);
 
-      await logAppmax(supabase, "info", "Bootstrap: app_id salvo como oficial", {
+      await logAppmax(supabase, "info", `Bootstrap: app_id salvo (${env})`, {
         app_id,
         external_key,
-      });
+      }, requestId);
     } else {
       // === NORMAL MODE: validate app_id ===
-      if (String(app_id) !== String(savedAppId)) {
-        await logAppmax(supabase, "error", "app_id inválido no health check", {
+      if (app_id && String(app_id) !== String(savedAppId)) {
+        await logAppmax(supabase, "error", `app_id inválido (${env})`, {
           received: app_id,
           expected: savedAppId,
-        });
-        return new Response(JSON.stringify({ error: "Invalid app_id" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        }, requestId);
+        return errorResponse("Invalid app_id", 401);
       }
+    }
+
+    // Encrypt merchant secrets before storing
+    let encryptedClientSecret: string | null = null;
+    try {
+      encryptedClientSecret = await encrypt(client_secret);
+    } catch (encErr: any) {
+      await logAppmax(supabase, "warn", `Falha ao criptografar secret: ${encErr.message}`, {}, requestId);
+      // Store masked if encryption fails (shouldn't happen in prod)
     }
 
     // Upsert installation
@@ -118,14 +121,15 @@ Deno.serve(async (req) => {
       .from("appmax_installations")
       .select("id, external_id")
       .eq("external_key", external_key)
-      .eq("environment", "sandbox")
+      .eq("environment", env)
       .maybeSingle();
 
     const externalId = existing?.external_id || crypto.randomUUID();
 
-    const updateData = {
+    const updateData: Record<string, any> = {
       merchant_client_id: client_id,
-      merchant_client_secret: client_secret,
+      merchant_client_secret: maskSecret(client_secret),
+      merchant_client_secret_encrypted: encryptedClientSecret,
       external_id: externalId,
       status: "connected",
       last_error: null,
@@ -143,31 +147,28 @@ Deno.serve(async (req) => {
         .insert({
           ...updateData,
           external_key,
-          environment: "sandbox",
-          app_id: String(app_id),
+          environment: env,
+          app_id: String(app_id || savedAppId),
         });
       if (error) throw error;
     }
 
-    await logAppmax(supabase, "info", "Health check concluído — status: connected", {
-      external_key,
-      external_id: externalId,
-      merchant_client_id: client_id,
-      bootstrap: !savedAppId,
-    });
-
-    return new Response(
-      JSON.stringify({ external_id: externalId }),
+    await logAppmax(
+      supabase,
+      "info",
+      `Health check concluído — connected (${env})`,
       {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+        external_key,
+        external_id: externalId,
+        merchant_client_id: client_id,
+        bootstrap: !savedAppId,
+      },
+      requestId
     );
+
+    return jsonResponse({ external_id: externalId });
   } catch (err: any) {
-    await logAppmax(supabase, "error", `Erro no health check: ${err.message}`);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    await logAppmax(supabase, "error", `Erro no health check: ${err.message}`, {}, requestId);
+    return errorResponse(err.message);
   }
 });
