@@ -228,7 +228,7 @@ export async function getAppToken(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(`${authUrl}/oauth2/token`, {
+      const res = await fetch(`${authUrl}/oauth/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
