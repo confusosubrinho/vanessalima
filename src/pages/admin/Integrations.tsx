@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi, Eye, EyeOff, Save, Copy } from 'lucide-react';
+import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi, Eye, EyeOff, Save, Copy, Stethoscope, ClipboardCopy } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 
 // ─── Types ───
@@ -612,8 +613,11 @@ function DomainSettings() {
 function AppmaxGatewayPanel() {
   const [showLogs, setShowLogs] = useState(false);
   const [showDomain, setShowDomain] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
+  const [diagModalOpen, setDiagModalOpen] = useState(false);
   const { toast } = useToast();
   const [testingApi, setTestingApi] = useState(false);
+  const [testingPing, setTestingPing] = useState(false);
 
   const { data: logs } = useQuery({
     queryKey: ['appmax-logs'],
@@ -625,6 +629,35 @@ function AppmaxGatewayPanel() {
         .limit(20);
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: lastHealthcheck, refetch: refetchHc } = useQuery({
+    queryKey: ['appmax-last-healthcheck'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('appmax_handshake_logs')
+        .select('*')
+        .eq('stage', 'healthcheck')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as any;
+    },
+  });
+
+  const { data: handshakeLogs, refetch: refetchHandshake } = useQuery({
+    queryKey: ['appmax-handshake-logs'],
+    enabled: diagModalOpen,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('appmax_handshake_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data as any[];
     },
   });
 
@@ -640,6 +673,58 @@ function AppmaxGatewayPanel() {
     } finally {
       setTestingApi(false);
     }
+  };
+
+  const handleTestPing = async () => {
+    setTestingPing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('appmax-healthcheck-ping', {});
+      if (error) throw new Error(error.message);
+      if (data?.ok) {
+        toast({ title: 'Endpoint acessível!', description: `Resposta em ${data.now}` });
+      } else {
+        toast({ title: 'Resposta inesperada', description: JSON.stringify(data), variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Endpoint inacessível', description: err.message, variant: 'destructive' });
+    } finally {
+      setTestingPing(false);
+    }
+  };
+
+  const copyDiagnostic = () => {
+    const lines: string[] = [
+      `=== Diagnóstico Appmax (${new Date().toISOString()}) ===`,
+      '',
+    ];
+    if (lastHealthcheck) {
+      lines.push(`Último Healthcheck:`);
+      lines.push(`  Data: ${lastHealthcheck.created_at}`);
+      lines.push(`  OK: ${lastHealthcheck.ok}`);
+      lines.push(`  HTTP Status: ${lastHealthcheck.http_status || 'N/A'}`);
+      lines.push(`  Mensagem: ${lastHealthcheck.message}`);
+      lines.push(`  External Key: ${lastHealthcheck.external_key || 'N/A'}`);
+      lines.push(`  Environment: ${lastHealthcheck.environment}`);
+      lines.push(`  Request ID: ${lastHealthcheck.request_id || 'N/A'}`);
+      if (lastHealthcheck.payload) {
+        lines.push(`  Payload: ${JSON.stringify(lastHealthcheck.payload, null, 2)}`);
+      }
+      if (lastHealthcheck.headers) {
+        lines.push(`  Headers: ${JSON.stringify(lastHealthcheck.headers, null, 2)}`);
+      }
+    } else {
+      lines.push('Nenhum log de healthcheck encontrado.');
+      lines.push('⚠️ A Appmax pode não estar chamando seu endpoint.');
+    }
+    lines.push('');
+    if (handshakeLogs?.length) {
+      lines.push(`Últimos ${handshakeLogs.length} logs de handshake:`);
+      for (const log of handshakeLogs) {
+        lines.push(`  [${log.created_at}] ${log.stage} | ${log.ok ? 'OK' : 'ERRO'} | ${log.message}`);
+      }
+    }
+    navigator.clipboard.writeText(lines.join('\n'));
+    toast({ title: 'Diagnóstico copiado!' });
   };
 
   return (
@@ -675,13 +760,152 @@ function AppmaxGatewayPanel() {
 
       <Separator />
 
-      {/* Quick Actions */}
-      <div className="space-y-2">
-        <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Diagnóstico</h5>
-        <Button variant="outline" size="sm" className="w-full text-xs" onClick={handleTestApi} disabled={testingApi}>
-          {testingApi ? <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />Testando...</> : <><Wifi className="h-3.5 w-3.5 mr-2" />Testar conexão API (Token OAuth)</>}
-        </Button>
+      {/* Diagnostic Section */}
+      <div className="space-y-3">
+        <button onClick={() => setShowDiag(!showDiag)} className="flex items-center gap-2 text-sm font-medium w-full">
+          <Stethoscope className="h-4 w-4" />
+          Diagnóstico de Handshake
+          {showDiag ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+        </button>
+
+        {showDiag && (
+          <div className="space-y-3 mt-2">
+            {/* Last Healthcheck Block */}
+            <div className="border rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-medium flex items-center gap-1.5">
+                  <Activity className="h-3.5 w-3.5" />
+                  Último Healthcheck
+                </h5>
+                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => refetchHc()}>
+                  <RefreshCw className="h-3 w-3 mr-1" /> Atualizar
+                </Button>
+              </div>
+
+              {!lastHealthcheck ? (
+                <div className="bg-destructive/10 text-destructive text-xs rounded-md p-2.5">
+                  <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
+                  Nenhum log de healthcheck encontrado. A Appmax <strong>não está chamando</strong> seu endpoint (URL errada no portal ou bloqueio de rede).
+                </div>
+              ) : (
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Última tentativa:</span>
+                    <span>{format(new Date(lastHealthcheck.created_at), "dd/MM/yyyy 'às' HH:mm:ss", { locale: ptBR })}</span>
+                    <span className="text-muted-foreground/60">
+                      ({formatDistanceToNow(new Date(lastHealthcheck.created_at), { addSuffix: true, locale: ptBR })})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Status:</span>
+                    <Badge variant={lastHealthcheck.ok ? 'default' : 'destructive'} className="text-[10px] h-5">
+                      {lastHealthcheck.ok ? 'OK' : 'ERRO'}
+                    </Badge>
+                    {lastHealthcheck.http_status && (
+                      <span className="text-muted-foreground/60">HTTP {lastHealthcheck.http_status}</span>
+                    )}
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-muted-foreground shrink-0">Mensagem:</span>
+                    <span className="break-all">{lastHealthcheck.message}</span>
+                  </div>
+                  {lastHealthcheck.external_key && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">External key:</span>
+                      <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono">{lastHealthcheck.external_key}</code>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Environment:</span>
+                    <span>{lastHealthcheck.environment}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" size="sm" className="text-xs" onClick={handleTestPing} disabled={testingPing}>
+                {testingPing ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Wifi className="h-3.5 w-3.5 mr-1" />}
+                Ping Endpoint
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs" onClick={() => { setDiagModalOpen(true); refetchHandshake(); }}>
+                <Eye className="h-3.5 w-3.5 mr-1" />
+                Ver logs
+              </Button>
+            </div>
+
+            <Button variant="outline" size="sm" className="w-full text-xs" onClick={handleTestApi} disabled={testingApi}>
+              {testingApi ? <><Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />Testando...</> : <><Wifi className="h-3.5 w-3.5 mr-2" />Testar conexão API (Token OAuth)</>}
+            </Button>
+          </div>
+        )}
       </div>
+
+      {/* Handshake Logs Modal */}
+      <Dialog open={diagModalOpen} onOpenChange={setDiagModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Stethoscope className="h-5 w-5" />
+              Logs de Handshake
+            </DialogTitle>
+            <DialogDescription>
+              Últimos 20 logs de authorize, callback e healthcheck
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end mb-2">
+            <Button variant="outline" size="sm" className="text-xs" onClick={copyDiagnostic}>
+              <ClipboardCopy className="h-3.5 w-3.5 mr-1" />
+              Copiar diagnóstico
+            </Button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+            {!handshakeLogs?.length && <p className="text-xs text-muted-foreground">Nenhum log de handshake encontrado.</p>}
+            {handshakeLogs?.map((log: any) => (
+              <div key={log.id} className="text-xs border rounded-md p-2.5 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant={log.ok ? 'default' : 'destructive'} className="text-[10px] h-5">
+                    {log.ok ? 'OK' : 'ERRO'}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] h-5 font-mono">
+                    {log.stage}
+                  </Badge>
+                  <span className="text-muted-foreground">{log.environment}</span>
+                  {log.http_status && <span className="text-muted-foreground/60">HTTP {log.http_status}</span>}
+                  <span className="text-muted-foreground/60 ml-auto">
+                    {format(new Date(log.created_at), "dd/MM HH:mm:ss", { locale: ptBR })}
+                  </span>
+                </div>
+                <p className="text-muted-foreground break-all">{log.message}</p>
+                {log.external_key && (
+                  <p className="text-muted-foreground/60">key: <code className="font-mono">{log.external_key}</code></p>
+                )}
+                {log.payload && (
+                  <details className="mt-1">
+                    <summary className="text-muted-foreground/60 cursor-pointer text-[10px]">Payload</summary>
+                    <pre className="bg-muted rounded p-1.5 mt-1 text-[10px] overflow-x-auto whitespace-pre-wrap">{JSON.stringify(log.payload, null, 2)}</pre>
+                  </details>
+                )}
+                {log.headers && (
+                  <details className="mt-1">
+                    <summary className="text-muted-foreground/60 cursor-pointer text-[10px]">Headers</summary>
+                    <pre className="bg-muted rounded p-1.5 mt-1 text-[10px] overflow-x-auto whitespace-pre-wrap">{JSON.stringify(log.headers, null, 2)}</pre>
+                  </details>
+                )}
+                {log.error_stack && (
+                  <details className="mt-1">
+                    <summary className="text-destructive/60 cursor-pointer text-[10px]">Stack trace</summary>
+                    <pre className="bg-destructive/5 rounded p-1.5 mt-1 text-[10px] overflow-x-auto whitespace-pre-wrap">{log.error_stack}</pre>
+                  </details>
+                )}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Separator />
 

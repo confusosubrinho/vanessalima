@@ -272,6 +272,51 @@ export type Database = {
         }
         Relationships: []
       }
+      appmax_handshake_logs: {
+        Row: {
+          created_at: string
+          environment: string
+          error_stack: string | null
+          external_key: string | null
+          headers: Json | null
+          http_status: number | null
+          id: string
+          message: string
+          ok: boolean
+          payload: Json | null
+          request_id: string | null
+          stage: string
+        }
+        Insert: {
+          created_at?: string
+          environment: string
+          error_stack?: string | null
+          external_key?: string | null
+          headers?: Json | null
+          http_status?: number | null
+          id?: string
+          message: string
+          ok?: boolean
+          payload?: Json | null
+          request_id?: string | null
+          stage: string
+        }
+        Update: {
+          created_at?: string
+          environment?: string
+          error_stack?: string | null
+          external_key?: string | null
+          headers?: Json | null
+          http_status?: number | null
+          id?: string
+          message?: string
+          ok?: boolean
+          payload?: Json | null
+          request_id?: string | null
+          stage?: string
+        }
+        Relationships: []
+      }
       appmax_installations: {
         Row: {
           app_id: string
