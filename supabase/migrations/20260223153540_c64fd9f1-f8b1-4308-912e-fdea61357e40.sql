@@ -1,0 +1,3 @@
+ALTER TABLE public.homepage_testimonials
+  ADD COLUMN IF NOT EXISTS photo_url TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS product_id UUID DEFAULT NULL REFERENCES public.products(id) ON DELETE SET NULL;

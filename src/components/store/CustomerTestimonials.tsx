@@ -16,6 +16,11 @@ interface TestimonialConfig {
   autoplay_speed: number;
 }
 
+interface ProductImage {
+  url: string;
+  is_primary: boolean | null;
+}
+
 interface Testimonial {
   id: string;
   customer_name: string;
@@ -23,6 +28,9 @@ interface Testimonial {
   testimonial: string;
   display_order: number;
   is_active: boolean;
+  photo_url: string | null;
+  product_id: string | null;
+  product: { id: string; name: string; slug: string; images: ProductImage[] } | null;
 }
 
 export function CustomerTestimonials() {
@@ -48,7 +56,7 @@ export function CustomerTestimonials() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('homepage_testimonials' as any)
-        .select('*')
+        .select('*, product:products(id, name, slug, images:product_images(url, is_primary))')
         .eq('is_active', true)
         .order('display_order', { ascending: true });
       if (error) throw error;
@@ -101,15 +109,18 @@ export function CustomerTestimonials() {
 
   const cardsPerView = config.cards_per_view || 4;
 
+  const getProductImage = (images: ProductImage[] | null | undefined): string | null => {
+    if (!images?.length) return null;
+    const primary = images.find(i => i.is_primary);
+    return primary?.url || images[0]?.url || null;
+  };
+
   return (
     <section className="py-12 md:py-16" style={{ backgroundColor: config.bg_color }}>
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
         <div className="text-center mb-10">
-          <h2
-            className="text-2xl md:text-3xl font-light italic mb-2"
-            style={{ color: config.text_color }}
-          >
+          <h2 className="text-2xl md:text-3xl font-light italic mb-2" style={{ color: config.text_color }}>
             {config.title}
           </h2>
           <p className="text-sm md:text-base opacity-70" style={{ color: config.text_color }}>
@@ -121,20 +132,12 @@ export function CustomerTestimonials() {
         {/* Carousel */}
         <div className="relative">
           {canScrollLeft && (
-            <button
-              onClick={() => scroll('left')}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/80 shadow-md flex items-center justify-center hover:bg-white transition-colors -ml-2 md:-ml-5"
-              aria-label="Anterior"
-            >
+            <button onClick={() => scroll('left')} className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/80 shadow-md flex items-center justify-center hover:bg-white transition-colors -ml-2 md:-ml-5" aria-label="Anterior">
               <ChevronLeft className="h-5 w-5 text-gray-600" />
             </button>
           )}
 
-          <div
-            ref={scrollRef}
-            className="flex gap-6 overflow-x-auto scrollbar-hide scroll-smooth px-1 py-2"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
+          <div ref={scrollRef} className="flex gap-6 overflow-x-auto scrollbar-hide scroll-smooth px-1 py-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {testimonials.map((t) => (
               <div
                 key={t.id}
@@ -147,39 +150,46 @@ export function CustomerTestimonials() {
                 }}
               >
                 {/* Avatar */}
-                <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-lg font-semibold text-gray-500 mb-3">
-                  {t.customer_name.charAt(0).toUpperCase()}
+                <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-lg font-semibold text-gray-500 mb-3 overflow-hidden">
+                  {t.photo_url ? (
+                    <img src={t.photo_url} alt={t.customer_name} className="w-full h-full object-cover" />
+                  ) : (
+                    t.customer_name.charAt(0).toUpperCase()
+                  )}
                 </div>
 
                 {/* Stars */}
                 <div className="flex gap-0.5 mb-3">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      className="h-4 w-4"
-                      fill={i < t.rating ? config.star_color : 'transparent'}
-                      stroke={i < t.rating ? config.star_color : '#ccc'}
-                    />
+                    <Star key={i} className="h-4 w-4" fill={i < t.rating ? config.star_color : 'transparent'} stroke={i < t.rating ? config.star_color : '#ccc'} />
                   ))}
                 </div>
 
                 {/* Text */}
-                <p className="text-sm leading-relaxed flex-1 mb-4 opacity-80">
-                  {t.testimonial}
-                </p>
+                <p className="text-sm leading-relaxed flex-1 mb-4 opacity-80">{t.testimonial}</p>
 
                 {/* Name */}
                 <p className="font-semibold text-sm">{t.customer_name}</p>
+
+                {/* Product link */}
+                {t.product && (
+                  <a
+                    href={`/produto/${t.product.slug}`}
+                    className="mt-2 flex items-center gap-1.5 text-[11px] opacity-60 hover:opacity-100 transition-opacity"
+                    style={{ color: config.text_color }}
+                  >
+                    {getProductImage(t.product.images) && (
+                      <img src={getProductImage(t.product.images)!} alt="" className="w-4 h-4 object-cover rounded-sm" />
+                    )}
+                    🛍️ {t.product.name}
+                  </a>
+                )}
               </div>
             ))}
           </div>
 
           {canScrollRight && (
-            <button
-              onClick={() => scroll('right')}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/80 shadow-md flex items-center justify-center hover:bg-white transition-colors -mr-2 md:-mr-5"
-              aria-label="Próximo"
-            >
+            <button onClick={() => scroll('right')} className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 rounded-full bg-white/80 shadow-md flex items-center justify-center hover:bg-white transition-colors -mr-2 md:-mr-5" aria-label="Próximo">
               <ChevronRight className="h-5 w-5 text-gray-600" />
             </button>
           )}
