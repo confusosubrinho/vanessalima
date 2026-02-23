@@ -279,6 +279,8 @@ export type Database = {
           image_url: string
           is_active: boolean | null
           mobile_image_url: string | null
+          show_on_desktop: boolean
+          show_on_mobile: boolean
           subtitle: string | null
           title: string | null
           updated_at: string
@@ -292,6 +294,8 @@ export type Database = {
           image_url: string
           is_active?: boolean | null
           mobile_image_url?: string | null
+          show_on_desktop?: boolean
+          show_on_mobile?: boolean
           subtitle?: string | null
           title?: string | null
           updated_at?: string
@@ -305,6 +309,8 @@ export type Database = {
           image_url?: string
           is_active?: boolean | null
           mobile_image_url?: string | null
+          show_on_desktop?: boolean
+          show_on_mobile?: boolean
           subtitle?: string | null
           title?: string | null
           updated_at?: string

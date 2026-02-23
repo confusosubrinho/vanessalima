@@ -11,7 +11,9 @@ export function BannerCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const displayBanners = banners || [];
+  const displayBanners = (banners || []).filter((b: any) =>
+    isMobile ? b.show_on_mobile !== false : b.show_on_desktop !== false
+  );
 
   const resetTimer = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);

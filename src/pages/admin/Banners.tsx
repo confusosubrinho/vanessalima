@@ -26,6 +26,8 @@ interface Banner {
   cta_url: string | null;
   display_order: number;
   is_active: boolean;
+  show_on_desktop: boolean;
+  show_on_mobile: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -39,7 +41,7 @@ export default function Banners() {
 
   const [formData, setFormData] = useState({
     title: '', subtitle: '', image_url: '', mobile_image_url: '',
-    cta_text: '', cta_url: '', is_active: true,
+    cta_text: '', cta_url: '', is_active: true, show_on_desktop: true, show_on_mobile: true,
   });
 
   const { data: banners, isLoading } = useQuery({
@@ -89,6 +91,8 @@ export default function Banners() {
         image_url: data.image_url, mobile_image_url: data.mobile_image_url || null,
         cta_text: data.cta_text || null, cta_url: data.cta_url || null,
         is_active: data.is_active,
+        show_on_desktop: data.show_on_desktop,
+        show_on_mobile: data.show_on_mobile,
         display_order: editingBanner?.display_order || (banners?.length || 0),
       };
       if (editingBanner) {
@@ -119,7 +123,7 @@ export default function Banners() {
   });
 
   const resetForm = () => {
-    setFormData({ title: '', subtitle: '', image_url: '', mobile_image_url: '', cta_text: '', cta_url: '', is_active: true });
+    setFormData({ title: '', subtitle: '', image_url: '', mobile_image_url: '', cta_text: '', cta_url: '', is_active: true, show_on_desktop: true, show_on_mobile: true });
     setEditingBanner(null);
   };
 
@@ -129,6 +133,7 @@ export default function Banners() {
       title: banner.title || '', subtitle: banner.subtitle || '',
       image_url: banner.image_url, mobile_image_url: banner.mobile_image_url || '',
       cta_text: banner.cta_text || '', cta_url: banner.cta_url || '', is_active: banner.is_active,
+      show_on_desktop: banner.show_on_desktop ?? true, show_on_mobile: banner.show_on_mobile ?? true,
     });
     setIsDialogOpen(true);
   };
@@ -211,9 +216,19 @@ export default function Banners() {
                 <div><Label>Texto do Botão</Label><Input value={formData.cta_text} onChange={(e) => setFormData({ ...formData, cta_text: e.target.value })} placeholder="Ver ofertas" /></div>
                 <div><Label>Link do Botão</Label><Input value={formData.cta_url} onChange={(e) => setFormData({ ...formData, cta_url: e.target.value })} placeholder="/outlet" /></div>
               </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={formData.is_active} onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })} />
-                <Label>Ativo</Label>
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <Switch checked={formData.is_active} onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })} />
+                  <Label>Ativo</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={formData.show_on_desktop} onCheckedChange={(checked) => setFormData({ ...formData, show_on_desktop: checked })} />
+                  <Label className="flex items-center gap-1"><Monitor className="h-3.5 w-3.5" />Desktop</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={formData.show_on_mobile} onCheckedChange={(checked) => setFormData({ ...formData, show_on_mobile: checked })} />
+                  <Label className="flex items-center gap-1"><Smartphone className="h-3.5 w-3.5" />Mobile</Label>
+                </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
@@ -245,6 +260,11 @@ export default function Banners() {
                     <p className="font-medium text-sm truncate">{banner.title || 'Sem título'}</p>
                     <p className="text-xs text-muted-foreground truncate hidden sm:block">{banner.subtitle}</p>
                     {banner.cta_url && <p className="text-xs text-primary truncate">{banner.cta_url}</p>}
+                    <div className="flex gap-2 mt-1">
+                      {banner.show_on_desktop && <span className="inline-flex items-center gap-0.5 text-[10px] bg-muted px-1.5 py-0.5 rounded"><Monitor className="h-3 w-3" />Desktop</span>}
+                      {banner.show_on_mobile && <span className="inline-flex items-center gap-0.5 text-[10px] bg-muted px-1.5 py-0.5 rounded"><Smartphone className="h-3 w-3" />Mobile</span>}
+                      {!banner.show_on_desktop && !banner.show_on_mobile && <span className="text-[10px] text-destructive">Oculto</span>}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(banner)}><Pencil className="h-4 w-4" /></Button>
