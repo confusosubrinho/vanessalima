@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.robots]
 verify_jwt = false
+
+[functions.appmax-healthcheck-ping]
+verify_jwt = false

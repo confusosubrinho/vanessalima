@@ -6,6 +6,8 @@ import {
   getAppToken,
   appmaxRequest,
   logAppmax,
+  logHandshake,
+  extractSafeHeaders,
   requireAdmin,
   errorResponse,
   jsonResponse,
@@ -43,6 +45,8 @@ Deno.serve(async (req) => {
   }
 
   const supabase = getServiceClient();
+  const requestId = crypto.randomUUID();
+  const safeHeaders = extractSafeHeaders(req);
 
   // Auth check — admin only
   const authResult = await requireAdmin(req, supabase);
@@ -83,7 +87,6 @@ Deno.serve(async (req) => {
       ? normalizeBaseUrl(configuredBase)
       : safeOrigin(originHeader);
 
-    // Fallback chain: DB setting > Origin header > appmax_settings.callback_url > env var > hardcoded
     let callbackUrl: string;
     if (baseUrl) {
       callbackUrl = `${baseUrl}${callbackPath.startsWith("/") ? "" : "/"}${callbackPath}`;
@@ -133,6 +136,23 @@ Deno.serve(async (req) => {
     });
 
     if (!result.ok) {
+      // Log authorize failure to handshake_logs
+      await logHandshake(supabase, {
+        environment: env,
+        stage: "authorize",
+        external_key: externalKey,
+        request_id: requestId,
+        ok: false,
+        http_status: result.status,
+        message: `Falha em /app/authorize: ${result.data?.message || JSON.stringify(result.data)}`,
+        payload: {
+          bootstrap: isBootstrap,
+          api_status: result.status,
+          api_response_message: result.data?.message || null,
+        },
+        headers: safeHeaders,
+      });
+
       await logAppmax(supabase, "error", `Falha em /app/authorize (${env})`, {
         status: result.status,
         response: result.data,
@@ -151,6 +171,18 @@ Deno.serve(async (req) => {
       result.data.data?.hash;
 
     if (!authorizeToken) {
+      await logHandshake(supabase, {
+        environment: env,
+        stage: "authorize",
+        external_key: externalKey,
+        request_id: requestId,
+        ok: false,
+        http_status: result.status,
+        message: "Token de autorização não retornado pela Appmax",
+        payload: { api_response_keys: Object.keys(result.data || {}) },
+        headers: safeHeaders,
+      });
+
       await logAppmax(supabase, "error", "Token de autorização não retornado", {
         response: result.data,
       });
@@ -173,17 +205,45 @@ Deno.serve(async (req) => {
       await supabase.from("appmax_installations").insert(upsertData);
     }
 
+    const redirectUrl = portalUrl
+      ? `${portalUrl}/appstore/integration/${authorizeToken}`
+      : authorizeToken;
+
+    // Log authorize success
+    await logHandshake(supabase, {
+      environment: env,
+      stage: "authorize",
+      external_key: externalKey,
+      request_id: requestId,
+      ok: true,
+      http_status: result.status,
+      message: `Autorização iniciada (${env})`,
+      payload: {
+        redirect_url: redirectUrl,
+        bootstrap: isBootstrap,
+        callback_url: callbackUrl,
+      },
+      headers: safeHeaders,
+    });
+
     await logAppmax(supabase, "info", `Autorização iniciada (${env})`, {
       external_key: externalKey,
       bootstrap: isBootstrap,
     });
 
-    const redirectUrl = portalUrl
-      ? `${portalUrl}/appstore/integration/${authorizeToken}`
-      : authorizeToken;
-
     return jsonResponse({ redirect_url: redirectUrl, bootstrap: isBootstrap, environment: env });
   } catch (err: any) {
+    await logHandshake(supabase, {
+      environment: "unknown",
+      stage: "authorize",
+      external_key: null,
+      request_id: requestId,
+      ok: false,
+      http_status: 500,
+      message: `Erro em appmax-authorize: ${err.message}`,
+      headers: safeHeaders,
+      error_stack: err.stack || null,
+    });
     await logAppmax(supabase, "error", `Erro em appmax-authorize: ${err.message}`);
     return errorResponse(err.message);
   }

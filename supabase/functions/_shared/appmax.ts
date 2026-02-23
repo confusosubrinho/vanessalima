@@ -428,3 +428,66 @@ export function jsonResponse(data: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+// ── Handshake diagnostic logger ────────────────────────────────────────────────
+
+/** Mask any value that looks like a secret */
+function maskPayloadSecrets(obj: Record<string, unknown>): Record<string, unknown> {
+  const masked: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (/secret|token|password|key|authorization/i.test(k) && typeof v === "string") {
+      masked[k] = maskSecret(v);
+    } else if (v && typeof v === "object" && !Array.isArray(v)) {
+      masked[k] = maskPayloadSecrets(v as Record<string, unknown>);
+    } else {
+      masked[k] = v;
+    }
+  }
+  return masked;
+}
+
+/** Extract useful headers from request */
+function extractSafeHeaders(req: Request): Record<string, string> {
+  const useful = ["user-agent", "content-type", "origin", "x-forwarded-for", "referer"];
+  const result: Record<string, string> = {};
+  for (const h of useful) {
+    const val = req.headers.get(h);
+    if (val) result[h] = val;
+  }
+  return result;
+}
+
+export interface HandshakeLogEntry {
+  environment: string;
+  stage: string;
+  external_key?: string | null;
+  request_id?: string | null;
+  ok: boolean;
+  http_status?: number | null;
+  message: string;
+  payload?: Record<string, unknown> | null;
+  headers?: Record<string, string> | null;
+  error_stack?: string | null;
+}
+
+export async function logHandshake(supabase: any, entry: HandshakeLogEntry) {
+  try {
+    const safePayload = entry.payload ? maskPayloadSecrets(entry.payload) : null;
+    await supabase.from("appmax_handshake_logs").insert({
+      environment: entry.environment,
+      stage: entry.stage,
+      external_key: entry.external_key || null,
+      request_id: entry.request_id || null,
+      ok: entry.ok,
+      http_status: entry.http_status || null,
+      message: entry.message,
+      payload: safePayload,
+      headers: entry.headers || null,
+      error_stack: entry.error_stack || null,
+    });
+  } catch (_) {
+    // never fail on logging
+  }
+}
+
+export { extractSafeHeaders, maskPayloadSecrets };
