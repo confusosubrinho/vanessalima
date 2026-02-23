@@ -136,6 +136,7 @@ const App = () => (
               <Route path="/promocoes" element={<PromotionsPage />} />
               <Route path="/novidades" element={<NewArrivalsPage />} />
               <Route path="/rastreio" element={<RastreioPage />} />
+              <Route path="/pedido-confirmado/:orderId" element={<OrderConfirmation />} />
               <Route path="/pedido-confirmado" element={<OrderConfirmation />} />
               <Route path="/favoritos" element={<FavoritesPage />} />
               <Route path="/busca" element={<SearchPage />} />

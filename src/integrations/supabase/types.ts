@@ -1447,13 +1447,17 @@ export type Database = {
       }
       orders: {
         Row: {
+          access_token: string | null
           appmax_customer_id: string | null
           appmax_order_id: string | null
           coupon_code: string | null
           created_at: string
+          customer_cpf: string | null
+          customer_email: string | null
           customer_id: string | null
           discount_amount: number | null
           id: string
+          idempotency_key: string | null
           last_webhook_event: string | null
           notes: string | null
           order_number: string
@@ -1473,13 +1477,17 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          access_token?: string | null
           appmax_customer_id?: string | null
           appmax_order_id?: string | null
           coupon_code?: string | null
           created_at?: string
+          customer_cpf?: string | null
+          customer_email?: string | null
           customer_id?: string | null
           discount_amount?: number | null
           id?: string
+          idempotency_key?: string | null
           last_webhook_event?: string | null
           notes?: string | null
           order_number: string
@@ -1499,13 +1507,17 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          access_token?: string | null
           appmax_customer_id?: string | null
           appmax_order_id?: string | null
           coupon_code?: string | null
           created_at?: string
+          customer_cpf?: string | null
+          customer_email?: string | null
           customer_id?: string | null
           discount_amount?: number | null
           id?: string
+          idempotency_key?: string | null
           last_webhook_event?: string | null
           notes?: string | null
           order_number?: string
@@ -2681,6 +2693,7 @@ export type Database = {
     }
     Functions: {
       check_login_rate_limit: { Args: { p_email: string }; Returns: boolean }
+      cleanup_orphan_orders: { Args: never; Returns: undefined }
       decrement_stock: {
         Args: { p_quantity: number; p_variant_id: string }
         Returns: Json
@@ -2695,6 +2708,10 @@ export type Database = {
       increment_coupon_uses: {
         Args: { p_coupon_id: string }
         Returns: undefined
+      }
+      increment_stock: {
+        Args: { p_quantity: number; p_variant_id: string }
+        Returns: Json
       }
       is_admin: { Args: never; Returns: boolean }
     }
