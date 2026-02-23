@@ -1,9 +1,67 @@
  import { useQuery } from '@tanstack/react-query';
  import { supabase } from '@/integrations/supabase/client';
-import { Package, ShoppingCart, Users, DollarSign } from 'lucide-react';
+import { Package, ShoppingCart, Users, DollarSign, Settings2 } from 'lucide-react';
 import { HelpHint } from '@/components/HelpHint';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Link } from 'react-router-dom';
+
+function StoreHealthCard() {
+  const { data: health } = useQuery({
+    queryKey: ['store-health-score'],
+    queryFn: async () => {
+      const [settings, theme, products] = await Promise.all([
+        supabase.from('store_settings').select('store_name, logo_url, contact_whatsapp').limit(1).maybeSingle(),
+        supabase.from('site_theme').select('id').limit(1).maybeSingle(),
+        supabase.from('products').select('id', { count: 'exact' }).limit(1),
+      ]);
+      const checks = [
+        { label: 'Nome da loja definido', ok: !!settings.data?.store_name && settings.data.store_name !== 'Minha Loja' },
+        { label: 'Logo enviado', ok: !!settings.data?.logo_url },
+        { label: 'WhatsApp configurado', ok: !!settings.data?.contact_whatsapp },
+        { label: 'Tema personalizado', ok: !!theme.data?.id },
+        { label: 'Primeiro produto cadastrado', ok: (products.count || 0) > 0 },
+      ];
+      return checks;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  if (!health) return null;
+  const completed = health.filter(c => c.ok).length;
+  if (completed === 5) return null; // All done, hide the card
+
+  const pct = (completed / 5) * 100;
+  const color = completed <= 2 ? 'text-red-500' : completed <= 4 ? 'text-amber-500' : 'text-green-500';
+
+  return (
+    <Card>
+      <CardHeader className="p-3 md:p-6 pb-2">
+        <CardTitle className="text-sm md:text-base flex items-center gap-2">
+          <Settings2 className="h-4 w-4" />
+          Configuração da Loja
+          <span className={`text-xs font-normal ${color}`}>{completed}/5</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-3 md:p-6 pt-0 space-y-3">
+        <Progress value={pct} className="h-2" />
+        <div className="space-y-1.5">
+          {health.map((item, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span>{item.ok ? '✅' : '⬜'}</span>
+              <span className={item.ok ? 'text-muted-foreground line-through' : ''}>{item.label}</span>
+            </div>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/admin/configuracoes">Completar configuração</Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
  
  export default function Dashboard() {
    const { data: stats } = useQuery({
@@ -82,6 +140,9 @@ import { useIsMobile } from '@/hooks/use-mobile';
         </div>
         <p className="text-xs md:text-sm text-muted-foreground">Visão geral da sua loja</p>
       </div>
+
+      {/* Store Setup Health Score */}
+      <StoreHealthCard />
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 gap-2 md:gap-4 lg:grid-cols-4">

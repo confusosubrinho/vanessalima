@@ -15,7 +15,6 @@ import NotFound from "./pages/NotFound";
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const SizePage = lazy(() => import("./pages/SizePage"));
-const BijuteriasPage = lazy(() => import("./pages/BijuteriasPage"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Cart = lazy(() => import("./pages/Cart"));
 const Checkout = lazy(() => import("./pages/Checkout"));
@@ -123,7 +122,6 @@ const App = () => (
               <Route path="/carrinho" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/tamanho/:size" element={<SizePage />} />
-              <Route path="/bijuterias" element={<BijuteriasPage />} />
               <Route path="/faq" element={<FAQPage />} />
               <Route path="/sobre" element={<SobrePage />} />
               <Route path="/politica-privacidade" element={<PoliticaPrivacidadePage />} />

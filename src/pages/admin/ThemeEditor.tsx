@@ -46,7 +46,7 @@ export default function ThemeEditor() {
     queryKey: ['site-theme'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('site_theme' as any)
+        .from('site_theme')
         .select('*')
         .limit(1)
         .maybeSingle();
@@ -92,14 +92,14 @@ export default function ThemeEditor() {
     mutationFn: async () => {
       if (theme?.id) {
         const { error } = await supabase
-          .from('site_theme' as any)
-          .update(form as any)
+          .from('site_theme')
+          .update(form as Record<string, unknown>)
           .eq('id', theme.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('site_theme' as any)
-          .insert(form as any);
+          .from('site_theme')
+          .insert(form as Record<string, unknown>);
         if (error) throw error;
       }
     },

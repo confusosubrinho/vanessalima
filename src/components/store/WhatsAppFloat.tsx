@@ -12,7 +12,6 @@ function getMessageForRoute(pathname: string): string {
     const cat = pathname.replace('/categoria/', '').replace(/-/g, ' ');
     return `Olá! Estou navegando na categoria "${cat}" e gostaria de ajuda para escolher.`;
   }
-  if (pathname === '/bijuterias') return 'Olá! Estou olhando as bijuterias e gostaria de saber mais!';
   if (pathname === '/mais-vendidos') return 'Olá! Vi os mais vendidos e gostaria de saber mais sobre os produtos.';
   if (pathname === '/faq') return 'Olá! Não encontrei a resposta que procurava no FAQ. Pode me ajudar?';
   if (pathname === '/rastreio') return 'Olá! Gostaria de rastrear meu pedido.';

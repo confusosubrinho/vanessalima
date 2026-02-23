@@ -57,8 +57,8 @@ export function HeaderCustomizer() {
   const currentForm: HeaderSettings = form || {
     header_logo_url: settings?.header_logo_url || '',
     header_subhead_text: settings?.header_subhead_text || 'Frete grátis para compras acima de R$ 399*',
-    header_highlight_text: settings?.header_highlight_text || 'Bijuterias',
-    header_highlight_url: settings?.header_highlight_url || '/bijuterias',
+    header_highlight_text: settings?.header_highlight_text || '',
+    header_highlight_url: settings?.header_highlight_url || '',
     header_highlight_icon: settings?.header_highlight_icon || 'Percent',
     header_menu_order: (settings?.header_menu_order as string[]) || [],
   };
@@ -190,7 +190,7 @@ export function HeaderCustomizer() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Menu em Destaque</CardTitle>
-          <CardDescription>Botão destacado no menu de navegação (ex: Bijuterias)</CardDescription>
+          <CardDescription>Botão destacado no menu de navegação</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -199,7 +199,7 @@ export function HeaderCustomizer() {
               <Input
                 value={currentForm.header_highlight_text}
                 onChange={e => updateForm({ header_highlight_text: e.target.value })}
-                placeholder="Bijuterias"
+                placeholder="Ex: Promoções"
               />
             </div>
             <div>
@@ -207,7 +207,7 @@ export function HeaderCustomizer() {
               <Input
                 value={currentForm.header_highlight_url}
                 onChange={e => updateForm({ header_highlight_url: e.target.value })}
-                placeholder="/bijuterias"
+                placeholder="/categoria/slug"
               />
             </div>
           </div>
