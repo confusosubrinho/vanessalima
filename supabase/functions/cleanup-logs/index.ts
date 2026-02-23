@@ -7,35 +7,39 @@ const corsHeaders = {
 };
 
 // === CONFIGURATION ===
-const RETENTION = {
-  error_logs: 30,        // days
-  app_logs: 14,
-  appmax_logs: 30,
-  bling_webhook_logs: 30,
-  bling_webhook_events: 30,
-  bling_sync_runs: 60,
-  login_attempts: 7,
-  traffic_sessions: 30,
-  abandoned_carts: 90,   // keep longer for marketing
+const RETENTION: Record<string, { days: number; dateCol: string }> = {
+  app_logs:              { days: 15, dateCol: "created_at" },
+  appmax_logs:           { days: 30, dateCol: "created_at" },
+  bling_webhook_logs:    { days: 14, dateCol: "created_at" },
+  bling_sync_runs:       { days: 90, dateCol: "started_at" },
+  login_attempts:        { days: 30, dateCol: "attempted_at" },
+  email_automation_logs: { days: 30, dateCol: "created_at" },
+  error_logs:            { days: 30, dateCol: "created_at" },
+  traffic_sessions:      { days: 30, dateCol: "created_at" },
+  abandoned_carts:       { days: 90, dateCol: "created_at" },
 };
 
-// Safety limits per execution
 const MAX_DELETE_PER_TABLE = 5000;
 
-// Tables that must NEVER be deleted
-const PROTECTED_TABLES = [
-  "orders",
-  "order_items",
-  "order_events",
-  "customers",
-  "products",
-  "product_variants",
-  "categories",
-  "coupons",
-  "profiles",
-  "user_roles",
-  "payment_pricing_config",
-  "payment_pricing_audit_log",
+const LEVEL_COL: Record<string, string> = {
+  app_logs: "level",
+  appmax_logs: "level",
+  bling_webhook_logs: "result",
+  error_logs: "severity",
+};
+
+// All tables that reference media URLs (for orphan detection)
+const MEDIA_TABLES: { table: string; cols: string[] }[] = [
+  { table: "product_images", cols: ["url"] },
+  { table: "banners", cols: ["image_url", "mobile_image_url"] },
+  { table: "highlight_banners", cols: ["image_url"] },
+  { table: "categories", cols: ["image_url", "banner_image_url"] },
+  { table: "instagram_videos", cols: ["thumbnail_url"] },
+  { table: "features_bar", cols: ["icon_url"] },
+  { table: "store_settings", cols: ["logo_url", "header_logo_url"] },
+  { table: "social_links", cols: ["icon_image_url"] },
+  { table: "security_seals", cols: ["image_url"] },
+  { table: "payment_methods_display", cols: ["image_url"] },
 ];
 
 interface CleanupResult {
@@ -57,24 +61,18 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const jobType = body.job_type || "daily_logs"; // daily_logs | daily_storage | weekly_optimize
-    const mode = body.mode || "execute"; // dry_run | execute
+    const jobType = body.job_type || "daily_logs";
+    const mode = body.mode || "execute";
     const isDryRun = mode === "dry_run";
 
-    // Create cleanup run record
     const startTime = Date.now();
     const { data: run, error: runError } = await supabase
       .from("cleanup_runs")
-      .insert({
-        job_type: jobType,
-        mode,
-        status: "running",
-      })
+      .insert({ job_type: jobType, mode, status: "running" })
       .select("id")
       .single();
 
     if (runError) {
-      console.error("Failed to create cleanup run:", runError);
       return new Response(
         JSON.stringify({ error: "Failed to create cleanup run" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -86,47 +84,22 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
     let totalDeleted = 0;
     let totalConsolidated = 0;
+    let bytesFreed = 0;
 
-    // === JOB: DAILY LOGS CLEANUP (03:30) ===
+    // === JOB: DAILY LOGS CLEANUP ===
     if (jobType === "daily_logs") {
-      // 1. Consolidate logs into daily stats BEFORE deleting
-      for (const [table, days] of Object.entries(RETENTION)) {
+      for (const [table, config] of Object.entries(RETENTION)) {
         try {
           const cutoffDate = new Date();
-          cutoffDate.setDate(cutoffDate.getDate() - days);
+          cutoffDate.setDate(cutoffDate.getDate() - config.days);
           const cutoff = cutoffDate.toISOString();
 
-          // Determine level column name
-          let levelCol = "level";
-          let hasLevel = true;
-          if (table === "error_logs") levelCol = "severity";
-          if (table === "login_attempts" || table === "traffic_sessions" || table === "abandoned_carts") hasLevel = false;
-          if (table === "bling_sync_runs") hasLevel = false;
-
-          // Consolidate: count records that will be deleted, grouped by date
-          if (hasLevel) {
-            const { data: stats, error: statsErr } = await supabase.rpc("consolidate_logs_before_delete", {
-              p_table_name: table,
-              p_cutoff: cutoff,
-              p_level_col: levelCol,
-            }).maybeSingle();
-
-            // If RPC doesn't exist, do manual aggregation via direct count
-            if (statsErr) {
-              console.warn(`Consolidation RPC not available for ${table}, skipping aggregation`);
-            }
-          }
-
           // Count records to delete
-          // login_attempts uses attempted_at instead of created_at
-          const dateCol = table === "login_attempts" ? "attempted_at" : "created_at";
-
           let countQuery = supabase
             .from(table as any)
             .select("id", { count: "exact", head: true })
-            .lt(dateCol, cutoff);
+            .lt(config.dateCol, cutoff);
 
-          // For abandoned_carts, only delete non-recovered ones
           if (table === "abandoned_carts") {
             countQuery = countQuery.eq("recovered", false);
           }
@@ -134,192 +107,175 @@ Deno.serve(async (req) => {
           const { count, error: countErr } = await countQuery;
 
           if (countErr) {
-            const errMsg = `Count error on ${table}: ${countErr.message}`;
-            errors.push(errMsg);
-            results.push({ table, deleted: 0, consolidated: 0, error: errMsg });
+            errors.push(`Count ${table}: ${countErr.message}`);
+            results.push({ table, deleted: 0, consolidated: 0, error: countErr.message });
             continue;
           }
 
           const toDelete = Math.min(count || 0, MAX_DELETE_PER_TABLE);
-
           if (toDelete === 0) {
             results.push({ table, deleted: 0, consolidated: 0 });
             continue;
           }
 
-          // Aggregate stats manually before deleting
-          if (hasLevel && !isDryRun) {
-            // Get aggregated counts by date for the records about to be deleted
+          // Consolidate logs with levels into daily stats
+          const levelCol = LEVEL_COL[table];
+          if (levelCol && !isDryRun) {
             const { data: aggData } = await supabase
               .from(table as any)
-              .select(`${dateCol}, ${levelCol}`)
-              .lt(dateCol, cutoff)
+              .select(`${config.dateCol}, ${levelCol}`)
+              .lt(config.dateCol, cutoff)
               .limit(MAX_DELETE_PER_TABLE);
 
             if (aggData && aggData.length > 0) {
               const statsMap = new Map<string, { total: number; error: number; warning: number; info: number }>();
-              
               for (const row of aggData) {
-                const date = new Date(row[dateCol]).toISOString().split("T")[0];
+                const date = new Date((row as any)[config.dateCol]).toISOString().split("T")[0];
                 const level = (row as any)[levelCol] || "info";
-                
-                if (!statsMap.has(date)) {
-                  statsMap.set(date, { total: 0, error: 0, warning: 0, info: 0 });
-                }
+                if (!statsMap.has(date)) statsMap.set(date, { total: 0, error: 0, warning: 0, info: 0 });
                 const s = statsMap.get(date)!;
                 s.total++;
-                if (level === "error" || level === "critical") s.error++;
-                else if (level === "warning" || level === "warn") s.warning++;
+                if (["error", "critical"].includes(level)) s.error++;
+                else if (["warning", "warn"].includes(level)) s.warning++;
                 else s.info++;
               }
-
-              // Upsert stats
               for (const [date, s] of statsMap) {
-                await supabase
-                  .from("log_daily_stats")
-                  .upsert(
-                    {
-                      stat_date: date,
-                      log_source: table,
-                      total_count: s.total,
-                      error_count: s.error,
-                      warning_count: s.warning,
-                      info_count: s.info,
-                    },
-                    { onConflict: "stat_date,log_source" }
-                  );
+                await supabase.from("log_daily_stats").upsert(
+                  { stat_date: date, log_source: table, total_count: s.total, error_count: s.error, warning_count: s.warning, info_count: s.info },
+                  { onConflict: "stat_date,log_source" }
+                );
               }
               totalConsolidated += aggData.length;
             }
           }
 
-          // Delete old records
+          // Delete old records in batches
           if (!isDryRun) {
-            // Get IDs to delete (with limit for safety)
             const { data: idsToDelete } = await supabase
               .from(table as any)
               .select("id")
-              .lt(dateCol, cutoff)
+              .lt(config.dateCol, cutoff)
               .limit(MAX_DELETE_PER_TABLE);
 
             if (idsToDelete && idsToDelete.length > 0) {
               const ids = idsToDelete.map((r: any) => r.id);
-              
-              // Delete in batches of 500
               for (let i = 0; i < ids.length; i += 500) {
-                const batch = ids.slice(i, i + 500);
                 const { error: delErr } = await supabase
                   .from(table as any)
                   .delete()
-                  .in("id", batch);
-
-                if (delErr) {
-                  errors.push(`Delete error on ${table}: ${delErr.message}`);
-                }
+                  .in("id", ids.slice(i, i + 500));
+                if (delErr) errors.push(`Delete ${table}: ${delErr.message}`);
               }
             }
-
             totalDeleted += toDelete;
           }
 
-          results.push({ table, deleted: isDryRun ? 0 : toDelete, consolidated: 0 });
-
+          results.push({ table, deleted: isDryRun ? toDelete : toDelete, consolidated: 0 });
         } catch (err: any) {
-          const errMsg = `Error processing ${table}: ${err.message}`;
-          errors.push(errMsg);
-          results.push({ table, deleted: 0, consolidated: 0, error: errMsg });
+          errors.push(`Error ${table}: ${err.message}`);
+          results.push({ table, deleted: 0, consolidated: 0, error: err.message });
         }
-      }
-
-      // Clean expired sessions (login_attempts older than 24h)
-      if (!isDryRun) {
-        const oneDayAgo = new Date(Date.now() - 86400000).toISOString();
-        await supabase
-          .from("login_attempts" as any)
-          .delete()
-          .lt("attempted_at", oneDayAgo)
-          .eq("success", true);
       }
     }
 
-    // === JOB: DAILY STORAGE CLEANUP (04:00) ===
+    // === JOB: DAILY STORAGE CLEANUP ===
     if (jobType === "daily_storage") {
-      // Clean orphaned product media (images not referenced by any product)
       try {
-        const { data: files, error: listErr } = await supabase.storage
-          .from("product-media")
-          .list("", { limit: 500 });
-
-        if (listErr) {
-          errors.push(`Storage list error: ${listErr.message}`);
-        } else if (files) {
-          let orphansRemoved = 0;
-
-          for (const folder of files) {
-            if (!folder.id) continue; // It's a folder, list its contents
-            
-            const { data: innerFiles } = await supabase.storage
-              .from("product-media")
-              .list(folder.name, { limit: 100 });
-
-            if (innerFiles) {
-              for (const file of innerFiles) {
-                const filePath = `${folder.name}/${file.name}`;
-                const url = supabase.storage.from("product-media").getPublicUrl(filePath).data.publicUrl;
-                
-                // Check if this URL is referenced in product_images
-                const { count } = await supabase
-                  .from("product_images")
-                  .select("id", { count: "exact", head: true })
-                  .ilike("url", `%${file.name}%`);
-
-                if ((count || 0) === 0 && !isDryRun) {
-                  // Also check banners and other tables
-                  const { count: bannerCount } = await supabase
-                    .from("banners")
-                    .select("id", { count: "exact", head: true })
-                    .or(`image_url.ilike.%${file.name}%,mobile_image_url.ilike.%${file.name}%`);
-
-                  if ((bannerCount || 0) === 0) {
-                    const { error: rmErr } = await supabase.storage
-                      .from("product-media")
-                      .remove([filePath]);
-
-                    if (!rmErr) orphansRemoved++;
-                    else errors.push(`Failed to remove ${filePath}: ${rmErr.message}`);
-                  }
+        // 1. Build set of all referenced URLs across all media tables
+        const referencedFiles = new Set<string>();
+        for (const { table, cols } of MEDIA_TABLES) {
+          const { data: rows } = await supabase
+            .from(table as any)
+            .select(cols.join(","))
+            .limit(5000);
+          if (rows) {
+            for (const row of rows) {
+              for (const col of cols) {
+                const val = (row as any)[col];
+                if (val && typeof val === "string") {
+                  // Extract filename from URL
+                  const parts = val.split("/");
+                  const fname = parts[parts.length - 1];
+                  if (fname) referencedFiles.add(fname);
                 }
               }
             }
           }
-
-          results.push({ table: "storage:product-media", deleted: orphansRemoved, consolidated: 0 });
-          totalDeleted += orphansRemoved;
         }
+
+        // 2. Paginate through storage bucket
+        let orphansRemoved = 0;
+        let offset = 0;
+        const PAGE_SIZE = 100;
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
+
+        // List top-level (could be folders or files)
+        const { data: topLevel } = await supabase.storage
+          .from("product-media")
+          .list("", { limit: 1000 });
+
+        if (topLevel) {
+          for (const item of topLevel) {
+            // If it's a folder, list its contents with pagination
+            const { data: innerFiles } = await supabase.storage
+              .from("product-media")
+              .list(item.name, { limit: 500 });
+
+            const filesToCheck = innerFiles || [];
+            // Also check if item itself is a file (has metadata)
+            if (item.metadata && item.name) {
+              filesToCheck.push(item);
+            }
+
+            for (const file of filesToCheck) {
+              if (!file.name) continue;
+              const filePath = innerFiles ? `${item.name}/${file.name}` : file.name;
+
+              // Check age (only delete files older than 7 days)
+              const createdAt = file.created_at ? new Date(file.created_at) : null;
+              if (createdAt && createdAt > sevenDaysAgo) continue;
+
+              // Check if referenced
+              if (!referencedFiles.has(file.name)) {
+                if (!isDryRun) {
+                  const { error: rmErr } = await supabase.storage
+                    .from("product-media")
+                    .remove([filePath]);
+                  if (!rmErr) {
+                    orphansRemoved++;
+                    bytesFreed += (file.metadata?.size || 0);
+                  } else {
+                    errors.push(`Remove ${filePath}: ${rmErr.message}`);
+                  }
+                } else {
+                  orphansRemoved++;
+                  bytesFreed += (file.metadata?.size || 0);
+                }
+              }
+            }
+          }
+        }
+
+        results.push({ table: "storage:product-media", deleted: orphansRemoved, consolidated: 0 });
+        totalDeleted += orphansRemoved;
       } catch (err: any) {
-        errors.push(`Storage cleanup error: ${err.message}`);
+        errors.push(`Storage cleanup: ${err.message}`);
       }
     }
 
-    // === JOB: WEEKLY OPTIMIZE (Sunday 05:00) ===
+    // === JOB: WEEKLY OPTIMIZE ===
     if (jobType === "weekly_optimize") {
-      // Clean old cleanup_runs (keep last 90 days)
       try {
+        // Clean old cleanup_runs (keep 90 days)
         const cutoff90 = new Date(Date.now() - 90 * 86400000).toISOString();
-        
         if (!isDryRun) {
           const { data: oldRuns } = await supabase
             .from("cleanup_runs")
             .select("id")
             .lt("created_at", cutoff90)
             .limit(1000);
-
           if (oldRuns && oldRuns.length > 0) {
-            await supabase
-              .from("cleanup_runs")
-              .delete()
-              .in("id", oldRuns.map((r: any) => r.id));
-            
+            await supabase.from("cleanup_runs").delete().in("id", oldRuns.map((r: any) => r.id));
             totalDeleted += oldRuns.length;
             results.push({ table: "cleanup_runs", deleted: oldRuns.length, consolidated: 0 });
           }
@@ -333,67 +289,51 @@ Deno.serve(async (req) => {
             .select("id")
             .lt("stat_date", cutoff365)
             .limit(1000);
-
           if (oldStats && oldStats.length > 0) {
-            await supabase
-              .from("log_daily_stats")
-              .delete()
-              .in("id", oldStats.map((r: any) => r.id));
-
+            await supabase.from("log_daily_stats").delete().in("id", oldStats.map((r: any) => r.id));
             totalDeleted += oldStats.length;
             results.push({ table: "log_daily_stats", deleted: oldStats.length, consolidated: 0 });
           }
         }
 
-        // Clean duplicate bling_webhook_events by event_id (keep most recent)
+        // Deduplicate bling_webhook_events
         const { data: dupes } = await supabase
           .from("bling_webhook_events" as any)
           .select("event_id, id, created_at")
           .order("created_at", { ascending: false })
           .limit(5000);
-
         if (dupes) {
           const seen = new Set<string>();
           const dupeIds: string[] = [];
           for (const row of dupes) {
-            if (seen.has(row.event_id)) {
-              dupeIds.push(row.id);
-            } else {
-              seen.add(row.event_id);
-            }
+            if (seen.has(row.event_id)) dupeIds.push(row.id);
+            else seen.add(row.event_id);
           }
-
           if (dupeIds.length > 0 && !isDryRun) {
             for (let i = 0; i < dupeIds.length; i += 500) {
-              await supabase
-                .from("bling_webhook_events" as any)
-                .delete()
-                .in("id", dupeIds.slice(i, i + 500));
+              await supabase.from("bling_webhook_events" as any).delete().in("id", dupeIds.slice(i, i + 500));
             }
             totalDeleted += dupeIds.length;
           }
-          results.push({ table: "bling_webhook_events_dedup", deleted: isDryRun ? dupeIds.length : dupeIds.length, consolidated: 0 });
+          results.push({ table: "bling_webhook_events_dedup", deleted: dupeIds.length, consolidated: 0 });
         }
-
       } catch (err: any) {
-        errors.push(`Weekly optimize error: ${err.message}`);
+        errors.push(`Weekly optimize: ${err.message}`);
       }
     }
 
-    // Update cleanup run with results
+    // Update cleanup run
     const durationMs = Date.now() - startTime;
-    await supabase
-      .from("cleanup_runs")
-      .update({
-        finished_at: new Date().toISOString(),
-        duration_ms: durationMs,
-        records_deleted: totalDeleted,
-        records_consolidated: totalConsolidated,
-        details: { results, mode },
-        errors: errors.length > 0 ? errors : null,
-        status: errors.length > 0 ? "completed_with_errors" : "completed",
-      })
-      .eq("id", runId);
+    await supabase.from("cleanup_runs").update({
+      finished_at: new Date().toISOString(),
+      duration_ms: durationMs,
+      records_deleted: totalDeleted,
+      records_consolidated: totalConsolidated,
+      bytes_freed: bytesFreed,
+      details: { results, mode },
+      errors: errors.length > 0 ? errors : null,
+      status: errors.length > 0 ? "completed_with_errors" : "completed",
+    }).eq("id", runId);
 
     return new Response(
       JSON.stringify({
@@ -403,6 +343,7 @@ Deno.serve(async (req) => {
         duration_ms: durationMs,
         records_deleted: totalDeleted,
         records_consolidated: totalConsolidated,
+        bytes_freed: bytesFreed,
         results,
         errors,
       }),
