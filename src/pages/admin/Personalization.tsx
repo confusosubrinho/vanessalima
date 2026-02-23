@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 const HighlightBannersAdmin = lazy(() => import('./HighlightBanners'));
 import { HomeSectionsManager } from '@/components/admin/HomeSectionsManager';
-import { LayoutGrid, Tag, FileText, CreditCard, Sparkles, PanelTop } from 'lucide-react';
+import { LayoutGrid, Tag, FileText, CreditCard, Sparkles, PanelTop, MessageSquareQuote } from 'lucide-react';
+import { TestimonialsManager } from '@/components/admin/TestimonialsManager';
 import { FeaturesBarManager } from '@/components/admin/FeaturesBarManager';
 import { FooterCustomizer } from '@/components/admin/FooterCustomizer';
 import { PagesEditor } from '@/components/admin/PagesEditor';
@@ -667,6 +668,7 @@ export default function Personalization() {
           <TabsTrigger value="banners" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Banners</TabsTrigger>
           <TabsTrigger value="destaques" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Destaques</TabsTrigger>
           <TabsTrigger value="videos" className="flex items-center gap-2"><Video className="h-4 w-4" />Inspire-se</TabsTrigger>
+          <TabsTrigger value="avaliacoes" className="flex items-center gap-2"><MessageSquareQuote className="h-4 w-4" />Avaliações</TabsTrigger>
           <TabsTrigger value="rodape" className="flex items-center gap-2"><CreditCard className="h-4 w-4" />Rodapé</TabsTrigger>
           <TabsTrigger value="paginas" className="flex items-center gap-2"><FileText className="h-4 w-4" />Páginas</TabsTrigger>
         </TabsList>
@@ -681,6 +683,7 @@ export default function Personalization() {
           </Suspense>
         </TabsContent>
         <TabsContent value="videos"><InstagramVideosSection /></TabsContent>
+        <TabsContent value="avaliacoes"><TestimonialsManager /></TabsContent>
         <TabsContent value="rodape"><FooterCustomizer /></TabsContent>
         <TabsContent value="paginas"><PagesEditor /></TabsContent>
       </Tabs>

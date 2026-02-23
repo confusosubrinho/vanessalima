@@ -11,9 +11,9 @@ const HighlightBanners = lazy(() => import('@/components/store/HighlightBanners'
 const InstagramFeed = lazy(() => import('@/components/store/InstagramFeed').then(m => ({ default: m.InstagramFeed })));
 const ShopBySize = lazy(() => import('@/components/store/ShopBySize').then(m => ({ default: m.ShopBySize })));
 const Newsletter = lazy(() => import('@/components/store/Newsletter').then(m => ({ default: m.Newsletter })));
+const CustomerTestimonials = lazy(() => import('@/components/store/CustomerTestimonials').then(m => ({ default: m.CustomerTestimonials })));
 
 const SectionFallback = () => <div className="py-12" />;
-
 const Index = () => {
   const { data: homeSections } = useHomeSections();
 
@@ -49,6 +49,12 @@ const Index = () => {
       <Suspense fallback={<SectionFallback />}>
         <InstagramFeed />
       </Suspense>
+
+      <div className="content-lazy">
+        <Suspense fallback={<SectionFallback />}>
+          <CustomerTestimonials />
+        </Suspense>
+      </div>
 
       <div className="content-lazy">
         <Suspense fallback={<SectionFallback />}>

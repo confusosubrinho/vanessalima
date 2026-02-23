@@ -1039,6 +1039,84 @@ export type Database = {
           },
         ]
       }
+      homepage_testimonials: {
+        Row: {
+          created_at: string
+          customer_name: string
+          display_order: number
+          id: string
+          is_active: boolean
+          rating: number
+          testimonial: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_name: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          rating?: number
+          testimonial: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          rating?: number
+          testimonial?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      homepage_testimonials_config: {
+        Row: {
+          autoplay: boolean
+          autoplay_speed: number
+          bg_color: string
+          card_color: string
+          cards_per_view: number
+          id: string
+          is_active: boolean
+          star_color: string
+          subtitle: string
+          text_color: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          autoplay?: boolean
+          autoplay_speed?: number
+          bg_color?: string
+          card_color?: string
+          cards_per_view?: number
+          id?: string
+          is_active?: boolean
+          star_color?: string
+          subtitle?: string
+          text_color?: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          autoplay?: boolean
+          autoplay_speed?: number
+          bg_color?: string
+          card_color?: string
+          cards_per_view?: number
+          id?: string
+          is_active?: boolean
+          star_color?: string
+          subtitle?: string
+          text_color?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       instagram_videos: {
         Row: {
           created_at: string
