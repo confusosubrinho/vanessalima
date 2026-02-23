@@ -125,7 +125,7 @@ export function useSiteTheme() {
     queryKey: ['site-theme'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('site_theme' as any)
+        .from('site_theme')
         .select('*')
         .limit(1)
         .maybeSingle();

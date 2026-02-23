@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, 
@@ -39,6 +39,8 @@ import logoFallback from '@/assets/logo.png';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery } from '@tanstack/react-query';
+
+const SetupWizard = lazy(() => import('@/components/admin/SetupWizard').then(m => ({ default: m.SetupWizard })));
 
 interface MenuItem {
   title: string;
@@ -416,6 +418,22 @@ export default function AdminLayout() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
+
+  const { data: setupData } = useQuery({
+    queryKey: ['store-setup'],
+    queryFn: async () => {
+      const { data } = await supabase.from('store_setup').select('*').limit(1).maybeSingle();
+      return data;
+    },
+    enabled: isAdmin === true,
+  });
+
+  useEffect(() => {
+    if (setupData && !setupData.setup_completed) {
+      setShowWizard(true);
+    }
+  }, [setupData]);
 
   useEffect(() => {
     checkAdmin();
@@ -466,51 +484,58 @@ export default function AdminLayout() {
     );
   }
 
+  const wizardOverlay = showWizard ? (
+    <Suspense fallback={null}>
+      <SetupWizard onComplete={() => setShowWizard(false)} />
+    </Suspense>
+  ) : null;
+
   // Mobile layout: top header + content + bottom tab bar
   if (isMobile) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
-        {/* Mobile header */}
-        <header className="sticky top-0 z-40 h-12 border-b bg-background flex items-center px-3 gap-2">
-          <MobileMenuSheet />
-          <h1 className="text-sm font-semibold flex-1 truncate">{getPageTitle(location.pathname)}</h1>
-          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
-            <Link to="/" target="_blank">
-              <Store className="h-3.5 w-3.5 mr-1" />
-              Loja
-            </Link>
-          </Button>
-        </header>
-
-        {/* Content area - padded for bottom bar */}
-        <main className="flex-1 p-3 pb-20 overflow-x-hidden">
-          <Outlet />
-        </main>
-
-        {/* Bottom tab bar */}
-        <MobileBottomBar />
-      </div>
+      <>
+        {wizardOverlay}
+        <div className="min-h-screen flex flex-col bg-background">
+          <header className="sticky top-0 z-40 h-12 border-b bg-background flex items-center px-3 gap-2">
+            <MobileMenuSheet />
+            <h1 className="text-sm font-semibold flex-1 truncate">{getPageTitle(location.pathname)}</h1>
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
+              <Link to="/" target="_blank">
+                <Store className="h-3.5 w-3.5 mr-1" />
+                Loja
+              </Link>
+            </Button>
+          </header>
+          <main className="flex-1 p-3 pb-20 overflow-x-hidden">
+            <Outlet />
+          </main>
+          <MobileBottomBar />
+        </div>
+      </>
     );
   }
 
   // Desktop layout: sidebar + content
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <AdminSidebar />
-        <div className="flex-1 flex flex-col">
-          <header className="h-14 border-b bg-background flex items-center px-4 gap-4">
-            <SidebarTrigger />
-            <div className="flex-1" />
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/" target="_blank">Ver Loja</Link>
-            </Button>
-          </header>
-          <main className="flex-1 p-6 bg-background overflow-auto">
-            <Outlet />
-          </main>
+    <>
+      {wizardOverlay}
+      <SidebarProvider>
+        <div className="min-h-screen flex w-full">
+          <AdminSidebar />
+          <div className="flex-1 flex flex-col">
+            <header className="h-14 border-b bg-background flex items-center px-4 gap-4">
+              <SidebarTrigger />
+              <div className="flex-1" />
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/" target="_blank">Ver Loja</Link>
+              </Button>
+            </header>
+            <main className="flex-1 p-6 bg-background overflow-auto">
+              <Outlet />
+            </main>
+          </div>
         </div>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </>
   );
 }

@@ -2364,6 +2364,30 @@ export type Database = {
         }
         Relationships: []
       }
+      store_setup: {
+        Row: {
+          completed_steps: Json | null
+          current_step: number | null
+          id: string
+          setup_completed: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          completed_steps?: Json | null
+          current_step?: number | null
+          id?: string
+          setup_completed?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          completed_steps?: Json | null
+          current_step?: number | null
+          id?: string
+          setup_completed?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       traffic_sessions: {
         Row: {
           created_at: string
