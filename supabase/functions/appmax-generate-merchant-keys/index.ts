@@ -4,6 +4,8 @@ import {
   getSettingsByEnv,
   getAppToken,
   logAppmax,
+  logHandshake,
+  extractSafeHeaders,
   encrypt,
   maskSecret,
   requireAdmin,
@@ -17,6 +19,8 @@ Deno.serve(async (req) => {
   }
 
   const supabase = getServiceClient();
+  const requestId = crypto.randomUUID();
+  const safeHeaders = extractSafeHeaders(req);
 
   // Auth check — admin only
   const authResult = await requireAdmin(req, supabase);
@@ -47,7 +51,8 @@ Deno.serve(async (req) => {
     const accessToken = await getAppToken(supabase, settings);
 
     // Call /app/client/generate
-    const generateRes = await fetch(`${settings.base_api_url}/app/client/generate`, {
+    const generateUrl = `${settings.base_api_url}/app/client/generate`;
+    const generateRes = await fetch(generateUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -56,24 +61,58 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ token }),
     });
 
-    const generateData = await generateRes.json();
+    const rawText = await generateRes.text();
+    let generateData: any;
+    try {
+      generateData = JSON.parse(rawText);
+    } catch {
+      await logHandshake(supabase, {
+        environment: env,
+        stage: "callback",
+        external_key,
+        request_id: requestId,
+        ok: false,
+        http_status: generateRes.status,
+        message: `Resposta não-JSON de /app/client/generate: HTTP ${generateRes.status}`,
+        payload: { response_preview: rawText.slice(0, 300) },
+        headers: safeHeaders,
+      });
+      return errorResponse(`Resposta inválida de /app/client/generate (HTTP ${generateRes.status})`);
+    }
 
     if (!generateRes.ok) {
+      const errMsg = generateData.message || "Falha ao gerar credenciais";
+
+      await logHandshake(supabase, {
+        environment: env,
+        stage: "callback",
+        external_key,
+        request_id: requestId,
+        ok: false,
+        http_status: generateRes.status,
+        message: `Falha em /app/client/generate: ${errMsg}`,
+        payload: {
+          api_status: generateRes.status,
+          api_response_message: errMsg,
+        },
+        headers: safeHeaders,
+      });
+
       await logAppmax(supabase, "error", `Falha em /app/client/generate (${env})`, {
         status: generateRes.status,
-        response_message: generateData.message || "unknown",
+        response_message: errMsg,
       });
 
       await supabase
         .from("appmax_installations")
         .update({
           status: "error",
-          last_error: generateData.message || "Falha ao gerar credenciais",
+          last_error: errMsg,
         })
         .eq("external_key", external_key)
         .eq("environment", env);
 
-      return errorResponse(generateData.message || "Falha ao gerar credenciais do merchant");
+      return errorResponse(errMsg);
     }
 
     const merchantClientId =
@@ -82,6 +121,18 @@ Deno.serve(async (req) => {
       generateData.client_secret || generateData.data?.client_secret;
 
     if (!merchantClientId || !merchantClientSecret) {
+      await logHandshake(supabase, {
+        environment: env,
+        stage: "callback",
+        external_key,
+        request_id: requestId,
+        ok: false,
+        http_status: generateRes.status,
+        message: "Credenciais do merchant não retornadas pela Appmax",
+        payload: { response_keys: Object.keys(generateData) },
+        headers: safeHeaders,
+      });
+
       await logAppmax(supabase, "error", `Credenciais do merchant não retornadas (${env})`, {
         response_keys: Object.keys(generateData),
       });
@@ -104,6 +155,20 @@ Deno.serve(async (req) => {
       .eq("external_key", external_key)
       .eq("environment", env);
 
+    await logHandshake(supabase, {
+      environment: env,
+      stage: "callback",
+      external_key,
+      request_id: requestId,
+      ok: true,
+      http_status: generateRes.status,
+      message: `Credenciais do merchant geradas com sucesso (${env})`,
+      payload: {
+        merchant_client_id: merchantClientId,
+      },
+      headers: safeHeaders,
+    });
+
     await logAppmax(supabase, "info", `Credenciais do merchant geradas com sucesso (${env})`, {
       external_key,
       merchant_client_id: merchantClientId,
@@ -113,6 +178,17 @@ Deno.serve(async (req) => {
     // NEVER return merchant_client_secret to frontend
     return jsonResponse({ success: true, status: "connected", environment: env });
   } catch (err: any) {
+    await logHandshake(supabase, {
+      environment: "unknown",
+      stage: "callback",
+      external_key: null,
+      request_id: requestId,
+      ok: false,
+      http_status: 500,
+      message: `Erro em appmax-generate-merchant-keys: ${err.message}`,
+      headers: safeHeaders,
+      error_stack: err.stack || null,
+    });
     await logAppmax(supabase, "error", `Erro em appmax-generate-merchant-keys: ${err.message}`);
     return errorResponse(err.message);
   }
