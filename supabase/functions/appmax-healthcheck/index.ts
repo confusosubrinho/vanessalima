@@ -45,43 +45,53 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Only POST
-    if (req.method !== "POST") {
-      return await fail("unknown", null, "METHOD_NOT_ALLOWED", "Method not allowed. Use POST.", 405);
+    // Accept both GET and POST (Appmax may use either)
+    if (req.method !== "POST" && req.method !== "GET") {
+      return await fail("unknown", null, "METHOD_NOT_ALLOWED", "Method not allowed. Use GET or POST.", 405);
     }
 
-    // Parse body: JSON or form-urlencoded
+    // Parse body from POST or query params from GET
     let body: Record<string, unknown> = {};
-    const ct = req.headers.get("content-type") || "";
-    const rawText = await req.text();
 
-    try {
-      if (ct.includes("application/json")) {
-        body = JSON.parse(rawText);
-      } else if (ct.includes("x-www-form-urlencoded")) {
-        const params = new URLSearchParams(rawText);
-        for (const [k, v] of params) body[k] = v;
-      } else {
-        // Try JSON first, then form
-        try {
+    if (req.method === "GET") {
+      // Parse from query string
+      const url = new URL(req.url);
+      for (const [k, v] of url.searchParams) {
+        body[k] = v;
+      }
+    } else {
+      // POST: parse JSON or form-urlencoded
+      const ct = req.headers.get("content-type") || "";
+      const rawText = await req.text();
+
+      try {
+        if (ct.includes("application/json")) {
           body = JSON.parse(rawText);
-        } catch {
+        } else if (ct.includes("x-www-form-urlencoded")) {
           const params = new URLSearchParams(rawText);
           for (const [k, v] of params) body[k] = v;
+        } else {
+          // Try JSON first, then form-urlencoded
+          try {
+            body = JSON.parse(rawText);
+          } catch {
+            const params = new URLSearchParams(rawText);
+            for (const [k, v] of params) body[k] = v;
+          }
         }
+      } catch {
+        return await fail("unknown", null, "INVALID_BODY", "Corpo da requisição inválido.", 400, { raw_preview: rawText.slice(0, 200) });
       }
-    } catch {
-      return await fail("unknown", null, "INVALID_BODY", "Corpo da requisição inválido. Envie JSON ou x-www-form-urlencoded.", 400, { raw_preview: rawText.slice(0, 200) });
     }
 
     const { app_id, client_id, client_secret, external_key } = body as Record<string, string>;
 
-    await logAppmax(supabase, "info", "Health check recebido", {
+    await logAppmax(supabase, "info", `Health check recebido (${req.method})`, {
+      method: req.method,
       app_id,
       external_key,
       has_client_id: !!client_id,
       has_client_secret: !!client_secret,
-      content_type: ct,
       body_keys: Object.keys(body),
     }, requestId);
 
@@ -92,13 +102,7 @@ Deno.serve(async (req) => {
         has_client_secret: !!client_secret,
         has_external_key: false,
         body_keys: Object.keys(body),
-      });
-    }
-
-    if (!client_id || !client_secret) {
-      return await fail("unknown", external_key, "MISSING_CREDENTIALS", "Campos obrigatórios ausentes: client_id e client_secret são necessários", 400, {
-        has_client_id: !!client_id,
-        has_client_secret: !!client_secret,
+        method: req.method,
       });
     }
 
@@ -125,7 +129,7 @@ Deno.serve(async (req) => {
     }
 
     if (!settings) {
-      return await fail("unknown", external_key, "NO_ENVIRONMENT", "Nenhum ambiente configurado. Configure sandbox ou production primeiro.", 500);
+      return await fail("unknown", external_key, "NO_ENVIRONMENT", "Nenhum ambiente configurado.", 500);
     }
 
     const env = settings.environment;
@@ -133,17 +137,16 @@ Deno.serve(async (req) => {
 
     // Validate app_id
     if (!savedAppId) {
-      // BOOTSTRAP MODE: accept and save the app_id
-      if (!app_id) {
-        return await fail(env, external_key, "BOOTSTRAP_NO_APP_ID", "Bootstrap: app_id não enviado no corpo da requisição", 400, { body_keys: Object.keys(body) });
+      // BOOTSTRAP MODE
+      if (app_id) {
+        await supabase
+          .from("appmax_settings")
+          .update({ app_id: String(app_id) })
+          .eq("id", settings.id);
+        await logAppmax(supabase, "info", `Bootstrap: app_id salvo (${env})`, { app_id, external_key }, requestId);
       }
-      await supabase
-        .from("appmax_settings")
-        .update({ app_id: String(app_id) })
-        .eq("id", settings.id);
-      await logAppmax(supabase, "info", `Bootstrap: app_id salvo (${env})`, { app_id, external_key }, requestId);
     } else {
-      // NORMAL MODE: strict app_id validation
+      // NORMAL MODE: validate app_id if provided
       if (app_id && String(app_id) !== String(savedAppId)) {
         return await fail(env, external_key, "APP_ID_MISMATCH", `app_id inválido: recebido=${app_id}, esperado=${savedAppId}`, 401, {
           received_app_id: app_id,
@@ -152,15 +155,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Encrypt merchant secret
-    let encryptedClientSecret: string | null = null;
-    try {
-      encryptedClientSecret = await encrypt(client_secret);
-    } catch (encErr: any) {
-      await logAppmax(supabase, "warn", `Falha ao criptografar secret: ${encErr.message}`, {}, requestId);
-    }
-
-    // Upsert installation → status = 'connected'
+    // Upsert installation
     const { data: existing } = await supabase
       .from("appmax_installations")
       .select("id, external_id")
@@ -171,13 +166,21 @@ Deno.serve(async (req) => {
     const externalId = existing?.external_id || crypto.randomUUID();
 
     const updateData: Record<string, any> = {
-      merchant_client_id: client_id,
-      merchant_client_secret: maskSecret(client_secret),
-      merchant_client_secret_encrypted: encryptedClientSecret,
       external_id: externalId,
       status: "connected",
       last_error: null,
     };
+
+    // If merchant credentials are provided (POST with full payload), save them
+    if (client_id && client_secret) {
+      updateData.merchant_client_id = client_id;
+      updateData.merchant_client_secret = maskSecret(client_secret);
+      try {
+        updateData.merchant_client_secret_encrypted = await encrypt(client_secret);
+      } catch (encErr: any) {
+        await logAppmax(supabase, "warn", `Falha ao criptografar secret: ${encErr.message}`, {}, requestId);
+      }
+    }
 
     if (existing?.id) {
       const { error } = await supabase
@@ -192,7 +195,7 @@ Deno.serve(async (req) => {
           ...updateData,
           external_key,
           environment: env,
-          app_id: String(app_id || savedAppId),
+          app_id: String(app_id || savedAppId || "unknown"),
         });
       if (error) throw error;
     }
@@ -205,22 +208,16 @@ Deno.serve(async (req) => {
       request_id: requestId,
       ok: true,
       http_status: 200,
-      message: `Health check OK — connected (${env})`,
+      message: `Health check OK — connected (${env}) via ${req.method}`,
       payload: {
         external_id: externalId,
-        merchant_client_id: client_id,
-        bootstrap: !savedAppId,
+        merchant_client_id: client_id || null,
+        has_credentials: !!(client_id && client_secret),
+        method: req.method,
         app_id: app_id || savedAppId,
       },
       headers: safeHeaders,
     });
-
-    await logAppmax(supabase, "info", `Health check concluído — connected (${env})`, {
-      external_key,
-      external_id: externalId,
-      merchant_client_id: client_id,
-      bootstrap: !savedAppId,
-    }, requestId);
 
     // MANDATORY: return { external_id } on success
     return jsonResponse({ external_id: externalId });
@@ -236,7 +233,6 @@ Deno.serve(async (req) => {
       headers: safeHeaders,
       error_stack: err.stack || null,
     });
-    await logAppmax(supabase, "error", `Erro no health check: ${err.message}`, {}, requestId);
     return healthError("INTERNAL_ERROR", err.message, 500);
   }
 });

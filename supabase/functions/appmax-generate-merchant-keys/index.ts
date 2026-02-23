@@ -34,10 +34,7 @@ Deno.serve(async (req) => {
       return errorResponse("external_key e token são obrigatórios", 400);
     }
 
-    // Determine environment: explicit param > fallback "sandbox"
     const env = environment || "sandbox";
-
-    // Load settings for the target environment
     const settings = await getSettingsByEnv(supabase, env);
     if (!settings) {
       return errorResponse(`Nenhuma configuração encontrada para ambiente '${env}'`, 400);
@@ -47,136 +44,151 @@ Deno.serve(async (req) => {
       return errorResponse(`base_api_url não configurado para ambiente '${env}'`, 400);
     }
 
-    // Get app token using shared cache + encryption
+    // Get app token
     const accessToken = await getAppToken(supabase, settings);
 
-    // Call /app/client/generate
+    // Try multiple payload formats for /app/client/generate
     const generateUrl = `${settings.base_api_url}/app/client/generate`;
-    const generateRes = await fetch(generateUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ token }),
-    });
 
-    const rawText = await generateRes.text();
-    let generateData: any;
-    try {
-      generateData = JSON.parse(rawText);
-    } catch {
-      await logHandshake(supabase, {
-        environment: env,
-        stage: "callback",
-        external_key,
-        request_id: requestId,
-        ok: false,
-        http_status: generateRes.status,
-        message: `Resposta não-JSON de /app/client/generate: HTTP ${generateRes.status}`,
-        payload: { response_preview: rawText.slice(0, 300) },
-        headers: safeHeaders,
-      });
-      return errorResponse(`Resposta inválida de /app/client/generate (HTTP ${generateRes.status})`);
+    // Attempt 1: { token }
+    // Attempt 2: { install_token }
+    // Attempt 3: { hash }
+    // Attempt 4: { token, external_key }
+    // Attempt 5: { token, app_id, external_key }
+    const payloadAttempts = [
+      { token },
+      { install_token: token },
+      { hash: token },
+      { token, external_key },
+      { token, app_id: settings.app_id, external_key },
+    ];
+
+    let lastResponse: any = null;
+    let lastRawText = "";
+    let lastStatus = 0;
+    let successData: any = null;
+
+    for (const payload of payloadAttempts) {
+      try {
+        const generateRes = await fetch(generateUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        lastStatus = generateRes.status;
+        lastRawText = await generateRes.text();
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(lastRawText);
+        } catch {
+          parsed = { raw: lastRawText.slice(0, 500) };
+        }
+
+        lastResponse = parsed;
+
+        await logAppmax(supabase, "info", `generate attempt: ${JSON.stringify(Object.keys(payload))}`, {
+          status: generateRes.status,
+          ok: generateRes.ok,
+          response_keys: typeof parsed === 'object' ? Object.keys(parsed) : [],
+          response_preview: lastRawText.slice(0, 300),
+          payload_keys: Object.keys(payload),
+        }, requestId);
+
+        if (generateRes.ok) {
+          const merchantClientId = parsed.client_id || parsed.data?.client_id;
+          const merchantClientSecret = parsed.client_secret || parsed.data?.client_secret;
+
+          if (merchantClientId && merchantClientSecret) {
+            successData = { merchantClientId, merchantClientSecret, payload };
+            break;
+          }
+        }
+
+        // If 400, try next payload format
+        if (generateRes.status === 400) continue;
+
+        // If non-400 error, stop trying
+        if (!generateRes.ok) break;
+      } catch (fetchErr: any) {
+        await logAppmax(supabase, "error", `generate fetch error: ${fetchErr.message}`, {
+          payload_keys: Object.keys(payload),
+        }, requestId);
+      }
     }
 
-    if (!generateRes.ok) {
-      const errMsg = generateData.message || "Falha ao gerar credenciais";
-
-      await logHandshake(supabase, {
-        environment: env,
-        stage: "callback",
-        external_key,
-        request_id: requestId,
-        ok: false,
-        http_status: generateRes.status,
-        message: `Falha em /app/client/generate: ${errMsg}`,
-        payload: {
-          api_status: generateRes.status,
-          api_response_message: errMsg,
-        },
-        headers: safeHeaders,
-      });
-
-      await logAppmax(supabase, "error", `Falha em /app/client/generate (${env})`, {
-        status: generateRes.status,
-        response_message: errMsg,
-      });
+    if (successData) {
+      // Success! Save credentials
+      const encryptedSecret = await encrypt(successData.merchantClientSecret);
 
       await supabase
         .from("appmax_installations")
         .update({
-          status: "error",
-          last_error: errMsg,
+          merchant_client_id: successData.merchantClientId,
+          merchant_client_secret: null,
+          merchant_client_secret_encrypted: encryptedSecret,
+          status: "connected",
+          last_error: null,
         })
         .eq("external_key", external_key)
         .eq("environment", env);
 
-      return errorResponse(errMsg);
-    }
-
-    const merchantClientId =
-      generateData.client_id || generateData.data?.client_id;
-    const merchantClientSecret =
-      generateData.client_secret || generateData.data?.client_secret;
-
-    if (!merchantClientId || !merchantClientSecret) {
       await logHandshake(supabase, {
         environment: env,
         stage: "callback",
         external_key,
         request_id: requestId,
-        ok: false,
-        http_status: generateRes.status,
-        message: "Credenciais do merchant não retornadas pela Appmax",
-        payload: { response_keys: Object.keys(generateData) },
+        ok: true,
+        http_status: 200,
+        message: `Credenciais geradas com sucesso (${env})`,
+        payload: {
+          merchant_client_id: successData.merchantClientId,
+          used_payload_keys: Object.keys(successData.payload),
+        },
         headers: safeHeaders,
       });
 
-      await logAppmax(supabase, "error", `Credenciais do merchant não retornadas (${env})`, {
-        response_keys: Object.keys(generateData),
-      });
-      return errorResponse("Credenciais do merchant não retornadas pela Appmax");
+      return jsonResponse({ success: true, status: "connected", environment: env });
     }
 
-    // Encrypt merchant_client_secret before storing
-    const encryptedSecret = await encrypt(merchantClientSecret);
-
-    // Update installation with encrypted credentials
-    await supabase
-      .from("appmax_installations")
-      .update({
-        merchant_client_id: merchantClientId,
-        merchant_client_secret: null, // clear plaintext
-        merchant_client_secret_encrypted: encryptedSecret,
-        status: "connected",
-        last_error: null,
-      })
-      .eq("external_key", external_key)
-      .eq("environment", env);
+    // All attempts failed — log full diagnostic
+    const errMsg = lastResponse?.message || lastResponse?.error || lastResponse?.error_description || "Falha ao gerar credenciais";
+    const fullDiag = {
+      api_status: lastStatus,
+      api_response: typeof lastResponse === 'object' ? lastResponse : { raw: lastRawText.slice(0, 500) },
+      attempted_payload_formats: payloadAttempts.map(p => Object.keys(p)),
+      generate_url: generateUrl,
+      token_preview: maskSecret(token),
+    };
 
     await logHandshake(supabase, {
       environment: env,
       stage: "callback",
       external_key,
       request_id: requestId,
-      ok: true,
-      http_status: generateRes.status,
-      message: `Credenciais do merchant geradas com sucesso (${env})`,
-      payload: {
-        merchant_client_id: merchantClientId,
-      },
+      ok: false,
+      http_status: lastStatus,
+      message: `Todas as tentativas falharam em /app/client/generate: ${errMsg}`,
+      payload: fullDiag,
       headers: safeHeaders,
     });
 
-    await logAppmax(supabase, "info", `Credenciais do merchant geradas com sucesso (${env})`, {
-      external_key,
-      merchant_client_id: merchantClientId,
-      merchant_client_secret: maskSecret(merchantClientSecret),
-    });
+    await logAppmax(supabase, "error", `Falha definitiva em /app/client/generate (${env})`, fullDiag);
 
-    // NEVER return merchant_client_secret to frontend
-    return jsonResponse({ success: true, status: "connected", environment: env });
+    await supabase
+      .from("appmax_installations")
+      .update({
+        status: "error",
+        last_error: `HTTP ${lastStatus}: ${errMsg}`,
+      })
+      .eq("external_key", external_key)
+      .eq("environment", env);
+
+    return errorResponse(`${errMsg} (HTTP ${lastStatus}). Verifique os logs de diagnóstico.`);
   } catch (err: any) {
     await logHandshake(supabase, {
       environment: "unknown",
@@ -189,7 +201,6 @@ Deno.serve(async (req) => {
       headers: safeHeaders,
       error_stack: err.stack || null,
     });
-    await logAppmax(supabase, "error", `Erro em appmax-generate-merchant-keys: ${err.message}`);
     return errorResponse(err.message);
   }
 });
