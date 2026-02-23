@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Check, AlertCircle, Loader2, RefreshCw, Clock } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
-const HEALTHCHECK_TIMEOUT_MS = 120_000; // 120s — healthcheck can take up to ~80s
+const HEALTHCHECK_TIMEOUT_MS = 300_000; // 5 minutos
 const POLL_INTERVAL_MS = 4_000;
 
 export default function AppmaxCallbackPage() {
@@ -85,7 +85,7 @@ export default function AppmaxCallbackPage() {
       if (elapsed * 1000 >= HEALTHCHECK_TIMEOUT_MS) {
         setStatus('error');
         setErrorMsg(
-          'O healthcheck da Appmax não foi recebido dentro do tempo esperado (120s). ' +
+          'O healthcheck da Appmax não foi recebido dentro do tempo esperado (5 min). ' +
           'Verifique se a "URL de validação" no app Appmax está configurada corretamente: ' +
           `https://sojrvsbqkrbxoymlwtii.supabase.co/functions/v1/appmax-healthcheck`
         );
@@ -103,6 +103,48 @@ export default function AppmaxCallbackPage() {
     }, 1000);
     return () => clearInterval(timer);
   }, [status]);
+
+  // Auto-generate quando página carrega com token na URL
+  const autoGenerateAttempted = useRef(false);
+
+  useEffect(() => {
+    if (autoGenerateAttempted.current) return;
+
+    const installToken =
+      searchParams.get('token') ||
+      searchParams.get('install_token') ||
+      searchParams.get('hash') ||
+      savedToken;
+
+    if (!installToken || status !== 'polling') return;
+
+    autoGenerateAttempted.current = true;
+
+    // Aguarda 2s para o banco estar atualizado após o redirect
+    const t = setTimeout(async () => {
+      try {
+        const env = detectedEnv || 'sandbox';
+        const { data, error } = await supabase.functions.invoke('appmax-generate-merchant-keys', {
+          body: {
+            external_key: externalKey,
+            token: installToken,
+            environment: env,
+          },
+        });
+
+        if (!error && data?.status === 'connected') {
+          connectedRef.current = true;
+          setStatus('connected');
+          await checkStatus();
+        }
+        // Se falhou, continua polling silenciosamente aguardando o healthcheck
+      } catch {
+        // Silencia erro — o polling continua normalmente
+      }
+    }, 2000);
+
+    return () => clearTimeout(t);
+  }, [searchParams, savedToken, status, detectedEnv, externalKey, checkStatus]);
 
   // Manual generate (fallback) — only via button click
   const handleManualGenerate = useCallback(async () => {
@@ -208,7 +250,7 @@ export default function AppmaxCallbackPage() {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground text-center">
-                A Appmax enviará as credenciais do merchant via healthcheck. Isso pode levar até 2 minutos.
+                A Appmax enviará as credenciais do merchant via healthcheck. Isso pode levar até 5 minutos.
               </p>
               <Button
                 variant="outline"
@@ -273,7 +315,7 @@ export default function AppmaxCallbackPage() {
               <div className="flex flex-col gap-2 mt-4 w-full">
                 <Button variant="outline" size="sm" onClick={handleRetry} className="w-full">
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Aguardar novamente (120s)
+                  Aguardar novamente (5 min)
                 </Button>
                 {hasInstallToken && (
                   <Button variant="secondary" size="sm" onClick={handleManualGenerate} className="w-full">
