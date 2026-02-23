@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { compressImageToWebP } from '@/lib/imageCompressor';
-import { Upload, Save, GripVertical, Trash2, X } from 'lucide-react';
+import { Upload, Save, GripVertical, Trash2, X, Plus, Megaphone } from 'lucide-react';
 import { useCategories } from '@/hooks/useProducts';
 
 const AVAILABLE_ICONS = [
@@ -279,6 +280,141 @@ export function HeaderCustomizer() {
           {saveMutation.isPending ? 'Salvando...' : 'Salvar Configurações do Header'}
         </Button>
       </div>
+
+      {/* Announcement Bar */}
+      <AnnouncementBarConfig />
     </div>
+  );
+}
+
+// ─── Announcement Bar Config ───
+
+interface AnnMsg { text: string; link?: string | null; }
+interface AnnConfig {
+  id: string; is_active: boolean; messages: AnnMsg[]; bg_color: string; text_color: string;
+  font_size: string; autoplay: boolean; autoplay_speed: number; closeable: boolean;
+}
+
+function AnnouncementBarConfig() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: config, isLoading } = useQuery({
+    queryKey: ['admin-announcement-bar'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('announcement_bar' as any).select('*').limit(1).maybeSingle();
+      if (error) throw error;
+      return data as unknown as AnnConfig | null;
+    },
+  });
+
+  const [form, setForm] = useState<AnnConfig | null>(null);
+  const current = form || config;
+
+  const update = (upd: Partial<AnnConfig>) => setForm(prev => ({ ...(prev || config!) as AnnConfig, ...upd }));
+
+  const saveMutation = useMutation({
+    mutationFn: async (d: AnnConfig) => {
+      const { error } = await supabase.from('announcement_bar' as any).update({
+        is_active: d.is_active, messages: d.messages as any, bg_color: d.bg_color, text_color: d.text_color,
+        font_size: d.font_size, autoplay: d.autoplay, autoplay_speed: d.autoplay_speed, closeable: d.closeable,
+      }).eq('id', d.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-announcement-bar'] });
+      qc.invalidateQueries({ queryKey: ['announcement-bar'] });
+      toast({ title: 'Barra de anúncios salva!' });
+      setForm(null);
+    },
+    onError: (e: any) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
+  });
+
+  if (isLoading || !current) return null;
+
+  const messages = current.messages || [];
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2"><Megaphone className="h-4 w-4" />Barra de Anúncios</CardTitle>
+        <CardDescription>Faixa fixa no topo da loja com mensagens rotativas</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-3">
+          <Switch checked={current.is_active} onCheckedChange={v => update({ is_active: v })} />
+          <Label>{current.is_active ? 'Ativa' : 'Inativa'}</Label>
+        </div>
+
+        <div>
+          <Label className="text-sm font-medium mb-2 block">Mensagens</Label>
+          <div className="space-y-2">
+            {messages.map((msg, i) => (
+              <div key={i} className="flex gap-2 items-start">
+                <div className="flex-1 space-y-1">
+                  <Input value={msg.text} onChange={e => { const m = [...messages]; m[i] = { ...m[i], text: e.target.value }; update({ messages: m }); }} placeholder="Texto da mensagem" />
+                  <Input value={msg.link || ''} onChange={e => { const m = [...messages]; m[i] = { ...m[i], link: e.target.value || null }; update({ messages: m }); }} placeholder="Link (opcional)" className="text-xs" />
+                </div>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { const m = messages.filter((_, j) => j !== i); update({ messages: m }); }}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={() => update({ messages: [...messages, { text: '', link: null }] })}>
+              <Plus className="h-4 w-4 mr-1" />Adicionar mensagem
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs">Cor de Fundo</Label>
+            <div className="flex gap-2 mt-1">
+              <input type="color" value={current.bg_color} onChange={e => update({ bg_color: e.target.value })} className="h-9 w-9 rounded border cursor-pointer" />
+              <Input value={current.bg_color} onChange={e => update({ bg_color: e.target.value })} className="flex-1" />
+            </div>
+          </div>
+          <div>
+            <Label className="text-xs">Cor do Texto</Label>
+            <div className="flex gap-2 mt-1">
+              <input type="color" value={current.text_color} onChange={e => update({ text_color: e.target.value })} className="h-9 w-9 rounded border cursor-pointer" />
+              <Input value={current.text_color} onChange={e => update({ text_color: e.target.value })} className="flex-1" />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="flex items-center gap-2">
+            <Switch checked={current.autoplay} onCheckedChange={v => update({ autoplay: v })} />
+            <Label className="text-xs">Autoplay</Label>
+          </div>
+          {current.autoplay && (
+            <div>
+              <Label className="text-xs">Velocidade (s)</Label>
+              <Input type="number" min={2} max={15} value={current.autoplay_speed} onChange={e => update({ autoplay_speed: Number(e.target.value) })} className="mt-1" />
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Switch checked={current.closeable} onCheckedChange={v => update({ closeable: v })} />
+            <Label className="text-xs">Pode fechar</Label>
+          </div>
+        </div>
+
+        {/* Preview */}
+        {current.is_active && messages[0]?.text && (
+          <div className="rounded-lg overflow-hidden">
+            <div className="text-center py-1.5 px-4 text-sm font-medium" style={{ backgroundColor: current.bg_color, color: current.text_color }}>
+              {messages[0].text}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <Button onClick={() => saveMutation.mutate(current as AnnConfig)} disabled={saveMutation.isPending}>
+            <Save className="h-4 w-4 mr-2" />{saveMutation.isPending ? 'Salvando...' : 'Salvar Barra de Anúncios'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

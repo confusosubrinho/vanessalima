@@ -27,12 +27,13 @@
    const { data: reviews, refetch } = useQuery({
      queryKey: ['reviews', productId],
      queryFn: async () => {
-       const { data, error } = await supabase
-         .from('product_reviews')
-         .select('*')
-         .eq('product_id', productId)
-         .eq('is_approved', true)
-         .order('created_at', { ascending: false });
+        const { data, error } = await (supabase
+          .from('product_reviews')
+          .select('*')
+          .eq('product_id', productId)
+          .eq('is_approved', true) as any)
+          .eq('status', 'published')
+          .order('created_at', { ascending: false });
  
        if (error) throw error;
        return data as ProductReview[];
@@ -242,12 +243,18 @@
                    {review.title && <p className="font-medium mb-1">{review.title}</p>}
                    <p className="text-muted-foreground">{review.comment}</p>
                    
-                   {review.is_verified_purchase && (
-                     <div className="flex items-center gap-1 mt-2 text-xs text-primary">
-                       <ThumbsUp className="h-3 w-3" />
-                       Compra verificada
-                     </div>
-                   )}
+                    {review.is_verified_purchase && (
+                      <div className="flex items-center gap-1 mt-2 text-xs text-primary">
+                        <ThumbsUp className="h-3 w-3" />
+                        Compra verificada
+                      </div>
+                    )}
+                    {(review as any).admin_reply && (
+                      <div className="bg-muted/50 rounded-lg p-3 mt-3 text-sm">
+                        <p className="font-semibold text-xs text-primary mb-1">Resposta da loja:</p>
+                        <p className="text-muted-foreground">{(review as any).admin_reply}</p>
+                      </div>
+                    )}
                  </div>
                ))
              ) : (

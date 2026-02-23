@@ -13,6 +13,7 @@ import {
   PenSquare,
   Menu,
   Store,
+  Star,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useQuery } from '@tanstack/react-query';
 
 const SetupWizard = lazy(() => import('@/components/admin/SetupWizard').then(m => ({ default: m.SetupWizard })));
+import { NotificationBell } from '@/components/admin/NotificationBell';
 
 interface MenuItem {
   title: string;
@@ -57,6 +59,7 @@ const menuItems: MenuItem[] = [
     children: [
       { title: 'Produtos', url: '/admin/produtos' },
       { title: 'Categorias', url: '/admin/categorias' },
+      { title: 'Avaliações', url: '/admin/avaliacoes' },
       { title: 'Galeria de Mídia', url: '/admin/galeria' },
     ]
   },
@@ -97,6 +100,7 @@ const menuItems: MenuItem[] = [
       { title: 'Loja', url: '/admin/configuracoes' },
       { title: 'Juros e Cartões', url: '/admin/precos' },
       { title: 'Integrações', url: '/admin/integracoes' },
+      { title: 'Notificações', url: '/admin/notificacoes' },
       { title: 'Código Externo', url: '/admin/configuracoes/codigo' },
       { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes' },
       { title: 'Logs do Sistema', url: '/admin/logs' },
@@ -499,6 +503,7 @@ export default function AdminLayout() {
           <header className="sticky top-0 z-40 h-12 border-b bg-background flex items-center px-3 gap-2">
             <MobileMenuSheet />
             <h1 className="text-sm font-semibold flex-1 truncate">{getPageTitle(location.pathname)}</h1>
+            <NotificationBell />
             <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
               <Link to="/" target="_blank">
                 <Store className="h-3.5 w-3.5 mr-1" />
@@ -526,6 +531,7 @@ export default function AdminLayout() {
             <header className="h-14 border-b bg-background flex items-center px-4 gap-4">
               <SidebarTrigger />
               <div className="flex-1" />
+              <NotificationBell />
               <Button variant="outline" size="sm" asChild>
                 <Link to="/" target="_blank">Ver Loja</Link>
               </Button>
