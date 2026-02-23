@@ -142,7 +142,6 @@ export default function Settings() {
             <TabsTrigger value="general">Geral</TabsTrigger>
             <TabsTrigger value="contact">Contato</TabsTrigger>
             <TabsTrigger value="footer">Footer</TabsTrigger>
-            <TabsTrigger value="footer">Footer</TabsTrigger>
              <TabsTrigger value="security">
                <Shield className="h-3 w-3 mr-1" />
                Segurança
