@@ -83,6 +83,78 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          link: string | null
+          message: string
+          metadata: Json | null
+          title: string
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          link?: string | null
+          message: string
+          metadata?: Json | null
+          title: string
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          link?: string | null
+          message?: string
+          metadata?: Json | null
+          title?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      announcement_bar: {
+        Row: {
+          autoplay: boolean | null
+          autoplay_speed: number | null
+          bg_color: string | null
+          closeable: boolean | null
+          font_size: string | null
+          id: string
+          is_active: boolean | null
+          messages: Json | null
+          text_color: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          autoplay?: boolean | null
+          autoplay_speed?: number | null
+          bg_color?: string | null
+          closeable?: boolean | null
+          font_size?: string | null
+          id?: string
+          is_active?: boolean | null
+          messages?: Json | null
+          text_color?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          autoplay?: boolean | null
+          autoplay_speed?: number | null
+          bg_color?: string | null
+          closeable?: boolean | null
+          font_size?: string | null
+          id?: string
+          is_active?: boolean | null
+          messages?: Json | null
+          text_color?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       app_logs: {
         Row: {
           correlation_id: string | null
@@ -976,8 +1048,10 @@ export type Database = {
           config: Json
           created_at: string
           display_order: number
+          icon: string
           id: string
           is_active: boolean
+          is_native: boolean | null
           label: string
           section_key: string
           section_type: string
@@ -987,8 +1061,10 @@ export type Database = {
           config?: Json
           created_at?: string
           display_order?: number
+          icon?: string
           id?: string
           is_active?: boolean
+          is_native?: boolean | null
           label: string
           section_key: string
           section_type: string
@@ -998,8 +1074,10 @@ export type Database = {
           config?: Json
           created_at?: string
           display_order?: number
+          icon?: string
           id?: string
           is_active?: boolean
+          is_native?: boolean | null
           label?: string
           section_key?: string
           section_type?: string
@@ -1751,6 +1829,7 @@ export type Database = {
       }
       product_reviews: {
         Row: {
+          admin_reply: string | null
           comment: string | null
           created_at: string
           customer_name: string
@@ -1759,11 +1838,14 @@ export type Database = {
           is_verified_purchase: boolean | null
           product_id: string
           rating: number
+          replied_at: string | null
+          status: string
           title: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
+          admin_reply?: string | null
           comment?: string | null
           created_at?: string
           customer_name: string
@@ -1772,11 +1854,14 @@ export type Database = {
           is_verified_purchase?: boolean | null
           product_id: string
           rating: number
+          replied_at?: string | null
+          status?: string
           title?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
+          admin_reply?: string | null
           comment?: string | null
           created_at?: string
           customer_name?: string
@@ -1785,6 +1870,8 @@ export type Database = {
           is_verified_purchase?: boolean | null
           product_id?: string
           rating?: number
+          replied_at?: string | null
+          status?: string
           title?: string | null
           updated_at?: string
           user_id?: string | null
