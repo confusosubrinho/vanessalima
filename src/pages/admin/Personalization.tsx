@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 const HighlightBannersAdmin = lazy(() => import('./HighlightBanners'));
 import { HomeSectionsManager } from '@/components/admin/HomeSectionsManager';
-import { LayoutGrid, Tag, FileText, CreditCard, Sparkles, PanelTop, MessageSquareQuote } from 'lucide-react';
+import { HomePageBuilder } from '@/components/admin/HomePageBuilder';
+import { LayoutGrid, Tag, FileText, CreditCard, Sparkles, PanelTop, MessageSquareQuote, Layers } from 'lucide-react';
 import { TestimonialsManager } from '@/components/admin/TestimonialsManager';
 import { FeaturesBarManager } from '@/components/admin/FeaturesBarManager';
 import { FooterCustomizer } from '@/components/admin/FooterCustomizer';
@@ -659,10 +660,11 @@ export default function Personalization() {
         <p className="text-sm text-muted-foreground">Gerencie banners, destaques, categorias e vídeos da página inicial</p>
       </div>
 
-      <Tabs defaultValue="header" className="space-y-4">
+      <Tabs defaultValue="builder" className="space-y-4">
         <TabsList className="flex-wrap">
+          <TabsTrigger value="builder" className="flex items-center gap-2"><Layers className="h-4 w-4" />Construtor</TabsTrigger>
           <TabsTrigger value="header" className="flex items-center gap-2"><PanelTop className="h-4 w-4" />Header</TabsTrigger>
-          <TabsTrigger value="secoes" className="flex items-center gap-2"><LayoutGrid className="h-4 w-4" />Seções</TabsTrigger>
+          <TabsTrigger value="secoes" className="flex items-center gap-2"><LayoutGrid className="h-4 w-4" />Seções Produtos</TabsTrigger>
           <TabsTrigger value="recursos" className="flex items-center gap-2"><Sparkles className="h-4 w-4" />Recursos</TabsTrigger>
           <TabsTrigger value="categorias" className="flex items-center gap-2"><Tag className="h-4 w-4" />Categorias</TabsTrigger>
           <TabsTrigger value="banners" className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />Banners</TabsTrigger>
@@ -672,6 +674,7 @@ export default function Personalization() {
           <TabsTrigger value="rodape" className="flex items-center gap-2"><CreditCard className="h-4 w-4" />Rodapé</TabsTrigger>
           <TabsTrigger value="paginas" className="flex items-center gap-2"><FileText className="h-4 w-4" />Páginas</TabsTrigger>
         </TabsList>
+        <TabsContent value="builder"><HomePageBuilder /></TabsContent>
         <TabsContent value="header"><HeaderCustomizer /></TabsContent>
         <TabsContent value="secoes"><HomeSectionsManager /></TabsContent>
         <TabsContent value="recursos"><FeaturesBarManager /></TabsContent>
