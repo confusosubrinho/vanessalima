@@ -44,6 +44,7 @@ export function useHomeSections() {
       if (error) throw error;
       return (data as unknown as HomeSection[]) || [];
     },
+    staleTime: 1000 * 60 * 10,
   });
 }
 
