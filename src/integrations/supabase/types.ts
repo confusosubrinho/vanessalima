@@ -2407,6 +2407,7 @@ export type Database = {
           address: string | null
           app_version: string | null
           appmax_access_token: string | null
+          appmax_callback_path: string | null
           appmax_environment: string | null
           bling_access_token: string | null
           bling_client_id: string | null
@@ -2443,6 +2444,7 @@ export type Database = {
           melhor_envio_token: string | null
           min_installment_value: number | null
           pix_discount: number | null
+          public_base_url: string | null
           rede_environment: string | null
           rede_merchant_id: string | null
           rede_merchant_key: string | null
@@ -2462,6 +2464,7 @@ export type Database = {
           address?: string | null
           app_version?: string | null
           appmax_access_token?: string | null
+          appmax_callback_path?: string | null
           appmax_environment?: string | null
           bling_access_token?: string | null
           bling_client_id?: string | null
@@ -2498,6 +2501,7 @@ export type Database = {
           melhor_envio_token?: string | null
           min_installment_value?: number | null
           pix_discount?: number | null
+          public_base_url?: string | null
           rede_environment?: string | null
           rede_merchant_id?: string | null
           rede_merchant_key?: string | null
@@ -2517,6 +2521,7 @@ export type Database = {
           address?: string | null
           app_version?: string | null
           appmax_access_token?: string | null
+          appmax_callback_path?: string | null
           appmax_environment?: string | null
           bling_access_token?: string | null
           bling_client_id?: string | null
@@ -2553,6 +2558,7 @@ export type Database = {
           melhor_envio_token?: string | null
           min_installment_value?: number | null
           pix_discount?: number | null
+          public_base_url?: string | null
           rede_environment?: string | null
           rede_merchant_id?: string | null
           rede_merchant_key?: string | null
