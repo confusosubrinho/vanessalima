@@ -28,35 +28,34 @@ interface ShippingRegion {
   enabled: boolean;
 }
 
-// ─── Appmax Gateway Panel ───
+// ─── Appmax Environment Tab ───
 
-function AppmaxGatewayPanel() {
+function AppmaxEnvTab({ env }: { env: 'sandbox' | 'production' }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const envLabel = env === 'sandbox' ? 'Sandbox' : 'Produção';
 
-  // Installation status
   const { data: installation, isLoading: installLoading } = useQuery({
-    queryKey: ['appmax-installation'],
+    queryKey: ['appmax-installation', env],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('appmax_installations' as any)
         .select('id, external_key, environment, status, last_error, updated_at, merchant_client_id, external_id')
         .eq('external_key', 'main-store')
-        .eq('environment', 'sandbox')
+        .eq('environment', env)
         .maybeSingle();
       if (error) throw error;
       return data as any;
     },
   });
 
-  // Appmax settings (bootstrap state)
   const { data: appmaxSettings } = useQuery({
-    queryKey: ['appmax-settings'],
+    queryKey: ['appmax-settings', env],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('appmax_settings' as any)
         .select('*')
-        .eq('environment', 'sandbox')
+        .eq('environment', env)
         .maybeSingle();
       if (error) throw error;
       return data as any;
@@ -64,29 +63,14 @@ function AppmaxGatewayPanel() {
   });
 
   const isBootstrap = !appmaxSettings?.app_id;
-
-  // Logs
-  const { data: logs } = useQuery({
-    queryKey: ['appmax-logs'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('appmax_logs' as any)
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data as any[];
-    },
-  });
-
+  const isActive = appmaxSettings?.is_active ?? false;
   const [connecting, setConnecting] = useState(false);
-  const [showLogs, setShowLogs] = useState(false);
 
   const handleConnect = async () => {
     setConnecting(true);
     try {
       const { data, error } = await supabase.functions.invoke('appmax-authorize', {
-        body: { external_key: 'main-store' },
+        body: { external_key: 'main-store', environment: env },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -107,8 +91,20 @@ function AppmaxGatewayPanel() {
         .update({ status: 'disconnected', merchant_client_id: null, merchant_client_secret: null, authorize_token: null, external_id: null, last_error: null } as any)
         .eq('id', installation.id);
       if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ['appmax-installation'] });
-      toast({ title: 'Appmax desconectada' });
+      queryClient.invalidateQueries({ queryKey: ['appmax-installation', env] });
+      toast({ title: `Appmax ${envLabel} desconectada` });
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleActivate = async () => {
+    try {
+      // Deactivate all first, then activate this one
+      await supabase.from('appmax_settings' as any).update({ is_active: false } as any).neq('environment', '___');
+      await supabase.from('appmax_settings' as any).update({ is_active: true } as any).eq('environment', env);
+      queryClient.invalidateQueries({ queryKey: ['appmax-settings'] });
+      toast({ title: `Ambiente ${envLabel} ativado` });
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
     }
@@ -122,95 +118,135 @@ function AppmaxGatewayPanel() {
     connected: { label: 'Conectado', color: 'bg-green-100 text-green-800' },
     error: { label: 'Erro', color: 'bg-red-100 text-red-800' },
   };
-
   const currentStatus = statusConfig[installStatus] || statusConfig.disconnected;
 
   return (
-    <div className="space-y-6">
-      {/* Connection Status */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="font-medium text-sm">Instalação do Aplicativo (Sandbox)</h4>
-          <div className="flex items-center gap-2">
-            {isBootstrap && (
-              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-orange-100 text-orange-800">
-                Bootstrap
-              </span>
-            )}
-            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${currentStatus.color}`}>
-              {currentStatus.label}
-            </span>
-          </div>
-        </div>
-
-        {isBootstrap && installStatus !== 'connected' && (
-          <div className="bg-orange-50 border border-orange-200 text-orange-800 text-xs rounded-md p-2.5">
-            <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
-            Modo Bootstrap: o App ID será definido automaticamente na primeira instalação pela Appmax.
-          </div>
-        )}
-
-        {appmaxSettings?.app_id && (
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">
-              App ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono">{appmaxSettings.app_id}</code>
-            </p>
-          </div>
-        )}
-
-        {installStatus === 'connected' && installation?.updated_at && (
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Check className="h-3.5 w-3.5 text-primary" />
-              Conectado em {format(new Date(installation.updated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-            </div>
-            {installation.external_id && (
-              <p className="text-xs text-muted-foreground">
-                External ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{installation.external_id}</code>
-              </p>
-            )}
-            {installation.merchant_client_id && (
-              <p className="text-xs text-muted-foreground">
-                Merchant Client ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{String(installation.merchant_client_id).slice(0, 12)}...</code>
-              </p>
-            )}
-          </div>
-        )}
-
-        {installStatus === 'error' && installation?.last_error && (
-          <div className="bg-destructive/10 text-destructive text-xs rounded-md p-2.5">
-            <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
-            {installation.last_error}
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          {installStatus !== 'connected' ? (
-            <Button onClick={handleConnect} disabled={connecting || installLoading} className="flex-1">
-              {connecting ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Redirecionando...</>
-              ) : (
-                <><Plug className="h-4 w-4 mr-2" />{isBootstrap ? 'Iniciar Bootstrap (Sandbox)' : 'Conectar Appmax (Sandbox)'}</>
-              )}
-            </Button>
-          ) : (
-            <Button variant="destructive" onClick={handleDisconnect} size="sm">
-              Desconectar
-            </Button>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-sm">Instalação ({envLabel})</h4>
+        <div className="flex items-center gap-2">
+          {isActive && (
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-primary/10 text-primary">Ativo</span>
           )}
-        </div>
-
-        {/* URLs de referência */}
-        <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
-          <p className="font-medium">🔗 URLs para cadastro no portal Appmax:</p>
-          <p className="text-muted-foreground">
-            Healthcheck: <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">https://sojrvsbqkrbxoymlwtii.supabase.co/functions/v1/appmax-healthcheck</code>
-          </p>
-          <p className="text-muted-foreground">
-            Callback: <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">{appmaxSettings?.callback_url || 'https://vanessalima.lovable.app/admin/integrations/appmax/callback'}</code>
-          </p>
+          {isBootstrap && (
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-800">Bootstrap</span>
+          )}
+          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${currentStatus.color}`}>
+            {currentStatus.label}
+          </span>
         </div>
       </div>
+
+      {!isActive && (
+        <div className="bg-muted/60 border rounded-md p-2.5 flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">Este ambiente está <strong>inativo</strong>. Ative para usar nas transações.</p>
+          <Button variant="outline" size="sm" onClick={handleActivate} className="text-xs h-7">
+            Ativar {envLabel}
+          </Button>
+        </div>
+      )}
+
+      {isBootstrap && installStatus !== 'connected' && (
+        <div className="bg-orange-50 border border-orange-200 text-orange-800 text-xs rounded-md p-2.5">
+          <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
+          Modo Bootstrap: o App ID será definido automaticamente na primeira instalação pela Appmax.
+        </div>
+      )}
+
+      {appmaxSettings?.app_id && (
+        <p className="text-xs text-muted-foreground">
+          App ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono">{appmaxSettings.app_id}</code>
+        </p>
+      )}
+
+      {installStatus === 'connected' && installation?.updated_at && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Check className="h-3.5 w-3.5 text-primary" />
+            Conectado em {format(new Date(installation.updated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+          </div>
+          {installation.external_id && (
+            <p className="text-xs text-muted-foreground">
+              External ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{installation.external_id}</code>
+            </p>
+          )}
+          {installation.merchant_client_id && (
+            <p className="text-xs text-muted-foreground">
+              Merchant Client ID: <code className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{String(installation.merchant_client_id).slice(0, 12)}...</code>
+            </p>
+          )}
+        </div>
+      )}
+
+      {installStatus === 'error' && installation?.last_error && (
+        <div className="bg-destructive/10 text-destructive text-xs rounded-md p-2.5">
+          <AlertCircle className="h-3.5 w-3.5 inline mr-1" />
+          {installation.last_error}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        {installStatus !== 'connected' ? (
+          <Button onClick={handleConnect} disabled={connecting || installLoading} className="flex-1">
+            {connecting ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Redirecionando...</>
+            ) : (
+              <><Plug className="h-4 w-4 mr-2" />{isBootstrap ? `Iniciar Bootstrap (${envLabel})` : `Conectar (${envLabel})`}</>
+            )}
+          </Button>
+        ) : (
+          <Button variant="destructive" onClick={handleDisconnect} size="sm">
+            Desconectar
+          </Button>
+        )}
+      </div>
+
+      {/* URLs de referência */}
+      <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
+        <p className="font-medium">🔗 URLs para cadastro no portal Appmax ({envLabel}):</p>
+        <p className="text-muted-foreground">
+          Healthcheck: <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">{appmaxSettings?.healthcheck_url || 'Não configurado'}</code>
+        </p>
+        <p className="text-muted-foreground">
+          Callback: <code className="bg-muted px-1 py-0.5 rounded text-[10px] break-all">{appmaxSettings?.callback_url || 'Não configurado'}</code>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Appmax Gateway Panel ───
+
+function AppmaxGatewayPanel() {
+  const [showLogs, setShowLogs] = useState(false);
+
+  const { data: logs } = useQuery({
+    queryKey: ['appmax-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('appmax_logs' as any)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue="sandbox" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="sandbox">🧪 Sandbox</TabsTrigger>
+          <TabsTrigger value="production">🚀 Produção</TabsTrigger>
+        </TabsList>
+        <TabsContent value="sandbox" className="mt-4">
+          <AppmaxEnvTab env="sandbox" />
+        </TabsContent>
+        <TabsContent value="production" className="mt-4">
+          <AppmaxEnvTab env="production" />
+        </TabsContent>
+      </Tabs>
 
       <Separator />
 
@@ -222,10 +258,10 @@ function AppmaxGatewayPanel() {
       <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
         <p className="font-medium">Como funciona:</p>
         <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
-          <li>Clique em "Conectar Appmax (Sandbox)"</li>
-          <li>Você será redirecionado para a Appmax para autorizar</li>
-          <li>Após autorizar, voltará automaticamente com as credenciais geradas</li>
-          <li>O sistema salvará tudo de forma segura (secrets nunca são expostos)</li>
+          <li>Selecione o ambiente (Sandbox ou Produção)</li>
+          <li>Clique em "Conectar" para iniciar a autorização</li>
+          <li>Após autorizar na Appmax, as credenciais serão salvas automaticamente</li>
+          <li>Ative o ambiente desejado para transações reais</li>
         </ol>
       </div>
 
