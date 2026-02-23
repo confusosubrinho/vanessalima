@@ -99,6 +99,7 @@ const menuItems: MenuItem[] = [
       { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes' },
       { title: 'Logs do Sistema', url: '/admin/logs' },
       { title: 'Saúde do Sistema', url: '/admin/saude' },
+      { title: 'Otimização & Limpeza', url: '/admin/otimizacao' },
       { title: 'Central de Ajuda', url: '/admin/ajuda' },
     ]
   },

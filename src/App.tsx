@@ -66,6 +66,7 @@ const SystemLogs = lazy(() => import("./pages/admin/SystemLogs"));
 const SystemHealth = lazy(() => import("./pages/admin/SystemHealth"));
 const ThemeEditor = lazy(() => import("./pages/admin/ThemeEditor"));
 const AppmaxCallback = lazy(() => import("./pages/admin/AppmaxCallback"));
+const Optimization = lazy(() => import("./pages/admin/Optimization"));
 
 // Lazy load non-critical floating components
 const WhatsAppFloat = lazy(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat })));
@@ -168,6 +169,7 @@ const App = () => (
                 <Route path="logs" element={<SystemLogs />} />
                 <Route path="tema" element={<ThemeEditor />} />
               <Route path="saude" element={<SystemHealth />} />
+              <Route path="otimizacao" element={<Optimization />} />
               </Route>
               <Route path="/admin/integrations/appmax/callback" element={<AppmaxCallback />} />
               
