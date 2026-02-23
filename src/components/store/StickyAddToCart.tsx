@@ -1,4 +1,5 @@
-import { ShoppingBag } from 'lucide-react';
+import { useState } from 'react';
+import { ShoppingBag, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/pricingEngine';
 
@@ -25,6 +26,8 @@ export function StickyAddToCart({
   onScrollToVariant,
   visible,
 }: StickyAddToCartProps) {
+  const [confirmed, setConfirmed] = useState(false);
+
   if (!visible) return null;
 
   const handleClick = () => {
@@ -32,7 +35,16 @@ export function StickyAddToCart({
       onScrollToVariant();
       return;
     }
+    // First click: scroll to variants to confirm; second click: add to cart
+    if (!confirmed) {
+      onScrollToVariant();
+      setConfirmed(true);
+      // Reset after 8s so they need to confirm again if they scroll away
+      setTimeout(() => setConfirmed(false), 8000);
+      return;
+    }
     onAddToCart();
+    setConfirmed(false);
   };
 
   const missingLabel = needsSize && needsColor
@@ -55,12 +67,13 @@ export function StickyAddToCart({
           disabled={!isInStock}
           className="rounded-full h-12 px-5 text-sm font-semibold shrink-0"
         >
-          <ShoppingBag className="h-4 w-4 mr-1.5" />
           {!isInStock
             ? 'Indisponível'
             : !hasSelectedVariant
             ? missingLabel || 'Selecionar'
-            : 'Comprar'}
+            : confirmed
+            ? <><Check className="h-4 w-4 mr-1.5" />Confirmar</>
+            : <><ShoppingBag className="h-4 w-4 mr-1.5" />Comprar</>}
         </Button>
       </div>
     </div>
