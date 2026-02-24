@@ -221,9 +221,7 @@ export function ProductCard({ product }: ProductCardProps) {
                   <>
                     <p className="text-[11px] text-muted-foreground">{pixDiscountPercent}% off no PIX</p>
                   </>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">no PIX</p>
-                )}
+                ) : null}
               </>
             ) : (
               <>
@@ -232,9 +230,7 @@ export function ProductCard({ product }: ProductCardProps) {
                   <>
                     <p className="text-[11px] text-muted-foreground">{pixDiscountPercent}% off no PIX</p>
                   </>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">{formatPrice(pixPrice)} via PIX</p>
-                )}
+                ) : null}
               </>
             )}
             {pricingConfig && (() => {

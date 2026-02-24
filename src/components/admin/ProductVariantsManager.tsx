@@ -352,7 +352,7 @@ export function ProductVariantsManager({
                       <Palette className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[300px] max-h-[90vh] overflow-y-auto" align="start">
+                  <PopoverContent className="w-[300px] max-h-[85vh] overflow-y-auto z-[100]" align="start" side="bottom" collisionPadding={16}>
                     <AddCustomColorForm onAdd={(name, hex) => addCustomColorAndAssign(name, hex, null)} />
                   </PopoverContent>
                 </Popover>
@@ -503,7 +503,7 @@ export function ProductVariantsManager({
                         <Palette className="h-4 w-4" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[300px] max-h-[90vh] overflow-y-auto" align="start">
+                    <PopoverContent className="w-[300px] max-h-[85vh] overflow-y-auto z-[100]" align="start" side="bottom" collisionPadding={16}>
                       <AddCustomColorForm
                         onAdd={(name, hex) => {
                           addCustomColorAndAssign(name, hex, editIndex);

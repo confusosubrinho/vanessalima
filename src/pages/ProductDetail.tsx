@@ -160,6 +160,10 @@ export default function ProductDetail() {
   }
 
   const images = product.images || [];
+  const hasDiscount = product.sale_price != null && product.base_price != null && Number(product.sale_price) < Number(product.base_price);
+  const discountPercentage = hasDiscount
+    ? Math.round((1 - Number(product.sale_price) / Number(product.base_price)) * 100)
+    : 0;
   const variants = product.variants?.filter(v => v.is_active) || [];
   
   // Valid variants: active AND in stock
@@ -193,10 +197,7 @@ export default function ProductDetail() {
     ? [...new Map(validVariants.filter(v => v.size === selectedSize && v.color).map(v => [v.color, { name: v.color!, hex: v.color_hex }])).values()]
     : colors;
   
-  const hasDiscount = product.sale_price && product.sale_price < product.base_price;
-  const discountPercentage = hasDiscount
-    ? Math.round((1 - Number(product.sale_price) / Number(product.base_price)) * 100)
-    : 0;
+  // (hasDiscount and discountPercentage already defined above)
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -230,6 +231,13 @@ export default function ProductDetail() {
   const installmentOptions = pricingConfig ? getInstallmentOptions(currentPrice, pricingConfig) : [];
   const installmentDisplay = pricingConfig ? getInstallmentDisplay(currentPrice, pricingConfig) : null;
   const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : false;
+
+  // When user selects a variant that has a linked image, switch main image to that variant's image
+  useEffect(() => {
+    if (!selectedVariant?.id || !images.length) return;
+    const variantImageIndex = images.findIndex((img: any) => img.product_variant_id === selectedVariant.id);
+    if (variantImageIndex >= 0) setSelectedImage(variantImageIndex);
+  }, [selectedVariant?.id, images]);
 
   const handleColorSelect = (colorName: string) => {
     setSelectedColor(colorName);
@@ -413,9 +421,7 @@ export default function ProductDetail() {
                 <>
                   <p className="text-sm text-muted-foreground">À vista com {pixDiscountPercent}% de desconto no PIX</p>
                 </>
-              ) : (
-                <p className="text-sm text-muted-foreground">À vista no PIX</p>
-              )}
+              ) : null}
             </div>
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium mb-2">Cartão de Crédito</h4>
@@ -620,9 +626,7 @@ export default function ProductDetail() {
                 <>
                   <p className="text-sm text-muted-foreground">no Pix ({pixDiscountPercent}% off)</p>
                 </>
-              ) : (
-                <p className="text-sm text-muted-foreground">no Pix</p>
-              )}
+              ) : null}
               {installmentDisplay && (
                 <>
                   <p className="text-muted-foreground font-medium">{installmentDisplay.primaryText}</p>

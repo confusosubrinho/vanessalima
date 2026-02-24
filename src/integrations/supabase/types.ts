@@ -2276,6 +2276,7 @@ export type Database = {
           is_primary: boolean | null
           media_type: string | null
           product_id: string
+          product_variant_id: string | null
           url: string
         }
         Insert: {
@@ -2286,6 +2287,7 @@ export type Database = {
           is_primary?: boolean | null
           media_type?: string | null
           product_id: string
+          product_variant_id?: string | null
           url: string
         }
         Update: {
@@ -2296,6 +2298,7 @@ export type Database = {
           is_primary?: boolean | null
           media_type?: string | null
           product_id?: string
+          product_variant_id?: string | null
           url?: string
         }
         Relationships: [

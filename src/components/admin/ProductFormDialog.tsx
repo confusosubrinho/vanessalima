@@ -221,16 +221,20 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
         })));
       }
       if (editingProduct.variants) {
-        setVariants(editingProduct.variants.map((v: any) => ({
-          id: v.id,
-          size: v.size || '',
-          color: v.color || '',
-          color_hex: v.color_hex || '',
-          stock_quantity: v.stock_quantity || 0,
-          price_modifier: v.price_modifier || 0,
-          sku: v.sku || '',
-          is_active: v.is_active ?? true,
-        })));
+        setVariants(editingProduct.variants.map((v: any) => {
+          const linkedImage = editingProduct.images?.find((img: any) => img.product_variant_id === v.id);
+          return {
+            id: v.id,
+            size: v.size || '',
+            color: v.color || '',
+            color_hex: v.color_hex || '',
+            stock_quantity: v.stock_quantity || 0,
+            price_modifier: v.price_modifier || 0,
+            sku: v.sku || '',
+            is_active: v.is_active ?? true,
+            image_url: linkedImage?.url,
+          };
+        }));
       }
       if (editingProduct.id) {
         supabase
@@ -342,8 +346,17 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
             sku: v.sku || null,
             is_active: v.is_active,
           }));
-          const { error: varError } = await supabase.from('product_variants').insert(variantInserts);
+          const { data: insertedVariants, error: varError } = await supabase.from('product_variants').insert(variantInserts).select('id');
           if (varError) throw varError;
+          // Link variant images: set product_images.product_variant_id where url matches variant.image_url
+          if (insertedVariants && insertedVariants.length === variants.length) {
+            for (let i = 0; i < variants.length; i++) {
+              const imageUrl = variants[i].image_url;
+              if (imageUrl && insertedVariants[i]) {
+                await supabase.from('product_images').update({ product_variant_id: insertedVariants[i].id }).eq('product_id', productId).eq('url', imageUrl);
+              }
+            }
+          }
         }
 
         if (productId) {
@@ -1037,8 +1050,8 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
             </>
           ) : (
             <>
-              <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setCurrentStep(STEPS.findIndex(s => s.key === v)); }} className="w-full">
-                <div className="px-6">
+              <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setCurrentStep(STEPS.findIndex(s => s.key === v)); }} className="w-full flex flex-col min-h-0">
+                <div className="px-6 flex-shrink-0">
                   <TabsList className={`grid w-full ${STEPS.length === 8 ? 'grid-cols-8' : 'grid-cols-7'}`}>
                     {STEPS.map(s => (
                       <TabsTrigger key={s.key} value={s.key} className="text-xs">{s.label}</TabsTrigger>
@@ -1046,14 +1059,13 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
                   </TabsList>
                 </div>
 
-                <ScrollArea className="h-[60vh] px-6">
+                <div className="flex-1 min-h-0 px-6 overflow-y-auto" style={{ maxHeight: '60vh' }}>
                   {STEPS.map(s => (
-                    <TabsContent key={s.key} value={s.key} className="mt-4">
+                    <TabsContent key={s.key} value={s.key} className="mt-4 pb-6 focus-visible:outline-none">
                       {renderStepContent(s.key)}
                     </TabsContent>
                   ))}
-                </ScrollArea>
-              </Tabs>
+                </div>
 
               <div className="flex justify-end gap-2 p-6 pt-4 border-t">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

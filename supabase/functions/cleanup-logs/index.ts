@@ -7,14 +7,15 @@ const corsHeaders = {
 };
 
 // === CONFIGURATION ===
-const RETENTION: Record<string, { days: number; dateCol: string }> = {
+// Use `days` for normal retention or `minutes` for short retention (e.g. error_logs)
+const RETENTION: Record<string, { days?: number; minutes?: number; dateCol: string }> = {
   app_logs:              { days: 15, dateCol: "created_at" },
   appmax_logs:           { days: 30, dateCol: "created_at" },
   bling_webhook_logs:    { days: 14, dateCol: "created_at" },
   bling_sync_runs:       { days: 90, dateCol: "started_at" },
   login_attempts:        { days: 30, dateCol: "attempted_at" },
   email_automation_logs: { days: 30, dateCol: "created_at" },
-  error_logs:            { days: 30, dateCol: "created_at" },
+  error_logs:            { minutes: 10, dateCol: "created_at" },
   traffic_sessions:      { days: 30, dateCol: "created_at" },
   abandoned_carts:       { days: 90, dateCol: "created_at" },
   order_events:          { days: 90, dateCol: "received_at" },
@@ -91,12 +92,22 @@ Deno.serve(async (req) => {
     let bytesFreed = 0;
 
     // === JOB: DAILY LOGS CLEANUP ===
-    if (jobType === "daily_logs") {
-      for (const [table, config] of Object.entries(RETENTION)) {
+    // job_type "daily_logs" = all tables; "error_logs_only" = only error_logs (for cron a cada ~5–10 min)
+    const tablesToClean = jobType === "error_logs_only"
+      ? [["error_logs", RETENTION.error_logs] as const]
+      : Object.entries(RETENTION);
+
+    if (jobType === "daily_logs" || jobType === "error_logs_only") {
+      for (const [table, config] of tablesToClean) {
         try {
-          const cutoffDate = new Date();
-          cutoffDate.setDate(cutoffDate.getDate() - config.days);
-          const cutoff = cutoffDate.toISOString();
+          const cutoff =
+            config.minutes != null
+              ? new Date(Date.now() - config.minutes * 60 * 1000).toISOString()
+              : (() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() - (config.days ?? 0));
+                  return d.toISOString();
+                })();
 
           // Count records to delete
           let countQuery = supabase

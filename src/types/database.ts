@@ -57,6 +57,7 @@ export interface Product {
    alt_text: string | null;
    display_order: number;
    is_primary: boolean;
+   product_variant_id?: string | null;
    created_at: string;
  }
  
