@@ -27,6 +27,8 @@ export default function CheckoutSettings() {
   const [showSecret, setShowSecret] = useState(false);
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncingCategories, setSyncingCategories] = useState(false);
+  const [syncingVariations, setSyncingVariations] = useState(false);
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "";
 
   // Queries
@@ -222,6 +224,42 @@ export default function CheckoutSettings() {
     }
   };
 
+  const syncCategories = async () => {
+    setSyncingCategories(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("yampi-sync-categories");
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["checkout-test-logs"] });
+      toast({
+        title: "Categorias sincronizadas!",
+        description: `${data?.created || 0} criadas, ${data?.matched || 0} mapeadas, ${data?.errors || 0} erros`,
+        variant: data?.errors > 0 ? "destructive" : "default",
+      });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao sincronizar categorias", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSyncingCategories(false);
+    }
+  };
+
+  const syncVariations = async () => {
+    setSyncingVariations(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("yampi-sync-variation-values");
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["checkout-test-logs"] });
+      toast({
+        title: "Variações sincronizadas!",
+        description: `${data?.created || 0} criadas, ${data?.matched || 0} mapeadas, ${data?.errors || 0} erros`,
+        variant: data?.errors > 0 ? "destructive" : "default",
+      });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao sincronizar variações", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSyncingVariations(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -409,14 +447,34 @@ export default function CheckoutSettings() {
               </CardTitle>
               <CardDescription>Replica produtos ativos do seu site para a Yampi</CardDescription>
             </div>
-            <Button
-              size="sm"
-              onClick={syncCatalog}
-              disabled={syncing}
-            >
-              {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
-              {syncing ? "Sincronizando..." : "Sincronizar catálogo (ativos)"}
-            </Button>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={syncCategories}
+                disabled={syncingCategories}
+              >
+                {syncingCategories ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Package className="h-3 w-3 mr-1" />}
+                {syncingCategories ? "Sincronizando..." : "Sync Categorias"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={syncVariations}
+                disabled={syncingVariations}
+              >
+                {syncingVariations ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Package className="h-3 w-3 mr-1" />}
+                {syncingVariations ? "Sincronizando..." : "Sync Variações"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={syncCatalog}
+                disabled={syncing}
+              >
+                {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
+                {syncing ? "Sincronizando..." : "Sincronizar catálogo (ativos)"}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">

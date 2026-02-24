@@ -62,3 +62,9 @@ verify_jwt = false
 
 [functions.yampi-catalog-sync]
 verify_jwt = false
+
+[functions.yampi-sync-categories]
+verify_jwt = false
+
+[functions.yampi-sync-variation-values]
+verify_jwt = false
