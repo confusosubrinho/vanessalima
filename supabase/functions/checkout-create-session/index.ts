@@ -226,30 +226,74 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Create payment link
+        // Create payment link (compatível com versões diferentes da API Yampi)
         const linkSkus = items.map((item) => {
           const variant = variants.find((v) => v.id === item.variant_id)!;
           return { id: variant.yampi_sku_id, quantity: item.quantity };
         });
 
-        const linkRes = await fetch(`${yampiBase}/checkout/payment-link`, {
-          method: "POST",
-          headers: yampiHeaders,
-          body: JSON.stringify({
-            name: (config.checkout_name_template as string || "Pedido #{order_number}").replace("{order_number}", order.order_number),
-            active: true,
-            skus: linkSkus,
-          }),
-        });
+        const checkoutName = (config.checkout_name_template as string || "Pedido #{order_number}")
+          .replace("{order_number}", order.order_number);
 
-        const linkData = await linkRes.json();
+        const attempts = [
+          {
+            url: `${yampiBase}/checkout/payment-link`,
+            body: {
+              name: checkoutName,
+              active: true,
+              skus: linkSkus,
+            },
+          },
+          {
+            url: `${yampiBase}/payments/links`,
+            body: {
+              name: checkoutName,
+              items: linkSkus.map((sku) => ({ sku_id: sku.id, quantity: sku.quantity })),
+              success_url: successUrl,
+              cancel_url: cancelUrl,
+              metadata: { local_order_id: order.id },
+            },
+          },
+        ];
 
-        if (!linkRes.ok) {
-          throw new Error(linkData?.message || "Erro ao criar link Yampi");
+        let linkData: Record<string, unknown> | null = null;
+        let lastError = "Erro ao criar link Yampi";
+
+        for (const attempt of attempts) {
+          const linkRes = await fetch(attempt.url, {
+            method: "POST",
+            headers: yampiHeaders,
+            body: JSON.stringify(attempt.body),
+          });
+
+          const parsed = await linkRes.json().catch(() => ({}));
+
+          if (linkRes.ok) {
+            linkData = parsed as Record<string, unknown>;
+            break;
+          }
+
+          lastError = (parsed as Record<string, unknown>)?.message as string || `Erro Yampi (${linkRes.status})`;
+
+          // Se não for 404, não adianta tentar endpoint alternativo
+          if (linkRes.status !== 404) break;
         }
 
-        const externalRef = linkData?.data?.id?.toString() || linkData?.id?.toString() || "";
-        const redirectUrl = linkData?.data?.link_url || linkData?.link_url || linkData?.data?.url || "";
+        if (!linkData) {
+          throw new Error(lastError);
+        }
+
+        const externalRef = (linkData?.data as Record<string, unknown> | undefined)?.id?.toString()
+          || linkData?.id?.toString()
+          || "";
+
+        const redirectUrl = (linkData?.data as Record<string, unknown> | undefined)?.link_url
+          || linkData?.link_url
+          || (linkData?.data as Record<string, unknown> | undefined)?.checkout_url
+          || (linkData?.data as Record<string, unknown> | undefined)?.url
+          || linkData?.checkout_url
+          || linkData?.url
+          || "";
 
         await supabase
           .from("orders")
