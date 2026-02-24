@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const externalKey = body.external_key;
     const envOverride = body.environment; // optional
+    const storeName = body.store_name; // optional — sent as "name" to Appmax
 
     if (!externalKey) return errorResponse("external_key é obrigatório", 400);
 
@@ -124,9 +125,10 @@ Deno.serve(async (req) => {
     const authorizePayload: Record<string, string> = {
       external_key: externalKey,
       url_callback: callbackWithKey,
-      healthcheck_url: healthcheckUrl,
+      url_healthcheck: healthcheckUrl,
     };
     if (appId) authorizePayload.app_id = appId;
+    if (storeName) authorizePayload.name = storeName;
 
     await logAppmax(supabase, "info", `Chamando /app/authorize (${env})`, {
       external_key: externalKey,
