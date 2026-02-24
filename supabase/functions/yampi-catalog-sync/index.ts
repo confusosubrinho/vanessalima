@@ -11,7 +11,7 @@ interface SyncCounters {
   updated_skus: number;
   skipped_inactive: number;
   errors_count: number;
-  errors: Array<{ product_id: string; variant_id?: string; message: string }>;
+  errors: Array<{ product_id: string; variant_id?: string; message: string; response_body?: unknown; sent_payload?: unknown }>;
 }
 
 async function yampiRequest(
@@ -25,9 +25,30 @@ async function yampiRequest(
   const opts: RequestInit = { method, headers: yampiHeaders };
   if (body) opts.body = JSON.stringify(body);
 
+  console.log(`[YAMPI] ${method} ${path}`, body ? JSON.stringify(body).slice(0, 500) : "");
+
   const res = await fetch(url, opts);
-  const data = await res.json();
-  return { ok: res.ok, status: res.status, data };
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    data = { raw_text: await res.text().catch(() => "unable to read") };
+  }
+
+  if (!res.ok) {
+    console.error(`[YAMPI] ERROR ${res.status} ${path}:`, JSON.stringify(data));
+  }
+
+  return { ok: res.ok, status: res.status, data: data as Record<string, unknown> };
+}
+
+function sanitizePayloadForLog(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const clean = { ...(payload as Record<string, unknown>) };
+  // Remove secrets from logs
+  delete clean["User-Token"];
+  delete clean["User-Secret-Key"];
+  return clean;
 }
 
 Deno.serve(async (req) => {
@@ -40,7 +61,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const onlyActive = body.only_active !== false; // default true
+    const onlyActive = body.only_active !== false;
 
     // Load Yampi config
     const { data: providerConfig } = await supabase
@@ -60,6 +81,7 @@ Deno.serve(async (req) => {
     const alias = config.alias as string;
     const userToken = config.user_token as string;
     const userSecretKey = config.user_secret_key as string;
+    const defaultBrandId = config.default_brand_id ? Number(config.default_brand_id) : null;
 
     if (!alias || !userToken || !userSecretKey) {
       return new Response(JSON.stringify({ error: "Credenciais Yampi incompletas" }), {
@@ -74,6 +96,39 @@ Deno.serve(async (req) => {
       "User-Secret-Key": userSecretKey,
       "Content-Type": "application/json",
     };
+
+    // If no brand_id configured, try to get or create one
+    let brandId = defaultBrandId;
+    if (!brandId) {
+      console.log("[YAMPI] No brand_id configured, fetching existing brands...");
+      const brandsRes = await yampiRequest(yampiBase, yampiHeaders, "/catalog/brands?limit=1", "GET");
+      if (brandsRes.ok && brandsRes.data?.data) {
+        const brands = brandsRes.data.data as Array<Record<string, unknown>>;
+        if (brands.length > 0) {
+          brandId = brands[0].id as number;
+          console.log(`[YAMPI] Using existing brand_id: ${brandId}`);
+        }
+      }
+      if (!brandId) {
+        console.log("[YAMPI] No brands found, creating default brand...");
+        const createBrand = await yampiRequest(yampiBase, yampiHeaders, "/catalog/brands", "POST", {
+          name: "Minha Marca",
+          active: true,
+        });
+        if (createBrand.ok) {
+          brandId = (createBrand.data?.data as Record<string, unknown>)?.id as number || (createBrand.data?.id as number);
+          console.log(`[YAMPI] Created brand_id: ${brandId}`);
+        } else {
+          return new Response(JSON.stringify({
+            error: "Não foi possível obter/criar marca na Yampi. Configure default_brand_id manualmente.",
+            yampi_response: createBrand.data,
+          }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+    }
 
     // Create sync run
     const { data: syncRun } = await supabase
@@ -94,7 +149,7 @@ Deno.serve(async (req) => {
     // Fetch products
     let productsQuery = supabase
       .from("products")
-      .select("id, name, slug, description, base_price, sale_price, sku, is_active, yampi_product_id, weight, height, width, depth, seo_title, seo_description, seo_keywords")
+      .select("id, name, slug, description, base_price, sale_price, sku, is_active, yampi_product_id, weight, height, width, depth, seo_title, seo_description, seo_keywords, brand")
       .order("created_at", { ascending: true });
 
     if (onlyActive) {
@@ -104,7 +159,7 @@ Deno.serve(async (req) => {
     const { data: products, error: prodError } = await productsQuery;
     if (prodError) throw new Error(`Erro ao buscar produtos: ${prodError.message}`);
 
-    // Also count inactive for stats
+    // Count inactive for stats
     if (onlyActive) {
       const { count } = await supabase
         .from("products")
@@ -117,48 +172,10 @@ Deno.serve(async (req) => {
       try {
         let yampiProductId = product.yampi_product_id;
 
-        // STEP 1: Create product on Yampi if it doesn't exist
-        if (!yampiProductId) {
-          const createPayload: Record<string, unknown> = {
-            name: product.name,
-            slug: product.slug,
-            active: product.is_active,
-            searchable: true,
-            description: product.description || "",
-          };
-          if (product.seo_title) createPayload.seo_title = product.seo_title;
-          if (product.seo_description) createPayload.seo_description = product.seo_description;
-          if (product.seo_keywords) createPayload.seo_keywords = product.seo_keywords;
-
-          const res = await yampiRequest(yampiBase, yampiHeaders, "/catalog/products", "POST", createPayload);
-
-          if (!res.ok) {
-            const msg = res.data?.message || res.data?.errors || JSON.stringify(res.data);
-            counters.errors.push({ product_id: product.id, message: `Criar produto: ${res.status} - ${typeof msg === 'string' ? msg : JSON.stringify(msg)}` });
-            counters.errors_count++;
-            continue;
-          }
-
-          yampiProductId = res.data?.data?.id || res.data?.id;
-          if (!yampiProductId) {
-            counters.errors.push({ product_id: product.id, message: "Resposta sem ID do produto criado" });
-            counters.errors_count++;
-            continue;
-          }
-
-          // Save yampi_product_id locally
-          await supabase
-            .from("products")
-            .update({ yampi_product_id: yampiProductId })
-            .eq("id", product.id);
-
-          counters.created_products++;
-        }
-
-        // STEP 2: Get variants for this product
+        // Get variants for this product
         let variantsQuery = supabase
           .from("product_variants")
-          .select("id, sku, size, color, stock_quantity, base_price, sale_price, is_active, yampi_sku_id")
+          .select("id, sku, size, color, stock_quantity, base_price, sale_price, is_active, yampi_sku_id, price_modifier")
           .eq("product_id", product.id);
 
         if (onlyActive) {
@@ -166,8 +183,9 @@ Deno.serve(async (req) => {
         }
 
         const { data: variants } = await variantsQuery;
+        const activeVariants = variants || [];
 
-        // Also count inactive variants
+        // Count inactive variants
         if (onlyActive) {
           const { count: inactiveVarCount } = await supabase
             .from("product_variants")
@@ -185,13 +203,125 @@ Deno.serve(async (req) => {
           .order("display_order", { ascending: true })
           .limit(10);
 
-        const imageUrls = (images || []).map((img) => ({ url: img.url }));
+        const imageUrls = (images || [])
+          .filter((img) => img.url && img.url.startsWith("http"))
+          .map((img) => ({ url: img.url }));
 
-        for (const variant of variants || []) {
+        // STEP 1: Create product on Yampi if it doesn't exist
+        if (!yampiProductId) {
+          const hasVariations = activeVariants.length > 1;
+
+          // Build inline SKUs for product creation
+          const inlineSkus = activeVariants.map((v) => {
+            const unitPrice = Number(v.sale_price ?? v.base_price ?? product.sale_price ?? product.base_price) || 0;
+            const variantSku = v.sku || `${product.sku || product.id.slice(0, 8)}-${v.size}-${(v.color || "U")}`.replace(/\s+/g, "-").slice(0, 64);
+
+            const skuObj: Record<string, unknown> = {
+              sku: variantSku,
+              price_cost: unitPrice,
+              price_sale: unitPrice,
+              price_discount: 0,
+              weight: Number(product.weight) || 0.3,
+              height: Number(product.height) || 5,
+              width: Number(product.width) || 15,
+              length: Number(product.depth) || 20,
+              quantity_managed: true,
+              availability: 0,
+              availability_soldout: 0,
+              blocked_sale: false,
+            };
+
+            if (imageUrls.length > 0) {
+              skuObj.images = imageUrls;
+            }
+
+            return skuObj;
+          });
+
+          const createPayload: Record<string, unknown> = {
+            name: product.name || "Produto sem nome",
+            slug: product.slug || product.name?.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || `produto-${product.id.slice(0, 8)}`,
+            active: true,
+            simple: !hasVariations,
+            brand_id: brandId,
+            searchable: true,
+            description: product.description || "",
+            priority: 1,
+          };
+
+          if (product.seo_title) createPayload.seo_title = product.seo_title;
+          if (product.seo_description) createPayload.seo_description = product.seo_description;
+          if (product.seo_keywords) createPayload.seo_keywords = product.seo_keywords;
+
+          // Include inline SKUs only for simple products (1 variant)
+          if (!hasVariations && inlineSkus.length > 0) {
+            createPayload.skus = inlineSkus;
+          }
+
+          const res = await yampiRequest(yampiBase, yampiHeaders, "/catalog/products", "POST", createPayload);
+
+          if (!res.ok) {
+            counters.errors.push({
+              product_id: product.id,
+              message: `Criar produto: ${res.status}`,
+              response_body: res.data,
+              sent_payload: sanitizePayloadForLog(createPayload),
+            });
+            counters.errors_count++;
+            continue;
+          }
+
+          yampiProductId = (res.data?.data as Record<string, unknown>)?.id as number || res.data?.id as number;
+          if (!yampiProductId) {
+            counters.errors.push({ product_id: product.id, message: "Resposta sem ID do produto criado", response_body: res.data });
+            counters.errors_count++;
+            continue;
+          }
+
+          // Save yampi_product_id locally
+          await supabase
+            .from("products")
+            .update({ yampi_product_id: yampiProductId })
+            .eq("id", product.id);
+
+          counters.created_products++;
+
+          // If simple product with inline SKU, try to extract SKU ID from response
+          if (!hasVariations && inlineSkus.length > 0) {
+            const productData = res.data?.data as Record<string, unknown>;
+            const skusData = productData?.skus as Record<string, unknown>;
+            const skusList = (skusData?.data || []) as Array<Record<string, unknown>>;
+            if (skusList.length > 0 && activeVariants.length > 0) {
+              const yampiSkuId = skusList[0].id as number;
+              await supabase
+                .from("product_variants")
+                .update({ yampi_sku_id: yampiSkuId })
+                .eq("id", activeVariants[0].id);
+              counters.created_skus++;
+
+              // Sync stock
+              if (activeVariants[0].stock_quantity > 0) {
+                await yampiRequest(yampiBase, yampiHeaders, `/catalog/products/${yampiProductId}/stocks/sync`, "POST", {
+                  data: [{
+                    id: yampiSkuId,
+                    sku: inlineSkus[0].sku,
+                    total_in_stock: activeVariants[0].stock_quantity,
+                    blocked_sale: false,
+                  }],
+                });
+              }
+            }
+          }
+
+          // Rate limit delay
+          await new Promise((r) => setTimeout(r, 2200));
+        }
+
+        // STEP 2: Create/update SKUs separately for multi-variant products or products already created
+        for (const variant of activeVariants) {
           try {
-            const unitPrice = variant.sale_price ?? variant.base_price ?? product.sale_price ?? product.base_price;
-            const variantSku = variant.sku || `${product.sku || product.id}-${variant.size}-${variant.color || ""}`.replace(/\s+/g, "-");
-            const title = `${product.name} - ${variant.size}${variant.color ? ` ${variant.color}` : ""}`;
+            const unitPrice = Number(variant.sale_price ?? variant.base_price ?? product.sale_price ?? product.base_price) || 0;
+            const variantSku = variant.sku || `${product.sku || product.id.slice(0, 8)}-${variant.size}-${(variant.color || "U")}`.replace(/\s+/g, "-").slice(0, 64);
 
             if (!variant.yampi_sku_id) {
               // CREATE SKU on Yampi
@@ -200,15 +330,22 @@ Deno.serve(async (req) => {
                 sku: variantSku,
                 price_cost: unitPrice,
                 price_sale: unitPrice,
-                blocked_sale: false,
+                price_discount: 0,
+                weight: Number(product.weight) || 0.3,
+                height: Number(product.height) || 5,
+                width: Number(product.width) || 15,
+                length: Number(product.depth) || 20,
                 quantity_managed: true,
-                weight: product.weight || 0.3,
-                height: product.height || 5,
-                width: product.width || 15,
-                length: product.depth || 20,
+                availability: 0,
+                availability_soldout: 0,
+                blocked_sale: false,
+                // Pass variation values as strings
+                variations_values_ids: [
+                  variant.size,
+                  ...(variant.color ? [variant.color] : []),
+                ].filter(Boolean),
               };
 
-              // Include images in SKU creation
               if (imageUrls.length > 0) {
                 skuPayload.images = imageUrls;
               }
@@ -216,17 +353,18 @@ Deno.serve(async (req) => {
               const res = await yampiRequest(yampiBase, yampiHeaders, "/catalog/skus", "POST", skuPayload);
 
               if (!res.ok) {
-                const msg = res.data?.message || res.data?.errors || JSON.stringify(res.data);
                 counters.errors.push({
                   product_id: product.id,
                   variant_id: variant.id,
-                  message: `Criar SKU: ${res.status} - ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`,
+                  message: `Criar SKU: ${res.status}`,
+                  response_body: res.data,
+                  sent_payload: sanitizePayloadForLog(skuPayload),
                 });
                 counters.errors_count++;
                 continue;
               }
 
-              const yampiSkuId = res.data?.data?.id || res.data?.id;
+              const yampiSkuId = (res.data?.data as Record<string, unknown>)?.id as number || res.data?.id as number;
               if (yampiSkuId) {
                 await supabase
                   .from("product_variants")
@@ -236,22 +374,16 @@ Deno.serve(async (req) => {
 
               counters.created_skus++;
 
-              // Update stock via separate endpoint if needed
+              // Sync stock
               if (variant.stock_quantity > 0 && yampiSkuId) {
-                await yampiRequest(
-                  yampiBase,
-                  yampiHeaders,
-                  `/catalog/products/${yampiProductId}/stocks/sync`,
-                  "POST",
-                  {
-                    data: [{
-                      id: yampiSkuId,
-                      sku: variantSku,
-                      total_in_stock: variant.stock_quantity,
-                      blocked_sale: false,
-                    }],
-                  }
-                );
+                await yampiRequest(yampiBase, yampiHeaders, `/catalog/products/${yampiProductId}/stocks/sync`, "POST", {
+                  data: [{
+                    id: yampiSkuId,
+                    sku: variantSku,
+                    total_in_stock: variant.stock_quantity,
+                    blocked_sale: false,
+                  }],
+                });
               }
             } else {
               // UPDATE existing SKU on Yampi
@@ -261,58 +393,40 @@ Deno.serve(async (req) => {
                 price_sale: unitPrice,
                 blocked_sale: false,
                 quantity_managed: true,
+                weight: Number(product.weight) || 0.3,
+                height: Number(product.height) || 5,
+                width: Number(product.width) || 15,
+                length: Number(product.depth) || 20,
               };
 
-              const res = await yampiRequest(
-                yampiBase,
-                yampiHeaders,
-                `/catalog/skus/${variant.yampi_sku_id}`,
-                "PUT",
-                updatePayload
-              );
+              const res = await yampiRequest(yampiBase, yampiHeaders, `/catalog/skus/${variant.yampi_sku_id}`, "PUT", updatePayload);
 
               if (!res.ok) {
-                const msg = res.data?.message || res.data?.errors || JSON.stringify(res.data);
                 counters.errors.push({
                   product_id: product.id,
                   variant_id: variant.id,
-                  message: `Update SKU: ${res.status} - ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`,
+                  message: `Update SKU: ${res.status}`,
+                  response_body: res.data,
+                  sent_payload: sanitizePayloadForLog(updatePayload),
                 });
                 counters.errors_count++;
                 continue;
               }
 
               // Sync stock
-              await yampiRequest(
-                yampiBase,
-                yampiHeaders,
-                `/catalog/products/${yampiProductId}/stocks/sync`,
-                "POST",
-                {
-                  data: [{
-                    id: variant.yampi_sku_id,
-                    sku: variantSku,
-                    total_in_stock: variant.stock_quantity,
-                    blocked_sale: false,
-                  }],
-                }
-              );
-
-              // Update images
-              if (imageUrls.length > 0) {
-                await yampiRequest(
-                  yampiBase,
-                  yampiHeaders,
-                  `/catalog/skus/${variant.yampi_sku_id}/images`,
-                  "POST",
-                  { images: imageUrls, upload_option: "resize" }
-                );
-              }
+              await yampiRequest(yampiBase, yampiHeaders, `/catalog/products/${yampiProductId}/stocks/sync`, "POST", {
+                data: [{
+                  id: variant.yampi_sku_id,
+                  sku: variantSku,
+                  total_in_stock: variant.stock_quantity,
+                  blocked_sale: false,
+                }],
+              });
 
               counters.updated_skus++;
             }
 
-            // Small delay to respect rate limits (30 req/min for catalog)
+            // Rate limit delay
             await new Promise((r) => setTimeout(r, 2200));
           } catch (varErr: unknown) {
             counters.errors.push({
@@ -343,7 +457,7 @@ Deno.serve(async (req) => {
           updated_skus: counters.updated_skus,
           skipped_inactive: counters.skipped_inactive,
           errors_count: counters.errors_count,
-          error_details: counters.errors,
+          error_details: counters.errors.slice(0, 50),
           finished_at: new Date().toISOString(),
         })
         .eq("id", syncRun.id);
@@ -353,18 +467,19 @@ Deno.serve(async (req) => {
     await supabase.from("integrations_checkout_test_logs").insert({
       provider: "yampi",
       status: counters.errors_count > 0 ? "error" : "success",
-      message: `Sync catálogo: ${counters.created_products} produtos criados, ${counters.created_skus} SKUs criados, ${counters.updated_skus} SKUs atualizados, ${counters.skipped_inactive} inativos ignorados, ${counters.errors_count} erros`,
+      message: `Sync catálogo: ${counters.created_products} produtos, ${counters.created_skus} SKUs criados, ${counters.updated_skus} atualizados, ${counters.skipped_inactive} inativos, ${counters.errors_count} erros`,
       payload_preview: {
         created_products: counters.created_products,
         created_skus: counters.created_skus,
         updated_skus: counters.updated_skus,
         skipped_inactive: counters.skipped_inactive,
         errors_count: counters.errors_count,
-        first_errors: counters.errors.slice(0, 5),
+        brand_id_used: brandId,
+        first_errors: counters.errors.slice(0, 10),
       },
     });
 
-    const result = {
+    return new Response(JSON.stringify({
       created_products: counters.created_products,
       created_skus: counters.created_skus,
       updated_skus: counters.updated_skus,
@@ -372,13 +487,12 @@ Deno.serve(async (req) => {
       errors_count: counters.errors_count,
       errors: counters.errors.slice(0, 20),
       sync_run_id: syncRun?.id,
-    };
-
-    return new Response(JSON.stringify(result), {
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";
+    console.error("[YAMPI-CATALOG-SYNC] Fatal error:", msg);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

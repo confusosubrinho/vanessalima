@@ -117,6 +117,8 @@ export default function CheckoutSettings() {
 
   const [yampiForm, setYampiForm] = useState<Record<string, string>>({});
 
+  const [errorDetailModal, setErrorDetailModal] = useState<unknown>(null);
+
   const openYampiModal = () => {
     setYampiForm({
       alias: (yampiConfig.alias as string) || "",
@@ -128,6 +130,7 @@ export default function CheckoutSettings() {
       mode: (yampiConfig.mode as string) || "redirect",
       sync_enabled: String(yampiConfig.sync_enabled ?? true),
       stock_mode: (yampiConfig.stock_mode as string) || "reserve",
+      default_brand_id: String(yampiConfig.default_brand_id || ""),
     });
     setShowYampiModal(true);
   };
@@ -161,6 +164,7 @@ export default function CheckoutSettings() {
         mode: yampiForm.mode,
         sync_enabled: yampiForm.sync_enabled === "true",
         stock_mode: yampiForm.stock_mode,
+        default_brand_id: yampiForm.default_brand_id ? Number(yampiForm.default_brand_id) : null,
       };
       const { error } = await supabase
         .from("integrations_checkout_providers")
@@ -450,14 +454,33 @@ export default function CheckoutSettings() {
                 </Badge>
               </div>
               {(lastSyncRun as any).errors_count > 0 && (lastSyncRun as any).error_details && (
-                <div className="border rounded p-2 max-h-32 overflow-y-auto">
+                <div className="border rounded p-2 max-h-48 overflow-y-auto">
                   <p className="text-xs font-medium mb-1 flex items-center gap-1">
                     <XCircle className="h-3 w-3 text-destructive" /> Erros recentes
                   </p>
                   {((lastSyncRun as any).error_details as any[]).slice(0, 10).map((err: any, i: number) => (
-                    <div key={i} className="text-[10px] border-b py-1 last:border-0">
-                      <span className="font-mono text-muted-foreground">{err.product_id?.slice(0, 8)}...</span>{" "}
-                      {err.message}
+                    <div key={i} className="text-[10px] border-b py-1 last:border-0 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span>
+                          <span className="font-mono text-muted-foreground">{err.product_id?.slice(0, 8)}...</span>{" "}
+                          {err.message}
+                        </span>
+                        {(err.response_body || err.sent_payload) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 text-[9px] px-1"
+                            onClick={() => setErrorDetailModal(err)}
+                          >
+                            Ver detalhes
+                          </Button>
+                        )}
+                      </div>
+                      {err.response_body && (
+                        <pre className="text-[9px] bg-muted/50 p-1 rounded overflow-x-auto max-h-16">
+                          {JSON.stringify(err.response_body, null, 2)}
+                        </pre>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -631,6 +654,20 @@ export default function CheckoutSettings() {
             <Separator />
 
             <div className="space-y-1">
+              <Label className="text-xs">Brand ID padrão (Yampi)</Label>
+              <Input
+                value={yampiForm.default_brand_id || ""}
+                onChange={(e) => setYampiForm((p) => ({ ...p, default_brand_id: e.target.value }))}
+                placeholder="Deixe vazio para auto-detectar"
+                className="text-xs h-8"
+                type="number"
+              />
+              <p className="text-[10px] text-muted-foreground">ID da marca na Yampi. Se vazio, será buscado/criado automaticamente.</p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-1">
               <Label className="text-xs">Template do Nome do Checkout</Label>
               <Input
                 value={yampiForm.checkout_name_template || ""}
@@ -719,6 +756,38 @@ export default function CheckoutSettings() {
               Salvar Configuração
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Error Detail Modal */}
+      <Dialog open={!!errorDetailModal} onOpenChange={() => setErrorDetailModal(null)}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Detalhes do Erro</DialogTitle>
+          </DialogHeader>
+          {errorDetailModal && (
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1">Mensagem</p>
+                <p className="text-xs">{(errorDetailModal as any).message}</p>
+              </div>
+              {(errorDetailModal as any).response_body && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Resposta da Yampi</p>
+                  <pre className="text-[10px] bg-muted p-2 rounded overflow-x-auto max-h-40">
+                    {JSON.stringify((errorDetailModal as any).response_body, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {(errorDetailModal as any).sent_payload && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Payload Enviado</p>
+                  <pre className="text-[10px] bg-muted p-2 rounded overflow-x-auto max-h-40">
+                    {JSON.stringify((errorDetailModal as any).sent_payload, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
