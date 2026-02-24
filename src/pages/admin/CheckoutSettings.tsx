@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   CreditCard, Settings2, Check, AlertCircle, Loader2, RefreshCw,
   Eye, EyeOff, Save, Plug, ShoppingCart, Package, Activity, Clock,
-  AlertTriangle, ExternalLink
+  AlertTriangle, ExternalLink, Upload, Database, CheckCircle2, XCircle
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ export default function CheckoutSettings() {
   const [showYampiModal, setShowYampiModal] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "";
 
   // Queries
@@ -90,6 +91,19 @@ export default function CheckoutSettings() {
         .from("orders")
         .select("id, order_number, status, created_at, total_amount, provider")
         .eq("provider", "yampi")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const { data: lastSyncRun, refetch: refetchSyncRun } = useQuery({
+    queryKey: ["last-catalog-sync-run"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("catalog_sync_runs")
+        .select("*")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -178,6 +192,29 @@ export default function CheckoutSettings() {
       toast({ title: "Erro no teste", description: (err as Error).message, variant: "destructive" });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const syncCatalog = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("yampi-catalog-sync", {
+        body: { only_active: true },
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["checkout-test-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["unmapped-yampi-products"] });
+      queryClient.invalidateQueries({ queryKey: ["unmapped-yampi-variants"] });
+      refetchSyncRun();
+      toast({
+        title: "Sincronização concluída!",
+        description: `${data?.created_products || 0} produtos criados, ${data?.created_skus || 0} SKUs criados, ${data?.updated_skus || 0} atualizados, ${data?.errors_count || 0} erros`,
+        variant: data?.errors_count > 0 ? "destructive" : "default",
+      });
+    } catch (err: unknown) {
+      toast({ title: "Erro na sincronização", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -353,6 +390,81 @@ export default function CheckoutSettings() {
                 </Button>
               </div>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Catalog Sync */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Sincronização de Catálogo
+              </CardTitle>
+              <CardDescription>Replica produtos ativos do seu site para a Yampi</CardDescription>
+            </div>
+            <Button
+              size="sm"
+              onClick={syncCatalog}
+              disabled={syncing}
+            >
+              {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
+              {syncing ? "Sincronizando..." : "Sincronizar catálogo (ativos)"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {lastSyncRun ? (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                <div className="text-center p-2 rounded border bg-muted/30">
+                  <p className="text-muted-foreground">Produtos criados</p>
+                  <p className="text-lg font-bold text-primary">{(lastSyncRun as any).created_products || 0}</p>
+                </div>
+                <div className="text-center p-2 rounded border bg-muted/30">
+                  <p className="text-muted-foreground">SKUs criados</p>
+                  <p className="text-lg font-bold text-primary">{(lastSyncRun as any).created_skus || 0}</p>
+                </div>
+                <div className="text-center p-2 rounded border bg-muted/30">
+                  <p className="text-muted-foreground">SKUs atualizados</p>
+                  <p className="text-lg font-bold">{(lastSyncRun as any).updated_skus || 0}</p>
+                </div>
+                <div className="text-center p-2 rounded border bg-muted/30">
+                  <p className="text-muted-foreground">Inativos ignorados</p>
+                  <p className="text-lg font-bold text-muted-foreground">{(lastSyncRun as any).skipped_inactive || 0}</p>
+                </div>
+                <div className="text-center p-2 rounded border bg-muted/30">
+                  <p className="text-muted-foreground">Erros</p>
+                  <p className={`text-lg font-bold ${(lastSyncRun as any).errors_count > 0 ? "text-destructive" : "text-primary"}`}>
+                    {(lastSyncRun as any).errors_count || 0}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                Último sync: {format(new Date((lastSyncRun as any).started_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                <Badge variant={(lastSyncRun as any).status === "success" ? "default" : "secondary"} className="text-[10px]">
+                  {(lastSyncRun as any).status}
+                </Badge>
+              </div>
+              {(lastSyncRun as any).errors_count > 0 && (lastSyncRun as any).error_details && (
+                <div className="border rounded p-2 max-h-32 overflow-y-auto">
+                  <p className="text-xs font-medium mb-1 flex items-center gap-1">
+                    <XCircle className="h-3 w-3 text-destructive" /> Erros recentes
+                  </p>
+                  {((lastSyncRun as any).error_details as any[]).slice(0, 10).map((err: any, i: number) => (
+                    <div key={i} className="text-[10px] border-b py-1 last:border-0">
+                      <span className="font-mono text-muted-foreground">{err.product_id?.slice(0, 8)}...</span>{" "}
+                      {err.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">Nenhuma sincronização realizada ainda. Clique em "Sincronizar catálogo" para iniciar.</p>
           )}
         </CardContent>
       </Card>
