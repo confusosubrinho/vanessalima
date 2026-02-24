@@ -1067,6 +1067,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
                   ))}
                 </div>
 
+              </Tabs>
               <div className="flex justify-end gap-2 p-6 pt-4 border-t">
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                   Cancelar
