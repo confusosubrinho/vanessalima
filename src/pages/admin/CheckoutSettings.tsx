@@ -206,7 +206,7 @@ export default function CheckoutSettings() {
   const syncCatalog = async () => {
     setSyncing(true);
     setSyncProgress("Iniciando...");
-    const BATCH_SIZE = 10;
+    const BATCH_SIZE = 3;
     let offset = 0;
     let syncRunId: string | null = null;
     let totalCreated = 0, totalSkus = 0, totalUpdated = 0, totalErrors = 0;

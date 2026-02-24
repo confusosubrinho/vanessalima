@@ -53,17 +53,17 @@ async function uploadImagesToSku(
   skuId: number,
   imageUrls: string[]
 ) {
-  // Only upload first 3 images to save time; skip on any error
-  for (const url of imageUrls.slice(0, 3)) {
-    const res = await yampiRequest(yampiBase, yampiHeaders, `/catalog/skus/${skuId}/images`, "POST", {
-      url,
-      upload_option: "resize",
-    });
-    if (!res.ok) {
-      console.log(`[YAMPI] Image upload failed for SKU ${skuId}, skipping remaining images`);
-      break; // Don't waste time on more images if first one fails
-    }
-    await delay(500);
+  // Send only ONE image per product/SKU as requested
+  const firstImage = imageUrls.find((url) => typeof url === "string" && url.startsWith("http"));
+  if (!firstImage) return;
+
+  const res = await yampiRequest(yampiBase, yampiHeaders, `/catalog/skus/${skuId}/images`, "POST", {
+    url: firstImage,
+    upload_option: "resize",
+  });
+
+  if (!res.ok) {
+    console.log(`[YAMPI] Image upload failed for SKU ${skuId}`);
   }
 }
 
@@ -233,6 +233,7 @@ Deno.serve(async (req) => {
         const imageUrls = (images || [])
           .filter((img) => img.url && img.url.startsWith("http"))
           .map((img) => img.url);
+        let imageUploadedForProduct = false;
 
         // ─── Category from Yampi mapping ───
         const category = product.categories as Record<string, unknown> | null;
@@ -337,15 +338,18 @@ Deno.serve(async (req) => {
             const productData = res.data?.data as Record<string, unknown>;
             const skusData = productData?.skus as Record<string, unknown>;
             const skusList = (skusData?.data || []) as Array<Record<string, unknown>>;
-            if (skusList.length > 0) {
-              const yampiSkuId = Number(skusList[0].id);
-              await supabase.from("product_variants").update({ yampi_sku_id: yampiSkuId }).eq("id", activeVariants[0].id);
-              counters.created_skus++;
-              await uploadImagesToSku(yampiBase, yampiHeaders, yampiSkuId, imageUrls);
-            }
+              if (skusList.length > 0) {
+                const yampiSkuId = Number(skusList[0].id);
+                await supabase.from("product_variants").update({ yampi_sku_id: yampiSkuId }).eq("id", activeVariants[0].id);
+                counters.created_skus++;
+                if (!imageUploadedForProduct) {
+                  await uploadImagesToSku(yampiBase, yampiHeaders, yampiSkuId, imageUrls);
+                  imageUploadedForProduct = true;
+                }
+              }
           }
 
-          await delay(1500);
+          await delay(350);
         }
 
         // ─── STEP 2: Create/Update SKUs for products with variations ───
@@ -405,7 +409,10 @@ Deno.serve(async (req) => {
                 const yampiSkuId = (res.data?.data as Record<string, unknown>)?.id as number || res.data?.id as number;
                 if (yampiSkuId) {
                   await supabase.from("product_variants").update({ yampi_sku_id: Number(yampiSkuId) }).eq("id", variant.id);
-                  await uploadImagesToSku(yampiBase, yampiHeaders, Number(yampiSkuId), imageUrls);
+                  if (!imageUploadedForProduct) {
+                    await uploadImagesToSku(yampiBase, yampiHeaders, Number(yampiSkuId), imageUrls);
+                    imageUploadedForProduct = true;
+                  }
                 }
                 counters.created_skus++;
               } else {
@@ -441,7 +448,7 @@ Deno.serve(async (req) => {
                 counters.updated_skus++;
               }
 
-              await delay(1200);
+              await delay(350);
             } catch (varErr: unknown) {
               counters.errors.push({
                 product_id: product.id, variant_id: variant.id,
