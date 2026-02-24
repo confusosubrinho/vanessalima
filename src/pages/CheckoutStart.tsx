@@ -36,6 +36,8 @@ export default function CheckoutStart() {
         if (fnError) throw new Error(fnError.message);
         if (data?.error) throw new Error(data.error);
 
+        // No order is created at this point - only abandoned cart
+        // Order will be created by webhook when payment is confirmed
         if (data?.redirect_url) {
           if (data.redirect_url.startsWith("http")) {
             window.location.href = data.redirect_url;
