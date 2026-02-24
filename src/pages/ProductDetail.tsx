@@ -11,7 +11,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { useFavorites } from '@/hooks/useFavorites';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
-import { getInstallmentOptions, getPixPrice, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
+import { getInstallmentOptions, getPixDiscountAmount, shouldApplyPixDiscount, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { ShippingCalculator } from '@/components/store/ShippingCalculator';
 import { ProductCarousel } from '@/components/store/ProductCarousel';
 import { ProductReviews } from '@/components/store/ProductReviews';
@@ -104,6 +104,9 @@ export default function ProductDetail() {
   }, []);
 
   const pixDiscountPercent = pricingConfig?.pix_discount ?? storeSettings?.pix_discount ?? 5;
+  const hasProductSale = hasDiscount;
+  const applyPix = pricingConfig ? shouldApplyPixDiscount(pricingConfig, hasProductSale) : true;
+  const pixDiscountAmount = pricingConfig ? getPixDiscountAmount(currentPrice, pricingConfig, hasProductSale) : (applyPix ? currentPrice * (pixDiscountPercent / 100) : 0);
 
   // Fetch buy together products configured for this product
   const { data: buyTogetherProducts } = useQuery({
@@ -406,8 +409,15 @@ export default function ProductDetail() {
           <div className="space-y-4">
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium text-primary mb-2">PIX</h4>
-              <p className="text-2xl font-bold">{pricingConfig ? formatCurrency(getPixPrice(currentPrice, pricingConfig)) : formatPrice(currentPrice * (1 - pixDiscountPercent / 100))}</p>
-              <p className="text-sm text-muted-foreground">À vista com {pixDiscountPercent}% de desconto</p>
+              <p className="text-2xl font-bold">{formatPrice(currentPrice)}</p>
+              {applyPix && pixDiscountAmount > 0 ? (
+                <>
+                  <p className="text-sm text-muted-foreground">Desconto PIX: {formatPrice(pixDiscountAmount)}</p>
+                  <p className="text-sm text-muted-foreground">À vista com {pixDiscountPercent}% de desconto no PIX</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">À vista no PIX</p>
+              )}
             </div>
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium mb-2">Cartão de Crédito</h4>
@@ -606,9 +616,16 @@ export default function ProductDetail() {
                 <p className="text-muted-foreground line-through text-lg">{formatPrice(Number(product.base_price))}</p>
               )}
               <p className="text-2xl sm:text-3xl font-bold text-primary">
-                {pricingConfig ? formatCurrency(getPixPrice(currentPrice, pricingConfig)) : formatPrice(currentPrice * (1 - pixDiscountPercent / 100))}
+                {formatPrice(currentPrice)}
               </p>
-              <p className="text-sm text-muted-foreground">no Pix ({pixDiscountPercent}% off)</p>
+              {applyPix && pixDiscountAmount > 0 ? (
+                <>
+                  <p className="text-sm text-muted-foreground">Desconto PIX: {formatPrice(pixDiscountAmount)}</p>
+                  <p className="text-sm text-muted-foreground">no Pix ({pixDiscountPercent}% off)</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">no Pix</p>
+              )}
               {installmentDisplay && (
                 <>
                   <p className="text-muted-foreground font-medium">{installmentDisplay.primaryText}</p>
@@ -623,7 +640,7 @@ export default function ProductDetail() {
                 installmentsWithoutInterest={pricingConfig?.interest_free_installments ?? 3}
                 installmentInterestRate={pricingConfig?.monthly_rate_fixed ?? 0}
                 minInstallmentValue={pricingConfig?.min_installment_value ?? 25}
-                pixDiscount={pixDiscountPercent}
+                pixDiscount={applyPix ? pixDiscountPercent : 0}
               />
             </div>
 

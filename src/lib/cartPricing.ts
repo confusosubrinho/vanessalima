@@ -17,3 +17,12 @@ export function getCartItemTotalPrice(item: CartItem): number {
   return getCartItemUnitPrice(item) * item.quantity;
 }
 
+/** True if this item is considered "on sale" (sale_price < base_price at variant or product level). */
+export function hasSaleDiscount(item: CartItem): boolean {
+  const v = item.variant;
+  const p = item.product;
+  if (v.sale_price != null && v.base_price != null && Number(v.sale_price) < Number(v.base_price)) return true;
+  if (p.sale_price != null && p.base_price != null && Number(p.sale_price) < Number(p.base_price)) return true;
+  return false;
+}
+

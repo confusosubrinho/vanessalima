@@ -101,6 +101,7 @@ Deno.serve(async (req) => {
         min_installment_value: Number(pricingConfig?.min_installment_value) || 30,
         pix_discount: Number(pricingConfig?.pix_discount) || 0,
         cash_discount: Number(pricingConfig?.cash_discount) || 0,
+        pix_discount_applies_to_sale_products: pricingConfig?.pix_discount_applies_to_sale_products !== false,
         card_cash_rate: Number(pricingConfig?.card_cash_rate) || 0,
         rounding_mode: pricingConfig?.rounding_mode || "adjust_last",
         transparent_checkout_fee_enabled: pricingConfig?.transparent_checkout_fee_enabled ?? false,
@@ -228,6 +229,8 @@ Deno.serve(async (req) => {
 
       // ── BUG #3: Server-side price validation ──
       let serverSubtotal = 0;
+      let serverSubtotalFull = 0;
+      let serverSubtotalSale = 0;
       const priceErrors: string[] = [];
 
       for (const product of products) {
@@ -263,7 +266,14 @@ Deno.serve(async (req) => {
           realUnitPrice = productPrice + Number(variantData.price_modifier || 0);
         }
 
-        serverSubtotal += realUnitPrice * (product.quantity || 1);
+        const lineTotal = realUnitPrice * (product.quantity || 1);
+        serverSubtotal += lineTotal;
+
+        const isSale =
+          (variantData.sale_price != null && variantData.base_price != null && Number(variantData.sale_price) < Number(variantData.base_price)) ||
+          (productData.sale_price != null && productData.base_price != null && Number(productData.sale_price) < Number(productData.base_price));
+        if (isSale) serverSubtotalSale += lineTotal;
+        else serverSubtotalFull += lineTotal;
       }
 
       if (priceErrors.length > 0) {
@@ -272,13 +282,27 @@ Deno.serve(async (req) => {
 
       // Calculate server total
       const serverDiscount = validatedCouponId ? validatedDiscount : 0;
-      const clientShippingCost = Math.max(0, amount - (serverSubtotal - serverDiscount));
       let serverTotal: number;
+      let clientShippingCost: number;
 
       if (payment_method === "pix") {
         const pixDiscountPct = Number(pricingConfig?.pix_discount || 0) / 100;
-        serverTotal = (serverSubtotal - serverDiscount) * (1 - pixDiscountPct) + clientShippingCost;
+        const applyPixToSale = pricingConfig?.pix_discount_applies_to_sale_products !== false;
+        let productTotalAfterPix: number;
+        if (!applyPixToSale && serverSubtotal > 0) {
+          const afterCoupon = serverSubtotal - serverDiscount;
+          const ratioFull = serverSubtotalFull / serverSubtotal;
+          const ratioSale = serverSubtotalSale / serverSubtotal;
+          const fullPart = afterCoupon * ratioFull;
+          const salePart = afterCoupon * ratioSale;
+          productTotalAfterPix = fullPart * (1 - pixDiscountPct) + salePart;
+        } else {
+          productTotalAfterPix = (serverSubtotal - serverDiscount) * (1 - pixDiscountPct);
+        }
+        clientShippingCost = Math.max(0, amount - productTotalAfterPix);
+        serverTotal = productTotalAfterPix + clientShippingCost;
       } else {
+        clientShippingCost = Math.max(0, amount - (serverSubtotal - serverDiscount));
         serverTotal = serverSubtotal - serverDiscount + clientShippingCost;
       }
 

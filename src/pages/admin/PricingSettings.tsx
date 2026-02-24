@@ -43,6 +43,7 @@ export default function PricingSettings() {
     card_cash_rate: 0,
     pix_discount: 5,
     cash_discount: 5,
+    pix_discount_applies_to_sale_products: true,
     interest_mode: 'fixed' as 'fixed' | 'by_installment',
     monthly_rate_fixed: 0,
     min_installment_value: 25,
@@ -67,6 +68,7 @@ export default function PricingSettings() {
         card_cash_rate: Number(config.card_cash_rate) || 0,
         pix_discount: Number(config.pix_discount) || 5,
         cash_discount: Number(config.cash_discount) || 5,
+        pix_discount_applies_to_sale_products: config.pix_discount_applies_to_sale_products !== false,
         interest_mode: config.interest_mode || 'fixed',
         monthly_rate_fixed: Number(config.monthly_rate_fixed) || 0,
         min_installment_value: Number(config.min_installment_value) || 25,
@@ -194,6 +196,16 @@ export default function PricingSettings() {
                     onChange={e => setForm(f => ({ ...f, cash_discount: parseFloat(e.target.value) || 0 }))}
                   />
                 </div>
+              </div>
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <div>
+                  <Label className="text-sm font-medium">Aplicar desconto PIX em produtos em promoção</Label>
+                  <p className="text-xs text-muted-foreground">Se desligado, o desconto PIX não será aplicado a produtos que já tenham preço promocional (sale_price).</p>
+                </div>
+                <Switch
+                  checked={form.pix_discount_applies_to_sale_products}
+                  onCheckedChange={v => setForm(f => ({ ...f, pix_discount_applies_to_sale_products: v }))}
+                />
               </div>
             </CardContent>
           </Card>

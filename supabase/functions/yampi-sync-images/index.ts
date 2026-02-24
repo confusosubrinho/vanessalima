@@ -61,6 +61,30 @@ function ensurePublicUrl(url: string): string {
   return url;
 }
 
+/**
+ * Prefer HTTPS so Yampi (and other APIs that require public URIs) accept the URL.
+ */
+function ensureHttps(url: string): string {
+  if (!url || !url.startsWith("http://")) return url;
+  try {
+    const u = new URL(url);
+    if (u.protocol === "http:") return `https://${u.host}${u.pathname}${u.search}`;
+  } catch { /* ignore */ }
+  return url;
+}
+
+/**
+ * Check if the image URL is reachable (Yampi will fetch it; if we get non-200, they often return "URL inválida").
+ */
+async function checkUrlReachable(url: string): Promise<{ ok: boolean; status: number }> {
+  try {
+    const res = await fetch(url, { method: "HEAD", redirect: "follow" });
+    return { ok: res.status === 200, status: res.status };
+  } catch {
+    return { ok: false, status: 0 };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -171,6 +195,7 @@ Deno.serve(async (req) => {
 
       // Ensure public stable URL
       imageUrl = ensurePublicUrl(imageUrl);
+      imageUrl = ensureHttps(imageUrl);
 
       // If WebP, try JPG fallback
       let urlToSend = imageUrl;
@@ -183,6 +208,26 @@ Deno.serve(async (req) => {
             console.log(`[YAMPI-IMG] WebP→JPG fallback: ${jpgUrl}`);
           }
         } catch { /* keep webp */ }
+      }
+
+      // Yampi fetches the URL; if it's not reachable (non-200), they return "URL inválida". Pre-validate.
+      const reach = await checkUrlReachable(urlToSend);
+      if (!reach.ok) {
+        skipped++;
+        const errMsg = reach.status
+          ? `URL inacessível (HTTP ${reach.status}) – Yampi rejeitaria como inválida`
+          : "URL inacessível (falha ao conectar)";
+        logs.push({
+          sku_id: item.yampi_sku_id,
+          product_id: item.product_id,
+          product_name: item.product_name,
+          source_url: urlToSend,
+          yampi_returned_url: null,
+          head_status: reach.status,
+          status: "skipped",
+          error: errMsg,
+        });
+        continue;
       }
 
       // POST image to Yampi

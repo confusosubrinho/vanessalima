@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Trash2, Settings2, Wand2, Bell } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Trash2, Settings2, Wand2, Bell, Palette } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { StockNotifyList } from './StockNotifyList';
@@ -9,8 +9,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { ColorWheelPicker } from './ColorWheelPicker';
+import { getClosestColorName } from '@/lib/colorUtils';
 
 export interface VariantItem {
   id?: string;
@@ -46,19 +53,61 @@ interface ProductVariantsManagerProps {
 }
 
 const COMMON_SIZES = ['33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', 'PP', 'P', 'M', 'G', 'GG', 'XG', 'Único'];
-const COMMON_COLORS = [
+const COMMON_COLORS: { name: string; hex: string }[] = [
   { name: 'Preto', hex: '#000000' },
   { name: 'Branco', hex: '#FFFFFF' },
+  { name: 'Cinza', hex: '#6B7280' },
+  { name: 'Cinza Escuro', hex: '#374151' },
+  { name: 'Grafite', hex: '#1F2937' },
+  { name: 'Off-White', hex: '#FAFAF9' },
+  { name: 'Creme', hex: '#FFFDD0' },
+  { name: 'Marfim', hex: '#FFFFF0' },
   { name: 'Vermelho', hex: '#EF4444' },
-  { name: 'Azul', hex: '#3B82F6' },
+  { name: 'Vermelho Escuro', hex: '#B91C1C' },
+  { name: 'Bordô', hex: '#722F37' },
+  { name: 'Vinho', hex: '#6B2D3C' },
+  { name: 'Coral', hex: '#FF7F50' },
+  { name: 'Salmão', hex: '#FA8072' },
   { name: 'Rosa', hex: '#EC4899' },
+  { name: 'Rosa Claro', hex: '#F9A8D4' },
+  { name: 'Rosa Pink', hex: '#FF69B4' },
+  { name: 'Rosa Choque', hex: '#FF1493' },
+  { name: 'Azul', hex: '#3B82F6' },
+  { name: 'Azul Marinho', hex: '#1E3A5F' },
+  { name: 'Azul Claro', hex: '#93C5FD' },
+  { name: 'Azul Petróleo', hex: '#0D9488' },
+  { name: 'Verde', hex: '#22C55E' },
+  { name: 'Verde Escuro', hex: '#166534' },
+  { name: 'Verde Lima', hex: '#84CC16' },
+  { name: 'Verde Militar', hex: '#4D5D23' },
+  { name: 'Oliva', hex: '#808000' },
+  { name: 'Amarelo', hex: '#EAB308' },
+  { name: 'Mostarda', hex: '#CA8A04' },
+  { name: 'Dourado', hex: '#FFD700' },
+  { name: 'Bronze', hex: '#CD7F32' },
+  { name: 'Cobre', hex: '#B87333' },
+  { name: 'Prata', hex: '#C0C0C0' },
+  { name: 'Champanhe', hex: '#F7E7CE' },
   { name: 'Nude', hex: '#D4A574' },
+  { name: 'Nude Claro', hex: '#E8C9A8' },
+  { name: 'Nude Escuro', hex: '#C4956A' },
+  { name: 'Bege', hex: '#F5F5DC' },
+  { name: 'Bege Areia', hex: '#E8DCC4' },
   { name: 'Caramelo', hex: '#C68642' },
   { name: 'Marrom', hex: '#8B4513' },
-  { name: 'Dourado', hex: '#FFD700' },
-  { name: 'Prata', hex: '#C0C0C0' },
-  { name: 'Verde', hex: '#22C55E' },
-  { name: 'Bege', hex: '#F5F5DC' },
+  { name: 'Marrom Claro', hex: '#A0522D' },
+  { name: 'Chocolate', hex: '#5C4033' },
+  { name: 'Taupe', hex: '#483C32' },
+  { name: 'Camel', hex: '#C19A6B' },
+  { name: 'Laranja', hex: '#F97316' },
+  { name: 'Terracota', hex: '#C4722B' },
+  { name: 'Lilás', hex: '#C084FC' },
+  { name: 'Lavanda', hex: '#A78BFA' },
+  { name: 'Roxo', hex: '#9333EA' },
+  { name: 'Roxo Escuro', hex: '#581C87' },
+  { name: 'Índigo', hex: '#4F46E5' },
+  { name: 'Turquesa', hex: '#2DD4BF' },
+  { name: 'Menta', hex: '#99F6E4' },
 ];
 
 function generateSku(parentSku: string, size: string, color: string): string {
@@ -88,6 +137,9 @@ export function ProductVariantsManager({
   const [bulkColorHex, setBulkColorHex] = useState('');
   const [bulkStock, setBulkStock] = useState('10');
   const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [customColors, setCustomColors] = useState<{ name: string; hex: string }[]>([]);
+
+  const allColors = useMemo(() => [...COMMON_COLORS, ...customColors], [customColors]);
 
   const checkDuplicateSku = (sku: string, excludeIndex?: number): boolean => {
     return variants.some((v, i) => i !== excludeIndex && v.sku === sku && sku !== '');
@@ -156,7 +208,7 @@ export function ProductVariantsManager({
   };
 
   const handleColorSelect = (index: number, colorName: string) => {
-    const color = COMMON_COLORS.find(c => c.name === colorName);
+    const color = allColors.find(c => c.name === colorName);
     if (color) {
       const updated = [...variants];
       updated[index] = {
@@ -167,6 +219,34 @@ export function ProductVariantsManager({
       };
       onChange(updated);
     }
+  };
+
+  const addCustomColorAndAssign = (name: string, hex: string, assignToEditIndex: number | null) => {
+    const trimmed = name.trim();
+    if (!trimmed || !hex) {
+      toast({ title: 'Preencha nome e cor', variant: 'destructive' });
+      return;
+    }
+    if (allColors.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      toast({ title: 'Já existe uma cor com esse nome', variant: 'destructive' });
+      return;
+    }
+    const newColor = { name: trimmed, hex: hex.startsWith('#') ? hex : `#${hex}` };
+    setCustomColors(prev => [...prev, newColor]);
+    if (assignToEditIndex !== null) {
+      const updated = [...variants];
+      updated[assignToEditIndex] = {
+        ...updated[assignToEditIndex],
+        color: newColor.name,
+        color_hex: newColor.hex,
+        sku: generateSku(parentSku, updated[assignToEditIndex].size, newColor.name),
+      };
+      onChange(updated);
+    } else {
+      setBulkColor(newColor.name);
+      setBulkColorHex(newColor.hex);
+    }
+    toast({ title: `Cor "${newColor.name}" adicionada` });
   };
 
   const handleBulkAdd = () => {
@@ -246,25 +326,37 @@ export function ProductVariantsManager({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs">Cor</Label>
-              <Select value={bulkColor} onValueChange={(val) => {
-                setBulkColor(val);
-                const c = COMMON_COLORS.find(c => c.name === val);
-                if (c) setBulkColorHex(c.hex);
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Opcional" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMMON_COLORS.map(c => (
-                    <SelectItem key={c.name} value={c.name}>
-                      <span className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: c.hex }} />
-                        {c.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-1">
+                <Select value={bulkColor} onValueChange={(val) => {
+                  setBulkColor(val);
+                  const c = allColors.find(c => c.name === val);
+                  if (c) setBulkColorHex(c.hex);
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Opcional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allColors.map(c => (
+                      <SelectItem key={c.name} value={c.name}>
+                        <span className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: c.hex }} />
+                          {c.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" size="icon" title="Adicionar cor personalizada">
+                      <Palette className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] max-h-[90vh] overflow-y-auto" align="start">
+                    <AddCustomColorForm onAdd={(name, hex) => addCustomColorAndAssign(name, hex, null)} />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
             <div>
               <Label className="text-xs">Estoque por variante</Label>
@@ -389,21 +481,37 @@ export function ProductVariantsManager({
               {/* Color on its own row */}
               <div>
                 <Label className="text-xs">Cor</Label>
-                <Select value={editingVariant.color || ''} onValueChange={(val) => handleColorSelect(editIndex, val)}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Selecione a cor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COMMON_COLORS.map(c => (
-                      <SelectItem key={c.name} value={c.name}>
-                        <span className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: c.hex }} />
-                          {c.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1">
+                  <Select value={editingVariant.color || ''} onValueChange={(val) => handleColorSelect(editIndex, val)}>
+                    <SelectTrigger className="h-9 flex-1">
+                      <SelectValue placeholder="Selecione a cor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allColors.map(c => (
+                        <SelectItem key={c.name} value={c.name}>
+                          <span className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: c.hex }} />
+                            {c.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0" title="Adicionar cor personalizada">
+                        <Palette className="h-4 w-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] max-h-[90vh] overflow-y-auto" align="start">
+                      <AddCustomColorForm
+                        onAdd={(name, hex) => {
+                          addCustomColorAndAssign(name, hex, editIndex);
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -538,6 +646,61 @@ export function ProductVariantsManager({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function AddCustomColorForm({ onAdd }: { onAdd: (name: string, hex: string) => void }) {
+  const [name, setName] = useState('');
+  const [hex, setHex] = useState('#E6E6FA');
+
+  const suggestedName = getClosestColorName(hex);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalName = name.trim() || suggestedName || hex;
+    onAdd(finalName, hex);
+    setName('');
+    setHex('#E6E6FA');
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 p-1">
+      <div>
+        <Label className="text-xs">Nome da cor</Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={suggestedName ? `Ex: ${suggestedName}` : 'Ex: Verde água'}
+          className="h-9 mt-1"
+        />
+        {suggestedName && !name && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">Sugestão: {suggestedName}</p>
+        )}
+      </div>
+      <div>
+        <Label className="text-xs mb-2 block">Escolha a cor (roda + luminosidade)</Label>
+        <ColorWheelPicker
+          value={hex}
+          onChange={(h) => setHex(h)}
+          size={180}
+          showName={true}
+          className="mx-auto"
+        />
+      </div>
+      <div>
+        <Label className="text-xs">Ou digite o hex</Label>
+        <Input
+          value={hex}
+          onChange={(e) => setHex(e.target.value.startsWith('#') ? e.target.value : '#' + e.target.value)}
+          placeholder="#000000"
+          className="h-9 mt-1 font-mono text-sm"
+        />
+      </div>
+      <Button type="submit" size="sm" className="w-full">
+        <Plus className="h-3.5 w-3.5 mr-1" />
+        Adicionar cor
+      </Button>
+    </form>
   );
 }
 

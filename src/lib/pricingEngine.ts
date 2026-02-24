@@ -8,6 +8,8 @@ export interface PricingConfig {
   card_cash_rate: number;
   pix_discount: number;
   cash_discount: number;
+  /** When false, PIX discount is not applied to products that already have sale_price < base_price. */
+  pix_discount_applies_to_sale_products: boolean;
   interest_mode: 'fixed' | 'by_installment';
   monthly_rate_fixed: number;
   monthly_rate_by_installment: Record<string, number>;
@@ -45,6 +47,7 @@ const DEFAULT_CONFIG: PricingConfig = {
   card_cash_rate: 0,
   pix_discount: 5,
   cash_discount: 5,
+  pix_discount_applies_to_sale_products: true,
   interest_mode: 'fixed',
   monthly_rate_fixed: 0,
   monthly_rate_by_installment: {},
@@ -86,6 +89,7 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
     card_cash_rate: Number(d.card_cash_rate) || 0,
     pix_discount: Number(d.pix_discount) || 0,
     cash_discount: Number(d.cash_discount) || 0,
+    pix_discount_applies_to_sale_products: d.pix_discount_applies_to_sale_products !== false,
     interest_mode: d.interest_mode || 'fixed',
     monthly_rate_fixed: Number(d.monthly_rate_fixed) || 0,
     monthly_rate_by_installment: d.monthly_rate_by_installment || {},
@@ -292,6 +296,30 @@ export function getBestHighlight(price: number, config: PricingConfig): string {
  */
 export function getPixPrice(price: number, config: PricingConfig): number {
   return Math.round(price * (1 - config.pix_discount / 100) * 100) / 100;
+}
+
+/**
+ * Whether PIX discount should be applied for this product (considering "no PIX on sale" setting).
+ */
+export function shouldApplyPixDiscount(config: PricingConfig, hasProductSaleDiscount: boolean): boolean {
+  if (hasProductSaleDiscount && config.pix_discount_applies_to_sale_products === false) return false;
+  return true;
+}
+
+/**
+ * PIX price for display: applies discount only when config allows (e.g. not for products already on sale).
+ */
+export function getPixPriceForDisplay(price: number, config: PricingConfig, hasProductSaleDiscount: boolean): number {
+  if (!shouldApplyPixDiscount(config, hasProductSaleDiscount)) return price;
+  return getPixPrice(price, config);
+}
+
+/**
+ * PIX discount amount in BRL for a given price (0 when discount is not applied).
+ */
+export function getPixDiscountAmount(price: number, config: PricingConfig, hasProductSaleDiscount: boolean): number {
+  if (!shouldApplyPixDiscount(config, hasProductSaleDiscount)) return 0;
+  return Math.round(price * (config.pix_discount / 100) * 100) / 100;
 }
 
 /**

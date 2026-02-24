@@ -16,7 +16,7 @@ import { getInstallmentOptions, formatCurrency as formatPricingCurrency, type Pr
 import { HelpHint } from '@/components/HelpHint';
 import { CouponInput } from '@/components/store/CouponInput';
 import logo from '@/assets/logo.png';
-import { getCartItemUnitPrice } from '@/lib/cartPricing';
+import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
 
 type Step = 'identification' | 'shipping' | 'payment';
 
@@ -75,8 +75,8 @@ export default function Checkout() {
   const { data: pricingConfig } = usePricingConfig();
   const pc: PricingConfig = pricingConfig || {
     id: '', is_active: true, max_installments: 6, interest_free_installments: 3,
-    card_cash_rate: 0, pix_discount: 5, cash_discount: 5, interest_mode: 'fixed',
-    monthly_rate_fixed: 0, monthly_rate_by_installment: {}, min_installment_value: 25,
+    card_cash_rate: 0, pix_discount: 5, cash_discount: 5, pix_discount_applies_to_sale_products: true,
+    interest_mode: 'fixed', monthly_rate_fixed: 0, monthly_rate_by_installment: {}, min_installment_value: 25,
     rounding_mode: 'adjust_last', transparent_checkout_fee_enabled: false, transparent_checkout_fee_percent: 0,
     gateway_fee_1x_percent: 4.99, gateway_fee_additional_per_installment_percent: 2.49,
     gateway_fee_starts_at_installment: 2, gateway_fee_mode: 'linear_per_installment',
@@ -207,8 +207,37 @@ export default function Checkout() {
   // Use pricing engine for installments
   const shippingCost = selectedShipping ? selectedShipping.price : 0;
   const total = subtotal - discount + shippingCost;
-  const pixDiscount = pc.pix_discount / 100;
-  const finalTotal = formData.paymentMethod === 'pix' ? total * (1 - pixDiscount) : total;
+
+  // PIX total: when pix_discount_applies_to_sale_products is false, apply discount only to full-price items
+  let finalTotal: number;
+  if (formData.paymentMethod === 'pix') {
+    const applyPixToSale = pc.pix_discount_applies_to_sale_products;
+    if (!applyPixToSale) {
+      let subtotalFull = 0;
+      let subtotalSale = 0;
+      for (const item of items) {
+        const lineTotal = getCartItemUnitPrice(item) * item.quantity;
+        if (hasSaleDiscount(item)) subtotalSale += lineTotal;
+        else subtotalFull += lineTotal;
+      }
+      const subtotalAfterCoupon = Math.max(0, subtotal - discount);
+      const ratioFull = subtotal > 0 ? subtotalFull / subtotal : 0;
+      const ratioSale = subtotal > 0 ? subtotalSale / subtotal : 0;
+      const fullPart = subtotalAfterCoupon * ratioFull;
+      const salePart = subtotalAfterCoupon * ratioSale;
+      const pixDiscountPct = pc.pix_discount / 100;
+      finalTotal = fullPart * (1 - pixDiscountPct) + salePart + shippingCost;
+    } else {
+      const pixDiscountPct = pc.pix_discount / 100;
+      finalTotal = total * (1 - pixDiscountPct);
+    }
+  } else {
+    finalTotal = total;
+  }
+
+  const pixDiscountAmount = formData.paymentMethod === 'pix'
+    ? Math.max(0, total - finalTotal)
+    : 0;
 
   const installmentOptions = getInstallmentOptions(total, pc).map(opt => ({
     value: opt.n,
@@ -749,13 +778,22 @@ export default function Checkout() {
                     className="space-y-4"
                   >
                     <div className={`p-4 border rounded-lg cursor-pointer transition-colors ${formData.paymentMethod === 'pix' ? 'border-primary bg-primary/5' : 'hover:border-primary'}`}>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="pix" id="payment-pix" />
-                        <Label htmlFor="payment-pix" className="cursor-pointer flex-1">
-                          <span className="font-medium">PIX</span>
-                          <p className="text-sm text-muted-foreground">Pagamento instantâneo com {pc.pix_discount}% de desconto</p>
-                        </Label>
-                        <span className="font-bold text-primary">{formatPrice(total * (1 - pc.pix_discount / 100))}</span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-3">
+                          <RadioGroupItem value="pix" id="payment-pix" />
+                          <Label htmlFor="payment-pix" className="cursor-pointer flex-1">
+                            <span className="font-medium">PIX</span>
+                            <p className="text-sm text-muted-foreground">Pagamento instantâneo com {pc.pix_discount}% de desconto</p>
+                          </Label>
+                          <span className="font-bold text-primary">{formatPrice(finalTotal)}</span>
+                        </div>
+                        {pixDiscountAmount > 0 && (
+                          <div className="pl-7 text-sm text-muted-foreground">
+                            <span className="line-through">{formatPrice(total)}</span>
+                            <span className="ml-2">Desconto PIX: -{formatPrice(pixDiscountAmount)}</span>
+                            <span className="block text-xs">{pc.pix_discount}% off no PIX</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className={`p-4 border rounded-lg cursor-pointer transition-colors ${formData.paymentMethod === 'card' ? 'border-primary bg-primary/5' : 'hover:border-primary'}`}>
@@ -978,10 +1016,10 @@ export default function Checkout() {
                     {selectedShipping ? (shippingCost === 0 ? 'Grátis' : formatPrice(shippingCost)) : 'A calcular'}
                   </span>
                 </div>
-                {formData.paymentMethod === 'pix' && (
+                {formData.paymentMethod === 'pix' && pixDiscountAmount > 0 && (
                   <div className="flex justify-between text-sm text-primary">
                     <span>Desconto PIX ({pc.pix_discount}%)</span>
-                    <span>-{formatPrice(total * (pc.pix_discount / 100))}</span>
+                    <span>-{formatPrice(pixDiscountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">

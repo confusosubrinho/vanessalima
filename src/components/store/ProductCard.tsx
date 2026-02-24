@@ -8,7 +8,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { useToast } from '@/hooks/use-toast';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { useStoreSettings } from '@/hooks/useProducts';
-import { getPixPrice, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
+import { getPixPriceForDisplay, getPixDiscountAmount, shouldApplyPixDiscount, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { resolveImageUrl } from '@/lib/imageUrl';
@@ -57,7 +57,14 @@ export function ProductCard({ product }: ProductCardProps) {
   const formatPrice = (price: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
   const currentPrice = Number(product.sale_price || product.base_price);
-  const pixPrice = pricingConfig ? getPixPrice(currentPrice, pricingConfig) : currentPrice * (1 - pixDiscountPercent / 100);
+  const hasProductSale = hasDiscount; // product already has sale_price < base_price
+  const applyPix = pricingConfig ? shouldApplyPixDiscount(pricingConfig, hasProductSale) : true;
+  const pixPrice = pricingConfig
+    ? getPixPriceForDisplay(currentPrice, pricingConfig, hasProductSale)
+    : (applyPix ? currentPrice * (1 - pixDiscountPercent / 100) : currentPrice);
+  const pixDiscountAmount = pricingConfig
+    ? getPixDiscountAmount(currentPrice, pricingConfig, hasProductSale)
+    : (applyPix ? currentPrice * (pixDiscountPercent / 100) : 0);
   const activeVariants = product.variants?.filter(v => v.is_active) || [];
   const hasVariants = activeVariants.length > 0;
   const totalStock = activeVariants.reduce((sum, v) => sum + (v.stock_quantity || 0), 0);
@@ -208,14 +215,28 @@ export function ProductCard({ product }: ProductCardProps) {
           <div className="mt-2 space-y-0.5">
             {hasDiscount ? (
               <>
-                <p className="price-original text-xs">{formatPrice(Number(product.base_price))}</p>
-                <p className="text-base font-bold text-primary">{formatPrice(pixPrice)}</p>
-                <p className="text-[11px] text-muted-foreground">no Pix</p>
+                <p className="price-original text-xs line-through text-muted-foreground">{formatPrice(Number(product.base_price))}</p>
+                <p className="text-base font-bold text-primary">{formatPrice(currentPrice)}</p>
+                {applyPix && pixDiscountAmount > 0 ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">Desconto PIX: {formatPrice(pixDiscountAmount)}</p>
+                    <p className="text-[11px] text-muted-foreground">{pixDiscountPercent}% off no PIX</p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">no PIX</p>
+                )}
               </>
             ) : (
               <>
-                <p className="price-current text-base font-bold">{formatPrice(Number(product.base_price))}</p>
-                <p className="text-[11px] text-muted-foreground">{formatPrice(pixPrice)} via Pix</p>
+                <p className="price-current text-base font-bold">{formatPrice(currentPrice)}</p>
+                {applyPix && pixDiscountAmount > 0 ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">Desconto PIX: {formatPrice(pixDiscountAmount)}</p>
+                    <p className="text-[11px] text-muted-foreground">{pixDiscountPercent}% off no PIX</p>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">{formatPrice(pixPrice)} via PIX</p>
+                )}
               </>
             )}
             {pricingConfig && (() => {
