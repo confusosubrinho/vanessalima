@@ -24,21 +24,11 @@ async function yampiRequest(
   const url = `${yampiBase}${path}`;
   const opts: RequestInit = { method, headers: yampiHeaders };
   if (body) opts.body = JSON.stringify(body);
-
   console.log(`[YAMPI] ${method} ${path}`, body ? JSON.stringify(body).slice(0, 800) : "");
-
   const res = await fetch(url, opts);
   let data: unknown;
-  try {
-    data = await res.json();
-  } catch {
-    data = { raw_text: await res.text().catch(() => "unable to read") };
-  }
-
-  if (!res.ok) {
-    console.error(`[YAMPI] ERROR ${res.status} ${path}:`, JSON.stringify(data));
-  }
-
+  try { data = await res.json(); } catch { data = { raw_text: await res.text().catch(() => "") }; }
+  if (!res.ok) console.error(`[YAMPI] ERROR ${res.status} ${path}:`, JSON.stringify(data));
   return { ok: res.ok, status: res.status, data: data as Record<string, unknown> };
 }
 
@@ -52,54 +42,12 @@ function sanitizePayloadForLog(payload: unknown): unknown {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// ─── Variation Groups & Values Cache ───
-const variationGroupCache: Record<string, number> = {};
-
-async function getOrCreateVariationGroup(
-  yampiBase: string,
-  yampiHeaders: Record<string, string>,
-  name: string
-): Promise<number | null> {
-  if (variationGroupCache[name]) return variationGroupCache[name];
-
-  // List existing variations
-  const listRes = await yampiRequest(yampiBase, yampiHeaders, `/catalog/variations?limit=50`, "GET");
-  if (listRes.ok && listRes.data?.data) {
-    const groups = listRes.data.data as Array<Record<string, unknown>>;
-    for (const g of groups) {
-      const gName = (g.name as string || "").toLowerCase().trim();
-      variationGroupCache[gName] = g.id as number;
-      if (gName === name.toLowerCase().trim()) {
-        return g.id as number;
-      }
-    }
-  }
-
-  // Create if not found
-  const createRes = await yampiRequest(yampiBase, yampiHeaders, "/catalog/variations", "POST", { name });
-  await delay(1000);
-  if (createRes.ok) {
-    const created = (createRes.data?.data as Record<string, unknown>[])
-      ? (createRes.data.data as Record<string, unknown>[])[0]
-      : createRes.data?.data as Record<string, unknown>;
-    const id = created?.id as number;
-    if (id) {
-      variationGroupCache[name.toLowerCase().trim()] = id;
-      return id;
-    }
-  }
-  console.error(`[YAMPI] Failed to create variation group "${name}"`, createRes.data);
-  return null;
-}
-
-// ─── Upload images to SKU via dedicated endpoint ───
 async function uploadImagesToSku(
   yampiBase: string,
   yampiHeaders: Record<string, string>,
   skuId: number,
   imageUrls: string[]
 ) {
-  if (!imageUrls.length) return;
   for (const url of imageUrls.slice(0, 10)) {
     await yampiRequest(yampiBase, yampiHeaders, `/catalog/skus/${skuId}/images`, "POST", {
       url,
@@ -156,7 +104,6 @@ Deno.serve(async (req) => {
     // ─── Resolve brand_id ───
     let brandId = defaultBrandId;
     if (!brandId) {
-      console.log("[YAMPI] No brand_id configured, fetching existing brands...");
       const brandsRes = await yampiRequest(yampiBase, yampiHeaders, "/catalog/brands?limit=1", "GET");
       if (brandsRes.ok && brandsRes.data?.data) {
         const brands = brandsRes.data.data as Array<Record<string, unknown>>;
@@ -169,21 +116,36 @@ Deno.serve(async (req) => {
         if (createBrand.ok) {
           const bd = createBrand.data?.data;
           brandId = Array.isArray(bd) ? (bd[0] as Record<string, unknown>)?.id as number : (bd as Record<string, unknown>)?.id as number;
-        } else {
-          return new Response(JSON.stringify({
-            error: "Não foi possível obter/criar marca na Yampi. Configure default_brand_id manualmente.",
-            yampi_response: createBrand.data,
-          }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (!brandId) {
+          return new Response(JSON.stringify({ error: "Não foi possível obter/criar marca. Configure default_brand_id." }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       }
     }
 
-    // ─── Pre-fetch/create variation groups for "Tamanho" and "Cor" ───
-    const sizeGroupId = await getOrCreateVariationGroup(yampiBase, yampiHeaders, "Tamanho");
-    await delay(500);
-    const colorGroupId = await getOrCreateVariationGroup(yampiBase, yampiHeaders, "Cor");
-    await delay(500);
-    console.log(`[YAMPI] Variation group IDs: Tamanho=${sizeGroupId}, Cor=${colorGroupId}`);
+    // ─── Load variation value mappings ───
+    const { data: variationMaps } = await supabase
+      .from("variation_value_map")
+      .select("type, value, yampi_variation_id, yampi_value_id");
+
+    const valueMap: Record<string, { yampi_variation_id: number; yampi_value_id: number }> = {};
+    for (const m of variationMaps || []) {
+      if (m.yampi_value_id) {
+        valueMap[`${m.type}:${m.value}`] = {
+          yampi_variation_id: m.yampi_variation_id,
+          yampi_value_id: m.yampi_value_id,
+        };
+      }
+    }
+    console.log(`[YAMPI] Loaded ${Object.keys(valueMap).length} variation value mappings`);
+
+    // ─── Derive variation group IDs from mappings ───
+    const variationGroupIds = new Set<number>();
+    for (const m of Object.values(valueMap)) {
+      if (m.yampi_variation_id) variationGroupIds.add(m.yampi_variation_id);
+    }
 
     // ─── Create sync run ───
     const { data: syncRun } = await supabase
@@ -204,7 +166,7 @@ Deno.serve(async (req) => {
         id, name, slug, description, base_price, sale_price, sku,
         is_active, yampi_product_id, weight, height, width, depth,
         seo_title, seo_description, seo_keywords, brand, cost,
-        category_id, categories!products_category_id_fkey ( name, slug )
+        category_id, categories!products_category_id_fkey ( name, slug, yampi_category_id )
       `)
       .order("created_at", { ascending: true });
 
@@ -213,7 +175,6 @@ Deno.serve(async (req) => {
     const { data: products, error: prodError } = await productsQuery;
     if (prodError) throw new Error(`Erro ao buscar produtos: ${prodError.message}`);
 
-    // Count inactive
     if (onlyActive) {
       const { count } = await supabase
         .from("products")
@@ -257,21 +218,30 @@ Deno.serve(async (req) => {
           .filter((img) => img.url && img.url.startsWith("http"))
           .map((img) => img.url);
 
+        // ─── Category from Yampi mapping ───
+        const category = product.categories as Record<string, unknown> | null;
+        const yampiCategoryId = category?.yampi_category_id as number | null;
+
         // ─── Determine variation groups needed ───
-        const hasSize = activeVariants.some((v) => v.size && v.size.trim() !== "");
-        const hasColor = activeVariants.some((v) => v.color && v.color.trim() !== "");
+        const hasSize = activeVariants.some((v) => v.size?.trim());
+        const hasColor = activeVariants.some((v) => v.color?.trim());
         const hasVariations = activeVariants.length > 1 || hasSize || hasColor;
 
-        const variationsIds: number[] = [];
-        if (hasSize && sizeGroupId) variationsIds.push(sizeGroupId);
-        if (hasColor && colorGroupId) variationsIds.push(colorGroupId);
+        // Collect unique variation group IDs from mapped values
+        const productVariationGroupIds = new Set<number>();
+        for (const v of activeVariants) {
+          if (v.size?.trim()) {
+            const mapping = valueMap[`size:${v.size.trim()}`];
+            if (mapping?.yampi_variation_id) productVariationGroupIds.add(mapping.yampi_variation_id);
+          }
+          if (v.color?.trim()) {
+            const mapping = valueMap[`color:${v.color.trim()}`];
+            if (mapping?.yampi_variation_id) productVariationGroupIds.add(mapping.yampi_variation_id);
+          }
+        }
 
-        // ─── Pricing helpers ───
         const productPrice = Number(product.sale_price ?? product.base_price) || 0;
         const productCost = Number(product.cost ?? product.base_price) || 0;
-
-        // ─── Category name for description fallback ───
-        const categoryName = (product.categories as Record<string, unknown>)?.name as string || "";
 
         // ─── STEP 1: Create product if not exists ───
         if (!yampiProductId) {
@@ -282,21 +252,26 @@ Deno.serve(async (req) => {
             simple: !hasVariations,
             brand_id: brandId,
             searchable: true,
-            description: product.description || `${product.name}${categoryName ? ` - ${categoryName}` : ""}`,
+            description: product.description || product.name || "",
             priority: 1,
           };
 
-          // SEO fields
           if (product.seo_title) createPayload.seo_title = product.seo_title;
           if (product.seo_description) createPayload.seo_description = product.seo_description;
           if (product.seo_keywords) createPayload.seo_keywords = product.seo_keywords;
 
-          // Variation group IDs on the product
-          if (variationsIds.length > 0) {
-            createPayload.variations_ids = variationsIds;
+          // Category
+          if (yampiCategoryId) {
+            createPayload.category_id = yampiCategoryId;
+            createPayload.categories_ids = [yampiCategoryId];
           }
 
-          // For simple products (1 variant), include inline SKU
+          // Variation groups
+          if (productVariationGroupIds.size > 0) {
+            createPayload.variations_ids = Array.from(productVariationGroupIds);
+          }
+
+          // Inline SKU for simple products
           if (!hasVariations && activeVariants.length > 0) {
             const v = activeVariants[0];
             const unitPrice = Number(v.sale_price ?? v.base_price ?? productPrice) || 0;
@@ -352,10 +327,8 @@ Deno.serve(async (req) => {
               await supabase.from("product_variants").update({ yampi_sku_id: yampiSkuId }).eq("id", activeVariants[0].id);
               counters.created_skus++;
 
-              // Upload images to SKU
               await uploadImagesToSku(yampiBase, yampiHeaders, yampiSkuId, imageUrls);
 
-              // Sync stock
               if (activeVariants[0].stock_quantity > 0) {
                 await yampiRequest(yampiBase, yampiHeaders, `/catalog/products/${yampiProductId}/stocks/sync`, "POST", {
                   data: [{ id: yampiSkuId, sku: activeVariants[0].sku, total_in_stock: activeVariants[0].stock_quantity, blocked_sale: false }],
@@ -367,17 +340,41 @@ Deno.serve(async (req) => {
           await delay(2200);
         }
 
-        // ─── STEP 2: Create/Update SKUs for all variants ───
+        // ─── STEP 2: Create/Update SKUs ───
         for (const variant of activeVariants) {
           try {
             const unitPrice = Number(variant.sale_price ?? variant.base_price ?? productPrice) || 0;
             const unitCost = Number(variant.base_price ?? productCost) || 0;
             const variantSku = variant.sku || `${product.sku || product.id.slice(0, 8)}-${variant.size || "U"}-${variant.color || "U"}`.replace(/\s+/g, "-").slice(0, 64);
 
-            // Build variations_values_ids (string array per Yampi docs)
-            const variationsValuesIds: string[] = [];
-            if (variant.size && variant.size.trim()) variationsValuesIds.push(variant.size.trim());
-            if (variant.color && variant.color.trim()) variationsValuesIds.push(variant.color.trim());
+            // Build variations_values_ids using mapped Yampi IDs
+            const variationsValuesIds: number[] = [];
+            let missingMapping = false;
+
+            if (variant.size?.trim()) {
+              const mapping = valueMap[`size:${variant.size.trim()}`];
+              if (mapping?.yampi_value_id) {
+                variationsValuesIds.push(mapping.yampi_value_id);
+              } else {
+                // Fallback: send string name (Yampi docs show it accepts strings too)
+                console.log(`[YAMPI] No mapping for size "${variant.size}", using string fallback`);
+              }
+            }
+            if (variant.color?.trim()) {
+              const mapping = valueMap[`color:${variant.color.trim()}`];
+              if (mapping?.yampi_value_id) {
+                variationsValuesIds.push(mapping.yampi_value_id);
+              } else {
+                console.log(`[YAMPI] No mapping for color "${variant.color}", using string fallback`);
+              }
+            }
+
+            // Build string fallback if no numeric IDs
+            const variationsStrings: string[] = [];
+            if (variationsValuesIds.length === 0) {
+              if (variant.size?.trim()) variationsStrings.push(variant.size.trim());
+              if (variant.color?.trim()) variationsStrings.push(variant.color.trim());
+            }
 
             if (!variant.yampi_sku_id) {
               // ── CREATE SKU ──
@@ -399,6 +396,8 @@ Deno.serve(async (req) => {
 
               if (variationsValuesIds.length > 0) {
                 skuPayload.variations_values_ids = variationsValuesIds;
+              } else if (variationsStrings.length > 0) {
+                skuPayload.variations_values_ids = variationsStrings;
               }
 
               const res = await yampiRequest(yampiBase, yampiHeaders, "/catalog/skus", "POST", skuPayload);
@@ -417,18 +416,14 @@ Deno.serve(async (req) => {
               const yampiSkuId = (res.data?.data as Record<string, unknown>)?.id as number || res.data?.id as number;
               if (yampiSkuId) {
                 await supabase.from("product_variants").update({ yampi_sku_id: yampiSkuId }).eq("id", variant.id);
-
-                // Upload images to this SKU
                 await uploadImagesToSku(yampiBase, yampiHeaders, yampiSkuId, imageUrls);
 
-                // Sync stock
                 if (variant.stock_quantity > 0) {
                   await yampiRequest(yampiBase, yampiHeaders, `/catalog/products/${yampiProductId}/stocks/sync`, "POST", {
                     data: [{ id: yampiSkuId, sku: variantSku, total_in_stock: variant.stock_quantity, blocked_sale: false }],
                   });
                 }
               }
-
               counters.created_skus++;
             } else {
               // ── UPDATE existing SKU ──
@@ -446,6 +441,8 @@ Deno.serve(async (req) => {
 
               if (variationsValuesIds.length > 0) {
                 updatePayload.variations_values_ids = variationsValuesIds;
+              } else if (variationsStrings.length > 0) {
+                updatePayload.variations_values_ids = variationsStrings;
               }
 
               const res = await yampiRequest(yampiBase, yampiHeaders, `/catalog/skus/${variant.yampi_sku_id}`, "PUT", updatePayload);
@@ -461,10 +458,8 @@ Deno.serve(async (req) => {
                 continue;
               }
 
-              // Re-upload images on update too
               await uploadImagesToSku(yampiBase, yampiHeaders, variant.yampi_sku_id, imageUrls);
 
-              // Sync stock
               await yampiRequest(yampiBase, yampiHeaders, `/catalog/products/${yampiProductId}/stocks/sync`, "POST", {
                 data: [{ id: variant.yampi_sku_id, sku: variantSku, total_in_stock: variant.stock_quantity, blocked_sale: false }],
               });
@@ -504,15 +499,11 @@ Deno.serve(async (req) => {
       }).eq("id", syncRun.id);
     }
 
-    // Log summary
     await supabase.from("integrations_checkout_test_logs").insert({
       provider: "yampi",
       status: counters.errors_count > 0 ? "partial" : "success",
-      message: `Sync: ${counters.created_products} produtos criados, ${counters.created_skus} SKUs criados, ${counters.updated_skus} SKUs atualizados, ${counters.skipped_inactive} inativos, ${counters.errors_count} erros`,
-      payload_preview: sanitizePayloadForLog({
-        ...counters,
-        errors: counters.errors.slice(0, 10),
-      }),
+      message: `Sync: ${counters.created_products} produtos, ${counters.created_skus} SKUs criados, ${counters.updated_skus} atualizados, ${counters.skipped_inactive} inativos, ${counters.errors_count} erros`,
+      payload_preview: sanitizePayloadForLog({ ...counters, errors: counters.errors.slice(0, 10) }),
     });
 
     return new Response(JSON.stringify(counters), {

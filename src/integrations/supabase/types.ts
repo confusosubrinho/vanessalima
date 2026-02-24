@@ -846,6 +846,7 @@ export type Database = {
           seo_title: string | null
           slug: string
           updated_at: string
+          yampi_category_id: number | null
         }
         Insert: {
           banner_image_url?: string | null
@@ -862,6 +863,7 @@ export type Database = {
           seo_title?: string | null
           slug: string
           updated_at?: string
+          yampi_category_id?: number | null
         }
         Update: {
           banner_image_url?: string | null
@@ -878,6 +880,7 @@ export type Database = {
           seo_title?: string | null
           slug?: string
           updated_at?: string
+          yampi_category_id?: number | null
         }
         Relationships: [
           {
@@ -3031,6 +3034,36 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      variation_value_map: {
+        Row: {
+          created_at: string
+          id: string
+          type: string
+          updated_at: string
+          value: string
+          yampi_value_id: number | null
+          yampi_variation_id: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          type: string
+          updated_at?: string
+          value: string
+          yampi_value_id?: number | null
+          yampi_variation_id?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          type?: string
+          updated_at?: string
+          value?: string
+          yampi_value_id?: number | null
+          yampi_variation_id?: number | null
         }
         Relationships: []
       }
