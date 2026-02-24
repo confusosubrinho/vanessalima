@@ -103,11 +103,6 @@ export default function ProductDetail() {
     variantSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, []);
 
-  const pixDiscountPercent = pricingConfig?.pix_discount ?? storeSettings?.pix_discount ?? 5;
-  const hasProductSale = hasDiscount;
-  const applyPix = pricingConfig ? shouldApplyPixDiscount(pricingConfig, hasProductSale) : true;
-  const pixDiscountAmount = pricingConfig ? getPixDiscountAmount(currentPrice, pricingConfig, hasProductSale) : (applyPix ? currentPrice * (pixDiscountPercent / 100) : 0);
-
   // Fetch buy together products configured for this product
   const { data: buyTogetherProducts } = useQuery({
     queryKey: ['buy-together', product?.id],
@@ -228,6 +223,10 @@ export default function ProductDetail() {
           ? Number(selectedVariant.base_price)
           : Number(product.sale_price || product.base_price) + Number(selectedVariant.price_modifier || 0))
     : Number(product.sale_price || product.base_price);
+  const pixDiscountPercent = pricingConfig?.pix_discount ?? storeSettings?.pix_discount ?? 5;
+  const hasProductSale = hasDiscount;
+  const applyPix = pricingConfig ? shouldApplyPixDiscount(pricingConfig, hasProductSale) : true;
+  const pixDiscountAmount = pricingConfig ? getPixDiscountAmount(currentPrice, pricingConfig, hasProductSale) : (applyPix ? currentPrice * (pixDiscountPercent / 100) : 0);
   const installmentOptions = pricingConfig ? getInstallmentOptions(currentPrice, pricingConfig) : [];
   const installmentDisplay = pricingConfig ? getInstallmentDisplay(currentPrice, pricingConfig) : null;
   const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : false;
