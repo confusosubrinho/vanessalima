@@ -242,7 +242,7 @@ export default function Cart() {
               </div>
 
               <Button asChild className="w-full" size="lg" disabled={!selectedShipping}>
-                <Link to={selectedShipping ? "/checkout" : "#"} onClick={(e) => { if (!selectedShipping) e.preventDefault(); }}>
+                <Link to={selectedShipping ? "/checkout/start" : "#"} onClick={(e) => { if (!selectedShipping) e.preventDefault(); }}>
                   {selectedShipping ? 'Finalizar Compra' : 'Calcule o frete primeiro'}
                 </Link>
               </Button>
