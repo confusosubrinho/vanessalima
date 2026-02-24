@@ -227,20 +227,18 @@ Deno.serve(async (req) => {
         }
 
         // Create payment link
-        const linkItems = items.map((item) => {
+        const linkSkus = items.map((item) => {
           const variant = variants.find((v) => v.id === item.variant_id)!;
-          return { sku_id: variant.yampi_sku_id, quantity: item.quantity };
+          return { id: variant.yampi_sku_id, quantity: item.quantity };
         });
 
-        const linkRes = await fetch(`${yampiBase}/payments/links`, {
+        const linkRes = await fetch(`${yampiBase}/checkout/payment-link`, {
           method: "POST",
           headers: yampiHeaders,
           body: JSON.stringify({
             name: (config.checkout_name_template as string || "Pedido #{order_number}").replace("{order_number}", order.order_number),
-            items: linkItems,
-            success_url: successUrl,
-            cancel_url: cancelUrl,
-            metadata: { local_order_id: order.id },
+            active: true,
+            skus: linkSkus,
           }),
         });
 
@@ -250,8 +248,8 @@ Deno.serve(async (req) => {
           throw new Error(linkData?.message || "Erro ao criar link Yampi");
         }
 
-        const externalRef = linkData?.data?.id?.toString() || linkData?.data?.token || "";
-        const redirectUrl = linkData?.data?.url || linkData?.data?.checkout_url || "";
+        const externalRef = linkData?.data?.id?.toString() || linkData?.id?.toString() || "";
+        const redirectUrl = linkData?.data?.link_url || linkData?.link_url || linkData?.data?.url || "";
 
         await supabase
           .from("orders")
