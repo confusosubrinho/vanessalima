@@ -1441,6 +1441,129 @@ export type Database = {
           },
         ]
       }
+      integrations_checkout: {
+        Row: {
+          enabled: boolean
+          fallback_to_native: boolean
+          id: string
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          enabled?: boolean
+          fallback_to_native?: boolean
+          id?: string
+          provider?: string
+          updated_at?: string
+        }
+        Update: {
+          enabled?: boolean
+          fallback_to_native?: boolean
+          id?: string
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      integrations_checkout_providers: {
+        Row: {
+          config: Json
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean
+          provider: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      integrations_checkout_test_logs: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          payload_preview: Json | null
+          provider: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          payload_preview?: Json | null
+          provider: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          payload_preview?: Json | null
+          provider?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      inventory_movements: {
+        Row: {
+          created_at: string
+          id: string
+          order_id: string | null
+          quantity: number
+          type: string
+          variant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_id?: string | null
+          quantity: number
+          type: string
+          variant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_id?: string | null
+          quantity?: number
+          type?: string
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       log_daily_stats: {
         Row: {
           created_at: string
@@ -1540,11 +1663,13 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          image_snapshot: string | null
           order_id: string
           product_id: string | null
           product_name: string
           product_variant_id: string | null
           quantity: number
+          title_snapshot: string | null
           total_price: number
           unit_price: number
           variant_info: string | null
@@ -1552,11 +1677,13 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          image_snapshot?: string | null
           order_id: string
           product_id?: string | null
           product_name: string
           product_variant_id?: string | null
           quantity: number
+          title_snapshot?: string | null
           total_price: number
           unit_price: number
           variant_info?: string | null
@@ -1564,11 +1691,13 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          image_snapshot?: string | null
           order_id?: string
           product_id?: string | null
           product_name?: string
           product_variant_id?: string | null
           quantity?: number
+          title_snapshot?: string | null
           total_price?: number
           unit_price?: number
           variant_info?: string | null
@@ -1608,12 +1737,18 @@ export type Database = {
           customer_email: string | null
           customer_id: string | null
           discount_amount: number | null
+          external_reference: string | null
+          gateway: string | null
           id: string
           idempotency_key: string | null
+          installments: number | null
+          landing_page: string | null
           last_webhook_event: string | null
           notes: string | null
           order_number: string
           payment_method: string | null
+          provider: string | null
+          referrer: string | null
           shipping_address: string
           shipping_city: string
           shipping_cost: number | null
@@ -1625,8 +1760,14 @@ export type Database = {
           subtotal: number
           total_amount: number
           tracking_code: string | null
+          transaction_id: string | null
           updated_at: string
           user_id: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
         }
         Insert: {
           access_token?: string | null
@@ -1638,12 +1779,18 @@ export type Database = {
           customer_email?: string | null
           customer_id?: string | null
           discount_amount?: number | null
+          external_reference?: string | null
+          gateway?: string | null
           id?: string
           idempotency_key?: string | null
+          installments?: number | null
+          landing_page?: string | null
           last_webhook_event?: string | null
           notes?: string | null
           order_number: string
           payment_method?: string | null
+          provider?: string | null
+          referrer?: string | null
           shipping_address: string
           shipping_city: string
           shipping_cost?: number | null
@@ -1655,8 +1802,14 @@ export type Database = {
           subtotal: number
           total_amount: number
           tracking_code?: string | null
+          transaction_id?: string | null
           updated_at?: string
           user_id?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
         }
         Update: {
           access_token?: string | null
@@ -1668,12 +1821,18 @@ export type Database = {
           customer_email?: string | null
           customer_id?: string | null
           discount_amount?: number | null
+          external_reference?: string | null
+          gateway?: string | null
           id?: string
           idempotency_key?: string | null
+          installments?: number | null
+          landing_page?: string | null
           last_webhook_event?: string | null
           notes?: string | null
           order_number?: string
           payment_method?: string | null
+          provider?: string | null
+          referrer?: string | null
           shipping_address?: string
           shipping_city?: string
           shipping_cost?: number | null
@@ -1685,8 +1844,14 @@ export type Database = {
           subtotal?: number
           total_amount?: number
           tracking_code?: string | null
+          transaction_id?: string | null
           updated_at?: string
           user_id?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
         }
         Relationships: [
           {
@@ -1867,6 +2032,56 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          gateway: string | null
+          id: string
+          installments: number | null
+          order_id: string
+          payment_method: string | null
+          provider: string
+          raw: Json | null
+          status: string
+          transaction_id: string | null
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          gateway?: string | null
+          id?: string
+          installments?: number | null
+          order_id: string
+          payment_method?: string | null
+          provider: string
+          raw?: Json | null
+          status?: string
+          transaction_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          gateway?: string | null
+          id?: string
+          installments?: number | null
+          order_id?: string
+          payment_method?: string | null
+          provider?: string
+          raw?: Json | null
+          status?: string
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_change_log: {
         Row: {
@@ -2065,6 +2280,7 @@ export type Database = {
           size: string
           sku: string | null
           stock_quantity: number
+          yampi_sku_id: number | null
         }
         Insert: {
           base_price?: number | null
@@ -2080,6 +2296,7 @@ export type Database = {
           size: string
           sku?: string | null
           stock_quantity?: number
+          yampi_sku_id?: number | null
         }
         Update: {
           base_price?: number | null
@@ -2095,6 +2312,7 @@ export type Database = {
           size?: string
           sku?: string | null
           stock_quantity?: number
+          yampi_sku_id?: number | null
         }
         Relationships: [
           {
@@ -2143,6 +2361,7 @@ export type Database = {
           video_url: string | null
           weight: number | null
           width: number | null
+          yampi_product_id: number | null
         }
         Insert: {
           age_group?: string | null
@@ -2180,6 +2399,7 @@ export type Database = {
           video_url?: string | null
           weight?: number | null
           width?: number | null
+          yampi_product_id?: number | null
         }
         Update: {
           age_group?: string | null
@@ -2217,6 +2437,7 @@ export type Database = {
           video_url?: string | null
           weight?: number | null
           width?: number | null
+          yampi_product_id?: number | null
         }
         Relationships: [
           {

@@ -1,4 +1,5 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import { captureAttribution } from "@/lib/attribution";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -70,6 +71,8 @@ const Notifications = lazy(() => import("./pages/admin/Notifications"));
 const Reviews = lazy(() => import("./pages/admin/Reviews"));
 const Team = lazy(() => import("./pages/admin/Team"));
 const AuditLog = lazy(() => import("./pages/admin/AuditLog"));
+const CheckoutSettings = lazy(() => import("./pages/admin/CheckoutSettings"));
+const CheckoutStart = lazy(() => import("./pages/CheckoutStart"));
 
 // Lazy load non-critical floating components
 const WhatsAppFloat = lazy(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat })));
@@ -99,7 +102,9 @@ function PageFallback() {
   );
 }
 
-const App = () => (
+const App = () => {
+  useEffect(() => { captureAttribution(); }, []);
+  return (
   <QueryClientProvider client={queryClient}>
     <CartProvider>
       <TooltipProvider>
@@ -125,6 +130,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/carrinho" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />
+              <Route path="/checkout/start" element={<CheckoutStart />} />
               <Route path="/tamanho/:size" element={<SizePage />} />
               <Route path="/faq" element={<FAQPage />} />
               <Route path="/sobre" element={<SobrePage />} />
@@ -177,6 +183,7 @@ const App = () => (
               <Route path="avaliacoes" element={<Reviews />} />
               <Route path="equipe" element={<Team />} />
               <Route path="logs/auditoria" element={<AuditLog />} />
+              <Route path="checkout-transparente" element={<CheckoutSettings />} />
               </Route>
               <Route path="/admin/integrations/appmax/callback" element={<AppmaxCallback />} />
               
@@ -188,6 +195,7 @@ const App = () => (
       </TooltipProvider>
     </CartProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

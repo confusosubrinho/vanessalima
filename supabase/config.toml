@@ -47,3 +47,15 @@ verify_jwt = false
 
 [functions.appmax-healthcheck-ping]
 verify_jwt = false
+
+[functions.checkout-create-session]
+verify_jwt = false
+
+[functions.integrations-test]
+verify_jwt = false
+
+[functions.yampi-webhook]
+verify_jwt = false
+
+[functions.yampi-sync-sku]
+verify_jwt = false
