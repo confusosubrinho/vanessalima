@@ -32,16 +32,17 @@ interface ShippingRegion {
 
 // ─── Appmax Settings Form ───
 
+// Conforme documentação Appmax: API e Auth em subdomínios; base sem /v1 (process-payment adiciona /v1/ ao path)
 const APPMAX_DEFAULTS: Record<string, { base_api_url: string; base_auth_url: string; base_portal_url: string }> = {
   sandbox: {
-    base_api_url: 'https://sandbox.appmax.com.br/api/v1',
-    base_auth_url: 'https://sandbox.appmax.com.br/oauth',
-    base_portal_url: 'https://sandbox.appmax.com.br',
+    base_api_url: 'https://api.sandboxappmax.com.br',
+    base_auth_url: 'https://auth.sandboxappmax.com.br',
+    base_portal_url: 'https://sandboxappmax.com.br',
   },
   production: {
-    base_api_url: 'https://api.appmax.com.br/api/v1',
-    base_auth_url: 'https://admin.appmax.com.br/oauth',
-    base_portal_url: 'https://admin.appmax.com.br',
+    base_api_url: 'https://api.appmax.com.br',
+    base_auth_url: 'https://auth.appmax.com.br',
+    base_portal_url: 'https://appmax.com.br',
   },
 };
 

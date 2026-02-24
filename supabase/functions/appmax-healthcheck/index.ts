@@ -85,7 +85,36 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { app_id, client_id, client_secret, external_key } = body as Record<string, string>;
+    const raw = body as Record<string, string>;
+    const app_id = raw.app_id;
+    const client_id = raw.client_id;
+    const client_secret = raw.client_secret;
+    // Doc Appmax: external_key pode vir vazio "" — ver https://appmax.readme.io/reference/instalação-do-aplicativo
+    const bodyExternalKey = typeof raw.external_key === "string" ? raw.external_key.trim() : raw.external_key;
+
+    // GET sem parâmetros = apenas verificação de conectividade (Appmax pode testar a URL assim)
+    const hasParams = Object.keys(body).length > 0;
+    if (req.method === "GET" && !hasParams) {
+      await logAppmax(supabase, "info", "Health check GET sem parâmetros (conectividade)", { method: "GET" }, requestId);
+      return jsonResponse({ status: "ok", message: "Healthcheck endpoint ready" });
+    }
+
+    // external_key: doc permite ""; se vazio ou ausente, usar instalação pendente ou "main-store"
+    let external_key = bodyExternalKey;
+    if (external_key === "" || external_key == null) {
+      const { data: pending } = await supabase
+        .from("appmax_installations")
+        .select("external_key")
+        .eq("status", "pending")
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      external_key = pending?.external_key || "main-store";
+      await logAppmax(supabase, "info", `Health check sem external_key no body; usando: ${external_key}`, {
+        used_default: !pending,
+        body_keys: Object.keys(body),
+      }, requestId);
+    }
 
     await logAppmax(supabase, "info", `Health check recebido (${req.method})`, {
       method: req.method,
@@ -95,17 +124,6 @@ Deno.serve(async (req) => {
       has_client_secret: !!client_secret,
       body_keys: Object.keys(body),
     }, requestId);
-
-    // Validate required fields
-    if (!external_key) {
-      return await fail("unknown", null, "MISSING_EXTERNAL_KEY", "Campo obrigatório ausente: external_key", 400, {
-        has_client_id: !!client_id,
-        has_client_secret: !!client_secret,
-        has_external_key: false,
-        body_keys: Object.keys(body),
-        method: req.method,
-      });
-    }
 
     // Find environment from installation or active settings
     const envAppId = Deno.env.get("APPMAX_APP_ID");
@@ -278,7 +296,7 @@ Deno.serve(async (req) => {
       headers: safeHeaders,
     });
 
-    // MANDATORY: return { external_id } on success
+    // Doc: https://appmax.readme.io/reference/instalação-do-aplicativo — resposta 200 com external_id
     return jsonResponse({ external_id: externalId });
   } catch (err: any) {
     await logHandshake(supabase, {
