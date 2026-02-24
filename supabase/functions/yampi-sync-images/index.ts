@@ -31,24 +31,16 @@ async function yampiRequest(
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
   let data: any;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
-  }
-  if (!res.ok)
-    console.error(`[YAMPI-IMG] ${res.status} ${path}:`, JSON.stringify(data));
+  try { data = await res.json(); } catch { data = null; }
+  if (!res.ok) console.error(`[YAMPI-IMG] ${res.status} ${path}:`, JSON.stringify(data));
   return { ok: res.ok, status: res.status, data };
 }
 
 /**
  * Ensure image URL is a stable public URL (not a signed/expiring URL).
- * If it's a Supabase Storage signed URL, convert to the public URL.
  */
-function ensurePublicUrl(url: string, supabaseUrl: string): string {
+function ensurePublicUrl(url: string): string {
   if (!url || !url.startsWith("http")) return url;
-
-  // Strip AWS signature params from any URL
   if (/[?&](X-Amz-|token=|Expires=|Signature=)/i.test(url)) {
     try {
       const u = new URL(url);
@@ -59,56 +51,26 @@ function ensurePublicUrl(url: string, supabaseUrl: string): string {
         }
       });
       keysToRemove.forEach((k) => u.searchParams.delete(k));
-      // Convert /storage/v1/object/sign/ to /storage/v1/object/public/
       let cleaned = u.toString();
-      cleaned = cleaned.replace(
-        "/storage/v1/object/sign/",
-        "/storage/v1/object/public/",
-      );
+      cleaned = cleaned.replace("/storage/v1/object/sign/", "/storage/v1/object/public/");
       return cleaned;
     } catch {
       return url.split("?")[0];
     }
   }
-
   return url;
 }
 
-/**
- * HEAD check with up to 2 retries. Returns HTTP status.
- */
-async function headCheck(
-  url: string,
-  retries = 2,
-): Promise<number> {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      const res = await fetch(url, { method: "HEAD", redirect: "follow" });
-      if (res.status === 200) return 200;
-      if (i < retries) await delay(1500);
-      else return res.status;
-    } catch {
-      if (i >= retries) return 0;
-      await delay(1500);
-    }
-  }
-  return 0;
-}
-
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabase = createClient(
-    supabaseUrl,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
+  const supabase = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   try {
     const body = await req.json().catch(() => ({}));
     const batchOffset = Number(body.offset) || 0;
-    const batchLimit = Number(body.limit) || 5;
+    const batchLimit = Number(body.limit) || 10;
 
     // Load Yampi config
     const { data: providerConfig } = await supabase
@@ -118,13 +80,9 @@ Deno.serve(async (req) => {
       .single();
 
     if (!providerConfig?.config) {
-      return new Response(
-        JSON.stringify({ error: "Provider Yampi não configurado" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Provider Yampi não configurado" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const config = providerConfig.config as Record<string, unknown>;
@@ -133,13 +91,9 @@ Deno.serve(async (req) => {
     const userSecretKey = config.user_secret_key as string;
 
     if (!alias || !userToken || !userSecretKey) {
-      return new Response(
-        JSON.stringify({ error: "Credenciais Yampi incompletas" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return new Response(JSON.stringify({ error: "Credenciais Yampi incompletas" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const yampiBase = `https://api.dooki.com.br/v2/${alias}`;
@@ -149,46 +103,53 @@ Deno.serve(async (req) => {
       "Content-Type": "application/json",
     };
 
-    // Get variants that have yampi_sku_id (already synced)
-    const { data: variants, error: vErr } = await supabase
-      .from("product_variants")
-      .select("id, yampi_sku_id, product_id, products(name)")
-      .not("yampi_sku_id", "is", null)
-      .eq("is_active", true)
-      .order("product_id")
-      .range(batchOffset, batchOffset + batchLimit - 1);
+    // ---- KEY OPTIMIZATION: Query DISTINCT products that have synced SKUs ----
+    // Instead of iterating all 657 variants and skipping most,
+    // we get unique product_ids that have yampi_sku_id set
+    const { data: distinctProducts, error: dpErr } = await supabase
+      .rpc("get_distinct_synced_products", {}) as any;
 
-    if (vErr) throw vErr;
+    // Fallback: if RPC doesn't exist, use raw query approach via variants
+    let productList: Array<{ product_id: string; yampi_sku_id: number; product_name: string }>;
 
-    // Count total
-    const { count: totalCount } = await supabase
-      .from("product_variants")
-      .select("id", { count: "exact", head: true })
-      .not("yampi_sku_id", "is", null)
-      .eq("is_active", true);
+    if (dpErr || !distinctProducts) {
+      // Fallback: get all variants and deduplicate in JS
+      const { data: allVariants } = await supabase
+        .from("product_variants")
+        .select("product_id, yampi_sku_id, products(name)")
+        .not("yampi_sku_id", "is", null)
+        .eq("is_active", true)
+        .order("product_id");
 
-    const total = totalCount || 0;
+      const seen = new Map<string, { product_id: string; yampi_sku_id: number; product_name: string }>();
+      for (const v of allVariants || []) {
+        if (!seen.has(v.product_id)) {
+          seen.set(v.product_id, {
+            product_id: v.product_id,
+            yampi_sku_id: v.yampi_sku_id,
+            product_name: (v as any).products?.name || "",
+          });
+        }
+      }
+      productList = Array.from(seen.values());
+    } else {
+      productList = distinctProducts;
+    }
+
+    const total = productList.length;
+    const batch = productList.slice(batchOffset, batchOffset + batchLimit);
+
     let uploaded = 0;
     let skipped = 0;
     let errors = 0;
     const logs: ImageLog[] = [];
-    const processedProductIds = new Set<string>();
 
-    for (const variant of variants || []) {
-      const productName = (variant as any).products?.name || "";
-
-      // Only upload 1 image per product (first SKU encountered)
-      if (processedProductIds.has(variant.product_id)) {
-        skipped++;
-        continue;
-      }
-      processedProductIds.add(variant.product_id);
-
+    for (const item of batch) {
       // Get first image for this product
       const { data: images } = await supabase
         .from("product_images")
         .select("url")
-        .eq("product_id", variant.product_id)
+        .eq("product_id", item.product_id)
         .order("display_order", { ascending: true })
         .limit(1);
 
@@ -196,9 +157,9 @@ Deno.serve(async (req) => {
       if (!imageUrl || !imageUrl.startsWith("http")) {
         skipped++;
         logs.push({
-          sku_id: variant.yampi_sku_id,
-          product_id: variant.product_id,
-          product_name: productName,
+          sku_id: item.yampi_sku_id,
+          product_id: item.product_id,
+          product_name: item.product_name,
           source_url: imageUrl || "(sem url)",
           yampi_returned_url: null,
           head_status: null,
@@ -208,45 +169,26 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // 1. Ensure public stable URL (not signed/expiring)
-      imageUrl = ensurePublicUrl(imageUrl, supabaseUrl);
+      // Ensure public stable URL
+      imageUrl = ensurePublicUrl(imageUrl);
 
-      // 2. HEAD-check the source to make sure it's accessible
-      const sourceHead = await headCheck(imageUrl, 1);
-      if (sourceHead !== 200) {
-        errors++;
-        logs.push({
-          sku_id: variant.yampi_sku_id,
-          product_id: variant.product_id,
-          product_name: productName,
-          source_url: imageUrl,
-          yampi_returned_url: null,
-          head_status: sourceHead,
-          status: "error",
-          error: `Imagem de origem inacessível (HEAD ${sourceHead})`,
-        });
-        continue;
-      }
-
-      // 3. If WebP, try to use a JPG fallback (some CDNs serve both)
+      // If WebP, try JPG fallback
       let urlToSend = imageUrl;
       if (urlToSend.match(/\.webp(\?|$)/i)) {
-        // Try .jpg version
         const jpgUrl = urlToSend.replace(/\.webp/i, ".jpg");
-        const jpgHead = await headCheck(jpgUrl, 0);
-        if (jpgHead === 200) {
-          urlToSend = jpgUrl;
-          console.log(`[YAMPI-IMG] WebP→JPG fallback: ${jpgUrl}`);
-        }
-        // If no jpg available, send webp anyway — Yampi may still accept it
+        try {
+          const jpgRes = await fetch(jpgUrl, { method: "HEAD", redirect: "follow" });
+          if (jpgRes.status === 200) {
+            urlToSend = jpgUrl;
+            console.log(`[YAMPI-IMG] WebP→JPG fallback: ${jpgUrl}`);
+          }
+        } catch { /* keep webp */ }
       }
 
-      // 4. POST image to Yampi SKU images endpoint
+      // POST image to Yampi
       const res = await yampiRequest(
-        yampiBase,
-        yampiHeaders,
-        `/catalog/skus/${variant.yampi_sku_id}/images`,
-        "POST",
+        yampiBase, yampiHeaders,
+        `/catalog/skus/${item.yampi_sku_id}/images`, "POST",
         { images: [{ url: urlToSend }], upload_option: "resize" },
       );
 
@@ -254,12 +196,12 @@ Deno.serve(async (req) => {
         errors++;
         const detail = JSON.stringify(res.data).slice(0, 500);
         logs.push({
-          sku_id: variant.yampi_sku_id,
-          product_id: variant.product_id,
-          product_name: productName,
+          sku_id: item.yampi_sku_id,
+          product_id: item.product_id,
+          product_name: item.product_name,
           source_url: urlToSend,
           yampi_returned_url: null,
-          head_status: sourceHead,
+          head_status: null,
           status: "error",
           error: `Yampi ${res.status}: ${detail}`,
         });
@@ -267,80 +209,53 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // 5. Read the returned image URL from Yampi response — never build manually
+      // Read returned URL from Yampi response
       let yampiReturnedUrl: string | null = null;
       try {
-        // Yampi response: { data: [{ id, url, ... }] } or { data: { images: [...] } }
-        const responseData = res.data?.data;
-        if (Array.isArray(responseData) && responseData.length > 0) {
-          yampiReturnedUrl = responseData[0]?.url || responseData[0]?.image_url || null;
-        } else if (responseData?.images && Array.isArray(responseData.images)) {
-          yampiReturnedUrl = responseData.images[0]?.url || null;
-        } else if (responseData?.url) {
-          yampiReturnedUrl = responseData.url;
+        const rd = res.data?.data;
+        if (Array.isArray(rd) && rd.length > 0) {
+          yampiReturnedUrl = rd[0]?.url || rd[0]?.image_url || null;
+        } else if (rd?.images && Array.isArray(rd.images)) {
+          yampiReturnedUrl = rd.images[0]?.url || null;
+        } else if (rd?.url) {
+          yampiReturnedUrl = rd.url;
         }
-      } catch {
-        // Could not parse returned URL
-      }
-
-      // 6. HEAD-validate the returned Yampi URL (with retries)
-      let returnedHeadStatus: number | null = null;
-      if (yampiReturnedUrl) {
-        // Wait a moment for Yampi to process the image
-        await delay(3000);
-        returnedHeadStatus = await headCheck(yampiReturnedUrl, 2);
-        if (returnedHeadStatus !== 200) {
-          console.warn(
-            `[YAMPI-IMG] ⚠️ Yampi returned URL not yet accessible (HEAD ${returnedHeadStatus}): ${yampiReturnedUrl}`,
-          );
-        }
-      }
+      } catch { /* ignore */ }
 
       uploaded++;
       logs.push({
-        sku_id: variant.yampi_sku_id,
-        product_id: variant.product_id,
-        product_name: productName,
+        sku_id: item.yampi_sku_id,
+        product_id: item.product_id,
+        product_name: item.product_name,
         source_url: urlToSend,
         yampi_returned_url: yampiReturnedUrl,
-        head_status: returnedHeadStatus,
+        head_status: null,
         status: "success",
       });
-      console.log(
-        `[YAMPI-IMG] ✅ SKU ${variant.yampi_sku_id} <- ${urlToSend} -> ${yampiReturnedUrl || "(no url returned)"}`,
-      );
+      console.log(`[YAMPI-IMG] ✅ SKU ${item.yampi_sku_id} <- ${urlToSend} -> ${yampiReturnedUrl || "(no url returned)"}`);
 
       // Rate limit: ~2s between requests
       await delay(2100);
     }
 
-    // Log results to integrations_checkout_test_logs
+    // Log results
     await supabase.from("integrations_checkout_test_logs").insert({
       provider: "yampi-images",
       status: errors > 0 ? "partial" : "success",
-      message: `Imagens batch ${batchOffset}: ${uploaded} enviadas, ${skipped} ignoradas, ${errors} erros`,
+      message: `Imagens ${batchOffset}-${batchOffset + batch.length}/${total}: ${uploaded} enviadas, ${skipped} sem imagem, ${errors} erros`,
       payload_preview: { uploaded, skipped, errors, logs: logs.slice(0, 30) },
     });
 
     const hasMore = batchOffset + batchLimit < total;
 
     return new Response(
-      JSON.stringify({
-        uploaded,
-        skipped,
-        errors,
-        total,
-        processed: (variants || []).length,
-        has_more: hasMore,
-        logs,
-      }),
+      JSON.stringify({ uploaded, skipped, errors, total, processed: batch.length, has_more: hasMore, logs }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error("[YAMPI-IMG] Fatal:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
