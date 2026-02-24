@@ -1,68 +1,95 @@
-# Vincular Sincronizacao Bling por SKU e Proteger Nomes Editaveis
 
-## Problema Identificado
+# Corrigir Fluxo de Checkout: Carrinho Abandonado vs Pedido
 
-Existem **dois problemas** trabalhando juntos:
+## Problema Atual
+Toda vez que alguém clica em "Finalizar Compra", o sistema cria imediatamente um **pedido completo** na tabela `orders` com status `pending` -- mesmo antes do cliente efetuar qualquer pagamento. Isso gera dezenas de pedidos falsos no painel administrativo (já existem 8+ pedidos pendentes sem email de cliente).
 
-1. **A cada sincronizacao, o nome do produto e sobrescrito pelo nome do Bling** (linhas 457 e 482 do `bling-sync`, linha 151 do `bling-webhook`). Quando voce edita o nome no site, a proxima sincronizacao reverte para o nome original do Bling. Isso tambem regenera o slug, podendo quebrar links.
-2. **O filtro `hasStock()` em `useProducts.ts**` oculta todos os produtos cujas variantes tem estoque 0. Se a sincronizacao de estoque falhar por qualquer motivo, os produtos somem da loja.
+O fluxo correto de um e-commerce profissional é:
+1. Cliente vai para o checkout --> **carrinho abandonado** (sem pedido)
+2. Cliente conclui o pagamento no Yampi --> Yampi envia webhook --> **aí sim o pedido é criado**
 
-## Solucao
+## Solução
 
-### 1. Proteger campos editaveis na sincronizacao (bling-sync)
+### 1. Refatorar a Edge Function `checkout-create-session`
+**Arquivo:** `supabase/functions/checkout-create-session/index.ts`
 
-Na funcao `upsertParentWithVariants`, ao **atualizar** um produto existente, remover os campos `name`, `slug` e `description` do objeto de update. Esses campos so serao definidos na **insercao inicial** (produto novo).
+Mudancas:
+- **Remover** toda a criacao de pedido (`orders` + `order_items` + `inventory_movements`)
+- Manter apenas: validar estoque, montar o link de pagamento Yampi, e retornar a URL de redirect
+- **Adicionar** registro de carrinho abandonado na tabela `abandoned_carts` com os dados do carrinho e um `session_id` unico
+- Incluir o `session_id` como metadata no link Yampi para rastreabilidade
 
-Campos que continuam sincronizando normalmente:  `sku`, `gtin`, `weight`, `is_active`, `category_id`, etc.
+### 2. Refatorar a Edge Function `yampi-webhook`
+**Arquivo:** `supabase/functions/yampi-webhook/index.ts`
 
-### 2. Proteger campos editaveis no webhook (bling-webhook)
+Mudancas:
+- Quando receber evento `payment.approved` / `payment.paid` / `order.paid`:
+  - **Criar o pedido** na tabela `orders` com status `processing` (ja pago)
+  - Inserir os `order_items` com base nos dados do payload do Yampi
+  - Debitar estoque via `decrement_stock`
+  - Marcar o carrinho abandonado correspondente como `recovered`
+- Quando receber cancelamento/recusa: apenas logar, sem criar pedido
 
-Na funcao `syncSingleProduct`, remover `name` e `description` do update de produtos existentes. Mesma logica: precos e estoque sincronizam, nome nao.
+### 3. Limpar Pedidos Fantasma Existentes
+- Executar UPDATE/DELETE nos 8+ pedidos pendentes que foram criados erroneamente (sem `customer_email`, provider `yampi`, status `pending`)
 
-### 3. Vincular variantes por bling_variant_id (ja funciona)
+### 4. Ajustar `CheckoutStart.tsx`
+**Arquivo:** `src/pages/CheckoutStart.tsx`
 
-A vinculacao de variantes ja usa `bling_variant_id` (linhas 580-584 do bling-sync e linhas 172-176 do bling-webhook), que e o identificador unico do Bling. Isso esta correto. O SKU e salvo como referencia adicional mas o match principal e pelo ID do Bling, que nunca muda.
+- Salvar carrinho abandonado antes de redirecionar ao Yampi
+- Nao esperar `order_id` no retorno (ja que pedido nao sera criado neste momento)
 
-### 4. Ativar produto automaticamente se houver estoque
+### 5. Ajustar Pagina de Pedidos Admin
+**Arquivo:** `src/pages/admin/Orders.tsx`
 
-Apos sincronizar variantes, verificar se pelo menos uma variante ativa tem `stock_quantity > 0`. Se sim, garantir que o produto pai tenha `is_active = true`. Isso resolve o caso onde o Bling marca `situacao = "A"` mas o estoque vem zerado.
+- Garantir que pedidos so aparecem quando realmente existem (com pagamento confirmado)
+- O filtro de status `pending` pode ser usado apenas para pedidos do checkout nativo (Appmax)
 
-### 5. Remover filtro hasStock do frontend
+---
 
-Remover a funcao `hasStock` e o `.filter()` do `useProducts.ts`. Todos os produtos ativos aparecerao na loja. Produtos sem estoque terao o botao de compra desabilitado na pagina de detalhe (ja validado pelo carrinho/checkout).
+## Resumo do Fluxo Correto
+
+```text
+Cliente clica "Finalizar Compra"
+         |
+         v
+  [checkout-create-session]
+  - Valida estoque
+  - Salva carrinho abandonado
+  - Gera link Yampi
+  - Retorna URL redirect
+         |
+         v
+  Cliente e redirecionado para Yampi
+  (carrinho fica como "abandonado")
+         |
+    +---------+---------+
+    |                   |
+  Nao paga            Paga
+    |                   |
+    v                   v
+  Fica como         [yampi-webhook]
+  abandonado        - Cria pedido com status "processing"
+                    - Insere order_items
+                    - Debita estoque
+                    - Marca carrinho como "recovered"
+```
 
 ## Detalhes Tecnicos
 
-### Arquivo: `supabase/functions/bling-sync/index.ts`
+### checkout-create-session (reescrita)
+- Remove: insert em `orders`, `order_items`, `inventory_movements`
+- Mantem: validacao de estoque, calculo de totais, criacao de link Yampi
+- Adiciona: upsert em `abandoned_carts` com `cart_data` contendo variant_ids e quantidades
+- Passa metadata para o Yampi com `session_id` para vincular depois
 
-**Funcao `upsertParentWithVariants` (linha ~456-498):**
+### yampi-webhook (expansao)
+- No evento de pagamento aprovado:
+  - Buscar dados dos SKUs do payload Yampi
+  - Mapear `yampi_sku_id` -> `product_variants` locais
+  - Criar pedido completo com todos os dados
+  - Debitar estoque
+  - Buscar e marcar `abandoned_carts` como recovered
 
-- Separar `productData` em dois objetos: `insertData` (com name, slug, description) e `updateData` (sem esses campos)
-- No bloco `if (existing)` (linha 481-484): usar `updateData` ao inves de `productData`
-- No bloco `else` (linha 485-498): usar `insertData` completo (insercao inicial)
-
-**Apos sincronizacao de variantes (linha ~680):**
-
-- Adicionar query para verificar se alguma variante ativa tem stock > 0
-- Se sim, fazer `update({ is_active: true })` no produto pai
-
-### Arquivo: `supabase/functions/bling-webhook/index.ts`
-
-**Funcao `syncSingleProduct` (linha ~150-157):**
-
-- Remover `name` do objeto de update
-- Remover `description` do objeto de update
-- Manter preco, is_active, weight
-
-### Arquivo: `src/hooks/useProducts.ts`
-
-- Remover funcao `hasStock` (linhas 57-62)
-- Remover `.filter(p => hasStock(p))` das linhas 46, 52, 104
-- Retornar todos os produtos ativos diretamente
-
-### Resultado esperado
-
-- Voce pode editar nomes e descricoes no site sem que a sincronizacao reverta
-- Estoque e precos continuam sincronizando automaticamente pelo ID do Bling
-- Todos os produtos ativos aparecem na loja, independente do estoque
-- Se uma variante tiver estoque no Bling, o produto pai fica ativo automaticamente
+### Limpeza de dados
+- DELETE dos pedidos pendentes Yampi sem pagamento (os 8 registros atuais)
