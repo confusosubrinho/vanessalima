@@ -734,6 +734,102 @@ export type Database = {
           },
         ]
       }
+      catalog_sync_queue: {
+        Row: {
+          action: string
+          attempts: number
+          created_at: string
+          id: string
+          last_error: string | null
+          processed_at: string | null
+          product_id: string | null
+          status: string
+          updated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          action?: string
+          attempts?: number
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          processed_at?: string | null
+          product_id?: string | null
+          status?: string
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          action?: string
+          attempts?: number
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          processed_at?: string | null
+          product_id?: string | null
+          status?: string
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_sync_queue_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_sync_queue_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catalog_sync_runs: {
+        Row: {
+          created_at: string
+          created_products: number | null
+          created_skus: number | null
+          error_details: Json | null
+          errors_count: number | null
+          finished_at: string | null
+          id: string
+          skipped_inactive: number | null
+          started_at: string
+          status: string
+          updated_skus: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_products?: number | null
+          created_skus?: number | null
+          error_details?: Json | null
+          errors_count?: number | null
+          finished_at?: string | null
+          id?: string
+          skipped_inactive?: number | null
+          started_at?: string
+          status?: string
+          updated_skus?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_products?: number | null
+          created_skus?: number | null
+          error_details?: Json | null
+          errors_count?: number | null
+          finished_at?: string | null
+          id?: string
+          skipped_inactive?: number | null
+          started_at?: string
+          status?: string
+          updated_skus?: number | null
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           banner_image_url: string | null
