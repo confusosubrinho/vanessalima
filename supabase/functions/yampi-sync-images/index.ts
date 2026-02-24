@@ -90,10 +90,11 @@ Deno.serve(async (req) => {
     let uploaded = 0;
     let skipped = 0;
     let errors = 0;
+    const logs: Array<{ sku_id: number; product_id: string; url: string; status: string; detail?: string }> = [];
     const processedProductIds = new Set<string>();
 
     for (const variant of (variants || [])) {
-      // Only upload 1 image per product (first SKU)
+      // Only upload 1 image per product (first SKU encountered)
       if (processedProductIds.has(variant.product_id)) {
         skipped++;
         continue;
@@ -111,24 +112,38 @@ Deno.serve(async (req) => {
       const imageUrl = images?.[0]?.url;
       if (!imageUrl || !imageUrl.startsWith("http")) {
         skipped++;
+        logs.push({ sku_id: variant.yampi_sku_id, product_id: variant.product_id, url: imageUrl || "(sem url)", status: "skipped", detail: "URL inválida ou ausente" });
         continue;
       }
 
+      // Use correct Yampi API format: { images: [{ url }], upload_option }
       const res = await yampiRequest(yampiBase, yampiHeaders, `/catalog/skus/${variant.yampi_sku_id}/images`, "POST", {
-        url: imageUrl,
+        images: [{ url: imageUrl }],
         upload_option: "resize",
       });
 
       if (res.ok) {
         uploaded++;
-        console.log(`[YAMPI-IMG] Uploaded image for SKU ${variant.yampi_sku_id} (product ${variant.product_id})`);
+        logs.push({ sku_id: variant.yampi_sku_id, product_id: variant.product_id, url: imageUrl, status: "success" });
+        console.log(`[YAMPI-IMG] ✅ SKU ${variant.yampi_sku_id} <- ${imageUrl}`);
       } else {
         errors++;
-        console.log(`[YAMPI-IMG] Failed SKU ${variant.yampi_sku_id}: ${res.status}`);
+        const detail = JSON.stringify(res.data).slice(0, 300);
+        logs.push({ sku_id: variant.yampi_sku_id, product_id: variant.product_id, url: imageUrl, status: "error", detail });
+        console.log(`[YAMPI-IMG] ❌ SKU ${variant.yampi_sku_id}: ${res.status} ${detail}`);
       }
 
-      await delay(400);
+      // Rate limit: 30 req/min for images endpoint → ~2s between requests
+      await delay(2100);
     }
+
+    // Log results to integrations_checkout_test_logs
+    await supabase.from("integrations_checkout_test_logs").insert({
+      provider: "yampi",
+      status: errors > 0 ? "partial" : "success",
+      message: `Imagens batch ${batchOffset}: ${uploaded} enviadas, ${skipped} ignoradas, ${errors} erros`,
+      payload_preview: { uploaded, skipped, errors, logs: logs.slice(0, 20) },
+    });
 
     const hasMore = batchOffset + batchLimit < total;
 
@@ -139,6 +154,7 @@ Deno.serve(async (req) => {
       total,
       processed: (variants || []).length,
       has_more: hasMore,
+      logs,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
