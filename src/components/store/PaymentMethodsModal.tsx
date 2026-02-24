@@ -90,9 +90,6 @@ export function PaymentMethodsModal({
               <p className="text-sm text-muted-foreground mt-1">
                 {pixDiscount}% de desconto no PIX
               </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                (Economia de {formatPrice(pixDiscountAmount)})
-              </p>
             </div>
             
             <div className="space-y-2 text-sm">

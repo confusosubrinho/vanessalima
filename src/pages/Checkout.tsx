@@ -790,7 +790,6 @@ export default function Checkout() {
                         {pixDiscountAmount > 0 && (
                           <div className="pl-7 text-sm text-muted-foreground">
                             <span className="line-through">{formatPrice(total)}</span>
-                            <span className="ml-2">Desconto PIX: -{formatPrice(pixDiscountAmount)}</span>
                             <span className="block text-xs">{pc.pix_discount}% off no PIX</span>
                           </div>
                         )}
@@ -1019,7 +1018,6 @@ export default function Checkout() {
                 {formData.paymentMethod === 'pix' && pixDiscountAmount > 0 && (
                   <div className="flex justify-between text-sm text-primary">
                     <span>Desconto PIX ({pc.pix_discount}%)</span>
-                    <span>-{formatPrice(pixDiscountAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">

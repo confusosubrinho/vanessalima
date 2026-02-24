@@ -2078,6 +2078,7 @@ export type Database = {
           monthly_rate_by_installment: Json | null
           monthly_rate_fixed: number | null
           pix_discount: number
+          pix_discount_applies_to_sale_products: boolean
           rounding_mode: string
           transparent_checkout_fee_enabled: boolean
           transparent_checkout_fee_percent: number
@@ -2101,6 +2102,7 @@ export type Database = {
           monthly_rate_by_installment?: Json | null
           monthly_rate_fixed?: number | null
           pix_discount?: number
+          pix_discount_applies_to_sale_products?: boolean
           rounding_mode?: string
           transparent_checkout_fee_enabled?: boolean
           transparent_checkout_fee_percent?: number
@@ -2124,6 +2126,7 @@ export type Database = {
           monthly_rate_by_installment?: Json | null
           monthly_rate_fixed?: number | null
           pix_discount?: number
+          pix_discount_applies_to_sale_products?: boolean
           rounding_mode?: string
           transparent_checkout_fee_enabled?: boolean
           transparent_checkout_fee_percent?: number

@@ -411,7 +411,6 @@ export default function ProductDetail() {
               <p className="text-2xl font-bold">{formatPrice(currentPrice)}</p>
               {applyPix && pixDiscountAmount > 0 ? (
                 <>
-                  <p className="text-sm text-muted-foreground">Desconto PIX: {formatPrice(pixDiscountAmount)}</p>
                   <p className="text-sm text-muted-foreground">À vista com {pixDiscountPercent}% de desconto no PIX</p>
                 </>
               ) : (
@@ -619,7 +618,6 @@ export default function ProductDetail() {
               </p>
               {applyPix && pixDiscountAmount > 0 ? (
                 <>
-                  <p className="text-sm text-muted-foreground">Desconto PIX: {formatPrice(pixDiscountAmount)}</p>
                   <p className="text-sm text-muted-foreground">no Pix ({pixDiscountPercent}% off)</p>
                 </>
               ) : (
