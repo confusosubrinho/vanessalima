@@ -104,7 +104,7 @@ export default function AppmaxCallbackPage() {
     return () => clearInterval(timer);
   }, [status]);
 
-  // Auto-generate quando página carrega com token na URL
+  // Auto-generate quando página carrega com token na URL — tenta logo para não depender do healthcheck
   const autoGenerateAttempted = useRef(false);
 
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function AppmaxCallbackPage() {
 
     autoGenerateAttempted.current = true;
 
-    // Aguarda 2s para o banco estar atualizado após o redirect
+    // Pequena espera para o banco estar consistente após o redirect; depois tenta gerar credenciais
     const t = setTimeout(async () => {
       try {
         const env = detectedEnv || 'sandbox';
@@ -137,11 +137,11 @@ export default function AppmaxCallbackPage() {
           setStatus('connected');
           await checkStatus();
         }
-        // Se falhou, continua polling silenciosamente aguardando o healthcheck
+        // Se falhou, continua polling; usuário pode clicar em "Gerar credenciais agora"
       } catch {
         // Silencia erro — o polling continua normalmente
       }
-    }, 2000);
+    }, 800);
 
     return () => clearTimeout(t);
   }, [searchParams, savedToken, status, detectedEnv, externalKey, checkStatus]);
@@ -250,18 +250,31 @@ export default function AppmaxCallbackPage() {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground text-center">
-                A Appmax enviará as credenciais do merchant via healthcheck. Isso pode levar até 5 minutos.
+                A Appmax pode enviar as credenciais via healthcheck. Se você já concluiu a instalação no portal, use o botão abaixo para finalizar agora.
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={checkStatus}
-                disabled={checking}
-                className="mt-2"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${checking ? 'animate-spin' : ''}`} />
-                Verificar agora
-              </Button>
+              <div className="flex flex-col gap-2 w-full mt-2">
+                {hasInstallToken && (
+                  <Button
+                    size="sm"
+                    onClick={handleManualGenerate}
+                    disabled={checking}
+                    className="w-full"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Gerar credenciais agora
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={checkStatus}
+                  disabled={checking}
+                  className="w-full"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${checking ? 'animate-spin' : ''}`} />
+                  Verificar status
+                </Button>
+              </div>
             </div>
           )}
 
