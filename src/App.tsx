@@ -73,6 +73,7 @@ const Team = lazy(() => import("./pages/admin/Team"));
 const AuditLog = lazy(() => import("./pages/admin/AuditLog"));
 const CheckoutSettings = lazy(() => import("./pages/admin/CheckoutSettings"));
 const CheckoutStart = lazy(() => import("./pages/CheckoutStart"));
+const CheckoutReturn = lazy(() => import("./pages/CheckoutReturn"));
 
 // Lazy load non-critical floating components
 const WhatsAppFloat = lazy(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat })));
@@ -131,6 +132,7 @@ const App = () => {
               <Route path="/carrinho" element={<Cart />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/checkout/start" element={<CheckoutStart />} />
+              <Route path="/checkout/obrigado" element={<CheckoutReturn />} />
               <Route path="/tamanho/:size" element={<SizePage />} />
               <Route path="/faq" element={<FAQPage />} />
               <Route path="/sobre" element={<SobrePage />} />

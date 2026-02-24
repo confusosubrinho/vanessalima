@@ -21,13 +21,13 @@ Deno.serve(async (req) => {
     };
 
     if (!items?.length) {
-      return new Response(JSON.stringify({ error: "Nenhum item no carrinho" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return jsonRes({ error: "Nenhum item no carrinho" }, 400);
     }
 
     // 1. Read checkout config
     const { data: checkoutConfig } = await supabase.from("integrations_checkout").select("*").limit(1).single();
     if (!checkoutConfig?.enabled) {
-      return new Response(JSON.stringify({ redirect_url: "/checkout", fallback: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return jsonRes({ redirect_url: "/checkout", fallback: true });
     }
 
     const provider = checkoutConfig.provider;
@@ -42,9 +42,9 @@ Deno.serve(async (req) => {
 
     if (!providerConfig) {
       if (checkoutConfig.fallback_to_native) {
-        return new Response(JSON.stringify({ redirect_url: "/checkout", fallback: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return jsonRes({ redirect_url: "/checkout", fallback: true });
       }
-      return new Response(JSON.stringify({ error: "Provider não configurado" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return jsonRes({ error: "Provider não configurado" }, 400);
     }
 
     const config = providerConfig.config as Record<string, unknown>;
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
       .in("id", variantIds);
 
     if (!variants?.length) {
-      return new Response(JSON.stringify({ error: "Variantes não encontradas" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return jsonRes({ error: "Variantes não encontradas" }, 400);
     }
 
     const productIds = [...new Set(variants.map((v) => v.product_id))];
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     for (const item of items) {
       const variant = variants.find((v) => v.id === item.variant_id);
       if (!variant || variant.stock_quantity < item.quantity) {
-        return new Response(JSON.stringify({ error: `Estoque insuficiente para variante ${item.variant_id}` }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return jsonRes({ error: `Estoque insuficiente para variante ${item.variant_id}` }, 400);
       }
     }
 
@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
       userId = user?.id || null;
     }
 
-    // 6. Calculate subtotal
+    // 6. Calculate subtotal and build cart details
     let subtotal = 0;
     const cartDetails: Array<{
       variant_id: string;
@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 7. Register abandoned cart (NO order creation)
+    // 7. Register abandoned cart + #11 reserve stock
     const sessionId = crypto.randomUUID();
 
     await supabase.from("abandoned_carts").insert({
@@ -128,6 +128,17 @@ Deno.serve(async (req) => {
       utm_term: attribution?.utm_term || null,
       utm_content: attribution?.utm_content || null,
     });
+
+    // #11 Reserve stock temporarily (will be debited by webhook on payment, or released by cleanup)
+    for (const item of items) {
+      const variant = variants.find((v) => v.id === item.variant_id)!;
+      await supabase.rpc("decrement_stock", { p_variant_id: variant.id, p_quantity: item.quantity });
+      await supabase.from("inventory_movements").insert({
+        variant_id: variant.id,
+        type: "reserve",
+        quantity: item.quantity,
+      });
+    }
 
     // 8. Provider-specific: Yampi
     if (provider === "yampi") {
@@ -161,7 +172,7 @@ Deno.serve(async (req) => {
                 body: JSON.stringify({
                   price_cost: unitPrice,
                   price_sale: unitPrice,
-                  quantity: variant.stock_quantity,
+                  quantity: variant.stock_quantity - item.quantity,
                 }),
               });
             }
@@ -218,6 +229,16 @@ Deno.serve(async (req) => {
         }
 
         if (!linkData) {
+          // Release reserved stock on failure
+          for (const item of items) {
+            const variant = variants.find((v) => v.id === item.variant_id)!;
+            await supabase.rpc("increment_stock", { p_variant_id: variant.id, p_quantity: item.quantity });
+            await supabase.from("inventory_movements").insert({
+              variant_id: variant.id,
+              type: "release",
+              quantity: item.quantity,
+            });
+          }
           throw new Error(lastError);
         }
 
@@ -229,10 +250,10 @@ Deno.serve(async (req) => {
           || linkData?.url
           || "";
 
-        return new Response(JSON.stringify({ session_id: sessionId, redirect_url: redirectUrl }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return jsonRes({ session_id: sessionId, redirect_url: redirectUrl });
       } catch (yampiErr: unknown) {
         const msg = yampiErr instanceof Error ? yampiErr.message : "Erro Yampi";
-        
+
         await supabase.from("integrations_checkout_test_logs").insert({
           provider: "yampi",
           status: "error",
@@ -241,16 +262,23 @@ Deno.serve(async (req) => {
         });
 
         if (checkoutConfig.fallback_to_native) {
-          return new Response(JSON.stringify({ redirect_url: "/checkout", fallback: true, error: msg }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          return jsonRes({ redirect_url: "/checkout", fallback: true, error: msg });
         }
-        return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        return jsonRes({ error: msg }, 500);
       }
     }
 
     // Default: native checkout
-    return new Response(JSON.stringify({ redirect_url: "/checkout" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return jsonRes({ redirect_url: "/checkout" });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";
-    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return jsonRes({ error: msg }, 500);
   }
 });
+
+function jsonRes(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
