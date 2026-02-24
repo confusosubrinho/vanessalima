@@ -47,25 +47,8 @@ function sanitizePayloadForLog(payload: unknown): unknown {
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function uploadImagesToSku(
-  yampiBase: string,
-  yampiHeaders: Record<string, string>,
-  skuId: number,
-  imageUrls: string[]
-) {
-  // Send only ONE image per product/SKU as requested
-  const firstImage = imageUrls.find((url) => typeof url === "string" && url.startsWith("http"));
-  if (!firstImage) return;
-
-  const res = await yampiRequest(yampiBase, yampiHeaders, `/catalog/skus/${skuId}/images`, "POST", {
-    url: firstImage,
-    upload_option: "resize",
-  });
-
-  if (!res.ok) {
-    console.log(`[YAMPI] Image upload failed for SKU ${skuId}`);
-  }
-}
+// Images are now handled separately via yampi-sync-images function
+// DO NOT upload images during catalog sync to avoid errors
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -222,18 +205,7 @@ Deno.serve(async (req) => {
         const { data: variants } = await variantsQuery;
         const activeVariants = variants || [];
 
-        // ─── Get product images ───
-        const { data: images } = await supabase
-          .from("product_images")
-          .select("url, alt_text")
-          .eq("product_id", product.id)
-          .order("display_order", { ascending: true })
-          .limit(5);
-
-        const imageUrls = (images || [])
-          .filter((img) => img.url && img.url.startsWith("http"))
-          .map((img) => img.url);
-        let imageUploadedForProduct = false;
+        // Images are handled separately via yampi-sync-images function
 
         // ─── Category from Yampi mapping ───
         const category = product.categories as Record<string, unknown> | null;
@@ -342,10 +314,6 @@ Deno.serve(async (req) => {
                 const yampiSkuId = Number(skusList[0].id);
                 await supabase.from("product_variants").update({ yampi_sku_id: yampiSkuId }).eq("id", activeVariants[0].id);
                 counters.created_skus++;
-                if (!imageUploadedForProduct) {
-                  await uploadImagesToSku(yampiBase, yampiHeaders, yampiSkuId, imageUrls);
-                  imageUploadedForProduct = true;
-                }
               }
           }
 
@@ -409,10 +377,6 @@ Deno.serve(async (req) => {
                 const yampiSkuId = (res.data?.data as Record<string, unknown>)?.id as number || res.data?.id as number;
                 if (yampiSkuId) {
                   await supabase.from("product_variants").update({ yampi_sku_id: Number(yampiSkuId) }).eq("id", variant.id);
-                  if (!imageUploadedForProduct) {
-                    await uploadImagesToSku(yampiBase, yampiHeaders, Number(yampiSkuId), imageUrls);
-                    imageUploadedForProduct = true;
-                  }
                 }
                 counters.created_skus++;
               } else {
