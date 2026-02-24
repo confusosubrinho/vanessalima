@@ -299,14 +299,14 @@ export default function CheckoutSettings() {
     setImageProgress("Iniciando...");
     setImageLogs([]);
     setShowImageLogs(true);
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 10;
     let offset = 0;
     let totalUploaded = 0, totalSkipped = 0, totalErrors = 0;
     const allLogs: typeof imageLogs = [];
 
     try {
       while (true) {
-        setImageProgress(`Processando SKUs ${offset + 1}-${offset + BATCH_SIZE}...`);
+        setImageProgress(`Processando produtos ${offset + 1}-${offset + BATCH_SIZE}...`);
         const { data, error } = await supabase.functions.invoke("yampi-sync-images", {
           body: { offset, limit: BATCH_SIZE },
         });
@@ -323,7 +323,7 @@ export default function CheckoutSettings() {
 
         const total = data?.total || 0;
         const processed = offset + (data?.processed || 0);
-        setImageProgress(`${processed}/${total} SKUs processados`);
+        setImageProgress(`${processed}/${total} produtos processados`);
 
         if (!data?.has_more) break;
         offset += BATCH_SIZE;
