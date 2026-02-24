@@ -104,23 +104,34 @@ Deno.serve(async (req) => {
     // ─── Resolve brand_id ───
     let brandId = defaultBrandId;
     if (!brandId) {
-      const brandsRes = await yampiRequest(yampiBase, yampiHeaders, "/catalog/brands?limit=1", "GET");
+      // Try fetching all brands and use the first one
+      const brandsRes = await yampiRequest(yampiBase, yampiHeaders, "/catalog/brands?limit=50", "GET");
       if (brandsRes.ok && brandsRes.data?.data) {
         const brands = brandsRes.data.data as Array<Record<string, unknown>>;
-        if (brands.length > 0) brandId = brands[0].id as number;
+        if (brands.length > 0) {
+          brandId = Number(brands[0].id);
+          console.log(`[YAMPI] Using existing brand id=${brandId} name=${brands[0].name}`);
+        }
       }
       if (!brandId) {
+        // Try creating; if 422 (already exists), re-fetch
         const createBrand = await yampiRequest(yampiBase, yampiHeaders, "/catalog/brands", "POST", {
           name: "Minha Marca", active: true, featured: false,
         });
         if (createBrand.ok) {
           const bd = createBrand.data?.data;
-          brandId = Array.isArray(bd) ? (bd[0] as Record<string, unknown>)?.id as number : (bd as Record<string, unknown>)?.id as number;
+          brandId = Array.isArray(bd) ? Number((bd[0] as Record<string, unknown>)?.id) : Number((bd as Record<string, unknown>)?.id);
+        } else if (createBrand.status === 422) {
+          // Brand exists but GET didn't return it — retry GET
+          await delay(1000);
+          const retry = await yampiRequest(yampiBase, yampiHeaders, "/catalog/brands?limit=50", "GET");
+          if (retry.ok && retry.data?.data) {
+            const brands = retry.data.data as Array<Record<string, unknown>>;
+            if (brands.length > 0) brandId = Number(brands[0].id);
+          }
         }
         if (!brandId) {
-          return new Response(JSON.stringify({ error: "Não foi possível obter/criar marca. Configure default_brand_id." }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          console.error("[YAMPI] Could not resolve brand. Proceeding with brandId=null, products may fail.");
         }
       }
     }
