@@ -24,14 +24,23 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: "es2020",
     cssMinify: true,
+    minify: "esbuild",
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react": ["react", "react-dom"],
-          "vendor-router": ["react-router-dom"],
-          "vendor-query": ["@tanstack/react-query"],
-          "vendor-supabase": ["@supabase/supabase-js"],
+        manualChunks: (id) => {
+          if (id.includes("node_modules")) {
+            if (id.includes("react-dom") || id.includes("react/")) return "vendor-react";
+            if (id.includes("react-router")) return "vendor-router";
+            if (id.includes("@tanstack/react-query")) return "vendor-query";
+            if (id.includes("@supabase/supabase-js")) return "vendor-supabase";
+            if (id.includes("zod")) return "vendor-zod";
+            if (id.includes("recharts")) return "vendor-recharts";
+            if (id.includes("xlsx")) return "vendor-xlsx";
+          }
         },
+        chunkFileNames: "assets/[name]-[hash].js",
+        entryFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
       },
     },
     chunkSizeWarningLimit: 600,

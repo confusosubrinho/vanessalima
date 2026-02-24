@@ -3204,6 +3204,7 @@ export type Database = {
     }
     Functions: {
       check_login_rate_limit: { Args: { p_email: string }; Returns: boolean }
+      cancel_order_return_stock: { Args: { p_order_id: string }; Returns: Json }
       cleanup_orphan_orders: { Args: never; Returns: undefined }
       decrement_stock: {
         Args: { p_quantity: number; p_variant_id: string }

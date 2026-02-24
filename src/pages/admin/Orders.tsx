@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal } from 'lucide-react';
+import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal, ShoppingCart } from 'lucide-react';
 import { HelpHint } from '@/components/HelpHint';
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
+import { exportToCSV } from '@/lib/csv';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -40,6 +41,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { Order } from '@/types/database';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
@@ -72,17 +79,44 @@ export default function Orders() {
     },
   });
 
+  const { data: orderItems, isLoading: orderItemsLoading } = useQuery({
+    queryKey: ['admin-order-items', selectedOrder?.id],
+    queryFn: async () => {
+      if (!selectedOrder?.id) return [];
+      const { data, error } = await supabase
+        .from('order_items')
+        .select('id, product_name, variant_info, quantity, unit_price, total_price, title_snapshot, image_snapshot')
+        .eq('order_id', selectedOrder.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!selectedOrder?.id,
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' }) => {
+      if (status === 'cancelled') {
+        const { data, error } = await supabase.rpc('cancel_order_return_stock', { p_order_id: id });
+        if (error) throw error;
+        if (data && typeof data === 'object' && (data as { success?: boolean }).success === false) {
+          const msg = (data as { message?: string }).message || 'Não foi possível cancelar o pedido.';
+          throw new Error(msg);
+        }
+        return;
+      }
       const { error } = await supabase
         .from('orders')
         .update({ status })
         .eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-      toast({ title: 'Status atualizado!' });
+      toast({ title: status === 'cancelled' ? 'Pedido cancelado e estoque devolvido!' : 'Status atualizado!' });
+    },
+    onError: (err: Error) => {
+      toast({ title: err.message || 'Erro ao atualizar status', variant: 'destructive' });
     },
   });
 
@@ -119,10 +153,11 @@ export default function Orders() {
     cancelled: 'Cancelado',
   };
 
-  // Apply filters
+  // Apply filters (null-safe: order_number/shipping_name can be null)
+  const searchLower = searchQuery.toLowerCase();
   let filteredOrders = orders?.filter(o =>
-    o.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    o.shipping_name.toLowerCase().includes(searchQuery.toLowerCase())
+    (o.order_number ?? '').toLowerCase().includes(searchLower) ||
+    (o.shipping_name ?? '').toLowerCase().includes(searchLower)
   ) || [];
 
   // Status filter
@@ -176,7 +211,6 @@ export default function Orders() {
   };
 
   const hasActiveFilters = statusFilter !== 'all' || dateFrom || dateTo || minValue || maxValue;
-  const importRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
     if (!orders) return;
@@ -197,12 +231,8 @@ export default function Orders() {
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const text = await readFileAsText(file);
-    const rows = parseCSV(text);
-    console.log(`${rows.length} pedidos lidos`);
-    if (importRef.current) importRef.current.value = '';
+    // Importação de CSV em desenvolvimento — funcionalidade em breve
+    e.target.value = '';
   };
 
   return (
@@ -227,9 +257,18 @@ export default function Orders() {
               <DropdownMenuItem onClick={handleExport}>
                 <Download className="h-4 w-4 mr-2" /> Exportar
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => importRef.current?.click()}>
-                <Upload className="h-4 w-4 mr-2" /> Importar
-              </DropdownMenuItem>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex w-full">
+                      <DropdownMenuItem disabled className="opacity-70">
+                        <Upload className="h-4 w-4 mr-2" /> Importar (em breve)
+                      </DropdownMenuItem>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Funcionalidade em desenvolvimento</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
@@ -237,12 +276,18 @@ export default function Orders() {
             <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" /> Exportar
             </Button>
-            <label>
-              <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
-              <Button variant="outline" size="sm" asChild>
-                <span><Upload className="h-4 w-4 mr-2" /> Importar</span>
-              </Button>
-            </label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button variant="outline" size="sm" disabled>
+                      <Upload className="h-4 w-4 mr-2" /> Importar (em breve)
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Funcionalidade em desenvolvimento</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         )}
       </div>
@@ -420,8 +465,13 @@ export default function Orders() {
                 </TableRow>
               ) : filteredOrders?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Nenhum pedido encontrado
+                  <TableCell colSpan={6} className="p-0">
+                    <AdminEmptyState
+                      icon={ShoppingCart}
+                      title="Nenhum pedido"
+                      description={hasActiveFilters ? 'Nenhum pedido corresponde aos filtros aplicados. Tente alterar os critérios.' : 'Ainda não há pedidos na loja.'}
+                      action={hasActiveFilters ? { label: 'Limpar filtros', onClick: clearFilters } : undefined}
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -474,10 +524,54 @@ export default function Orders() {
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
+              {(selectedOrder.customer_email || selectedOrder.provider) && (
+                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                  {selectedOrder.customer_email && (
+                    <span>Email: {selectedOrder.customer_email}</span>
+                  )}
+                  {selectedOrder.provider && (
+                    <Badge variant="outline" className="text-xs">{selectedOrder.provider === 'yampi' ? 'Yampi' : 'Appmax'}</Badge>
+                  )}
+                </div>
+              )}
+              {orderItemsLoading ? (
+                <p className="text-sm text-muted-foreground">Carregando itens...</p>
+              ) : orderItems && orderItems.length > 0 ? (
+                <div>
+                  <h3 className="font-medium mb-2">Itens do pedido</h3>
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-xs">Produto</TableHead>
+                          <TableHead className="text-xs w-16">Qtd</TableHead>
+                          <TableHead className="text-xs text-right">Unit.</TableHead>
+                          <TableHead className="text-xs text-right">Total</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {orderItems.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell className="text-sm">
+                              <span className="font-medium">{item.title_snapshot || item.product_name}</span>
+                              {item.variant_info && (
+                                <span className="text-muted-foreground block text-xs">{item.variant_info}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm">{item.quantity}</TableCell>
+                            <TableCell className="text-sm text-right">{formatPrice(Number(item.unit_price))}</TableCell>
+                            <TableCell className="text-sm text-right font-medium">{formatPrice(Number(item.total_price))}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <h3 className="font-medium mb-2">Endereço de Entrega</h3>
-                  <p>{selectedOrder.shipping_name}</p>
+                  <p>{selectedOrder.shipping_name ?? '—'}</p>
                   <p className="text-muted-foreground">
                     {selectedOrder.shipping_address}<br />
                     {selectedOrder.shipping_city} - {selectedOrder.shipping_state}<br />

@@ -46,7 +46,12 @@ export function BannerCarousel() {
   };
 
   return (
-    <div className="relative w-full overflow-hidden bg-muted">
+    <div
+      className="relative w-full overflow-hidden bg-muted"
+      role="region"
+      aria-roledescription="carrossel"
+      aria-label="Banner promocional"
+    >
       <div 
         className="flex transition-transform duration-500 ease-in-out"
         style={{ transform: `translateX(-${currentIndex * 100}%)` }}
@@ -85,6 +90,7 @@ export function BannerCarousel() {
             size="icon"
             onClick={goToPrevious}
             className="absolute left-4 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background rounded-full shadow-lg"
+            aria-label="Slide anterior"
           >
             <ChevronLeft className="h-6 w-6" />
           </Button>
@@ -93,6 +99,7 @@ export function BannerCarousel() {
             size="icon"
             onClick={goToNext}
             className="absolute right-4 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background rounded-full shadow-lg"
+            aria-label="Próximo slide"
           >
             <ChevronRight className="h-6 w-6" />
           </Button>
@@ -100,11 +107,14 @@ export function BannerCarousel() {
       )}
 
       {displayBanners.length > 1 && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2" role="tablist" aria-label="Slides do carrossel">
           {displayBanners.map((_: any, index: number) => (
             <button
               key={index}
               onClick={() => goToIndex(index)}
+              role="tab"
+              aria-selected={index === currentIndex}
+              aria-label={`Slide ${index + 1} de ${displayBanners.length}`}
               className={`w-3 h-3 rounded-full transition-colors ${
                 index === currentIndex ? 'bg-secondary' : 'bg-secondary/40'
               }`}

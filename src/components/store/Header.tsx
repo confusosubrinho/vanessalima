@@ -4,16 +4,16 @@ import { User, ShoppingBag, Menu, Phone, MessageCircle, ChevronDown, Trash2, Plu
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
-import { useCart } from '@/contexts/CartContext';
 import { useCategories, useProducts } from '@/hooks/useProducts';
+import { useCart } from '@/contexts/CartContext';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useStoreSettingsPublic } from '@/hooks/useStoreContact';
 import defaultLogo from '@/assets/logo.png';
 import { ShippingCalculator } from './ShippingCalculator';
 import { CouponInput } from './CouponInput';
 import { SearchPreview } from './SearchPreview';
 import { CartProductSuggestions } from './CartProductSuggestions';
+import { prefetchCategoryPage, prefetchSearchPage, prefetchCartPage, prefetchCheckoutStartPage } from '@/lib/prefetch';
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Percent, Star, Sparkles, Heart, Gift, Tag, Flame, Zap, Crown, ShoppingBag,
@@ -74,19 +74,8 @@ export function Header() {
     return () => { if (catTimeoutRef.current) clearTimeout(catTimeoutRef.current); };
   }, []);
 
-  // Fetch header settings from public view
-  const { data: headerSettings } = useQuery({
-    queryKey: ['store-settings-public'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('store_settings_public' as any)
-        .select('*')
-        .maybeSingle();
-      if (error) throw error;
-      return data as any;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+  // Fetch header settings from public view (cache compartilhado com footer etc.)
+  const { data: headerSettings } = useStoreSettingsPublic();
 
   const logo = headerSettings?.header_logo_url || headerSettings?.logo_url || defaultLogo;
   const subheadText = headerSettings?.header_subhead_text || 'Frete grátis para compras acima de R$ 399*';
@@ -247,7 +236,7 @@ export function Header() {
 
           {/* CENTER ZONE: Search (desktop) */}
           <div className="hidden md:flex flex-1 justify-center max-w-xl mx-auto">
-            <SearchPreview onSearch={handleSearch} className="w-full" />
+            <SearchPreview onSearch={handleSearch} onFocus={prefetchSearchPage} className="w-full" />
           </div>
 
           {/* RIGHT ZONE: Icons */}
@@ -304,7 +293,7 @@ export function Header() {
             {/* Cart */}
             <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="relative rounded-full border-2 border-primary bg-primary text-primary-foreground hover:bg-primary/90 min-w-[44px] min-h-[44px]">
+                <Button variant="outline" size="icon" className="relative rounded-full border-2 border-primary bg-primary text-primary-foreground hover:bg-primary/90 min-w-[44px] min-h-[44px]" onMouseEnter={prefetchCartPage}>
                   <ShoppingBag className="h-5 w-5" />
                   {itemCount > 0 && (
                     <span className="absolute -top-2 -right-2 bg-secondary text-secondary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold animate-scale-bounce" key={itemCount}>
@@ -429,9 +418,15 @@ export function Header() {
                         </div>
                       </div>
                       
-                      <Button asChild className="w-full" size="sm">
-                        <Link to="/checkout/start" onClick={() => setIsCartOpen(false)}>Finalizar Compra</Link>
-                      </Button>
+                      {selectedShipping ? (
+                        <Button asChild className="w-full" size="sm">
+                          <Link to="/checkout/start" onClick={() => setIsCartOpen(false)} onMouseEnter={prefetchCheckoutStartPage}>Finalizar Compra</Link>
+                        </Button>
+                      ) : (
+                        <Button asChild className="w-full" size="sm" variant="secondary">
+                          <Link to="/carrinho" onClick={() => setIsCartOpen(false)}>Calcule o frete no carrinho</Link>
+                        </Button>
+                      )}
                       <Button asChild variant="outline" className="w-full" size="sm">
                         <Link to="/carrinho" onClick={() => setIsCartOpen(false)}>Ver Carrinho Completo</Link>
                       </Button>
@@ -456,7 +451,7 @@ export function Header() {
             {/* All Categories - with delay */}
             <div
               className="relative flex-shrink-0"
-              onMouseEnter={allCategoriesDD.handleEnter}
+              onMouseEnter={() => { allCategoriesDD.handleEnter(); prefetchCategoryPage(); }}
               onMouseLeave={allCategoriesDD.handleLeave}
             >
               <button className="nav-link flex items-center gap-2 py-4 px-4 hover:bg-muted transition-colors">
@@ -517,6 +512,7 @@ export function Header() {
                     <Link
                       to={`/categoria/${category.slug}`}
                       className="nav-link flex items-center gap-1 py-4 px-3 hover:bg-muted transition-colors whitespace-nowrap"
+                      onMouseEnter={prefetchCategoryPage}
                     >
                       {category.name}
                     </Link>

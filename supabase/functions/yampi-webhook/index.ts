@@ -14,6 +14,21 @@ Deno.serve(async (req) => {
   );
 
   try {
+    // Webhook security: validate shared secret in query string (?token=...)
+    const url = new URL(req.url);
+    const webhookSecret = Deno.env.get("YAMPI_WEBHOOK_SECRET");
+
+    if (!webhookSecret) {
+      console.error("[yampi-webhook] YAMPI_WEBHOOK_SECRET não configurado — rejeitando request");
+      return new Response("Webhook secret not configured", { status: 500, headers: corsHeaders });
+    }
+
+    const incomingToken = url.searchParams.get("token");
+    if (!incomingToken || incomingToken !== webhookSecret) {
+      console.warn("[yampi-webhook] Webhook token inválido recebido");
+      return new Response("Unauthorized", { status: 401, headers: corsHeaders });
+    }
+
     const payload = await req.json();
     const event = payload?.event || payload?.type || "unknown";
     const resourceData = payload?.resource || payload?.data || payload;
@@ -113,6 +128,7 @@ Deno.serve(async (req) => {
           tracking_code: trackingCode,
           status: "processing",
           external_reference: yampiOrderId,
+          checkout_session_id: sessionId,
           appmax_order_id: null,
           // #2 UTM attribution
           utm_source: utmData.utm_source || null,

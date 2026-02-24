@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
+import { Helmet } from 'react-helmet-async';
+import { ChevronRight, RefreshCw } from 'lucide-react';
 import { StoreLayout } from '@/components/store/StoreLayout';
 import { ProductGrid } from '@/components/store/ProductGrid';
+import { Button } from '@/components/ui/button';
 import { CategoryFilters, FilterState } from '@/components/store/CategoryFilters';
 import { useProducts, useCategories } from '@/hooks/useProducts';
 
 export default function CategoryPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { data: products, isLoading } = useProducts(slug);
+  const { data: products, isLoading, isError, refetch } = useProducts(slug);
   const { data: categories } = useCategories();
 
   const category = categories?.find(c => c.slug === slug);
@@ -143,6 +145,10 @@ export default function CategoryPage() {
 
   return (
     <StoreLayout>
+      <Helmet>
+        <title>{category?.name ? `${category.name} | Loja` : 'Produtos | Loja'}</title>
+        <meta name="description" content={category?.description || `Confira os produtos da categoria ${category?.name || 'Produtos'}.`} />
+      </Helmet>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
 
       {/* Breadcrumb */}
@@ -192,15 +198,27 @@ export default function CategoryPage() {
 
           {/* Main Content */}
           <main className="flex-1 min-w-0">
-            <ProductGrid
-              products={filteredProducts}
-              isLoading={isLoading}
-            />
-
-            {!isLoading && filteredProducts.length === 0 && (
+            {isError ? (
               <div className="py-16 text-center">
-                <p className="text-muted-foreground">Nenhum produto encontrado com os filtros selecionados.</p>
+                <p className="text-muted-foreground mb-4">Não foi possível carregar os produtos.</p>
+                <Button variant="outline" onClick={() => refetch()}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Tentar novamente
+                </Button>
               </div>
+            ) : (
+              <>
+                <ProductGrid
+                  products={filteredProducts}
+                  isLoading={isLoading}
+                />
+
+                {!isLoading && filteredProducts.length === 0 && (
+                  <div className="py-16 text-center">
+                    <p className="text-muted-foreground">Nenhum produto encontrado com os filtros selecionados.</p>
+                  </div>
+                )}
+              </>
             )}
           </main>
         </div>

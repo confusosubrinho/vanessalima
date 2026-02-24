@@ -1,7 +1,62 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { CartItem, Product, ProductVariant, Coupon, ShippingOption } from '@/types/database';
 import { saveAbandonedCart } from '@/lib/utmTracker';
- 
+import { getCartItemUnitPrice } from '@/lib/cartPricing';
+
+function safeParse<T>(key: string, fallback: T, validate?: (parsed: unknown) => parsed is T): T {
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) return fallback;
+    const parsed = JSON.parse(stored) as unknown;
+    if (validate && !validate(parsed)) return fallback;
+    return (parsed as T) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function isValidCartItem(x: unknown): x is CartItem {
+  if (!x || typeof x !== 'object') return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.product === 'object' && o.product !== null &&
+    typeof (o.product as Record<string, unknown>).id === 'string' &&
+    typeof o.variant === 'object' && o.variant !== null &&
+    typeof (o.variant as Record<string, unknown>).id === 'string' &&
+    typeof o.quantity === 'number' && o.quantity > 0
+  );
+}
+
+function safeParseCart(): CartItem[] {
+  const parsed = safeParse<unknown>('cart', []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter(isValidCartItem);
+}
+
+function safeParseCoupon(): Coupon | null {
+  const parsed = safeParse<unknown>('appliedCoupon', null);
+  if (!parsed || typeof parsed !== 'object') return null;
+  const o = parsed as Record<string, unknown>;
+  if (typeof o.discount_type !== 'string' || (o.discount_value !== undefined && typeof o.discount_value !== 'number')) return null;
+  return parsed as Coupon;
+}
+
+function safeParseShipping(): ShippingOption | null {
+  const parsed = safeParse<unknown>('selectedShipping', null);
+  if (!parsed || typeof parsed !== 'object') return null;
+  const o = parsed as Record<string, unknown>;
+  if (typeof o.id !== 'string' || typeof o.price !== 'number') return null;
+  return parsed as ShippingOption;
+}
+
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // quota exceeded or storage disabled
+  }
+}
+
  interface CartContextType {
    items: CartItem[];
    addItem: (product: Product, variant: ProductVariant, quantity?: number) => void;
@@ -26,27 +81,22 @@ import { saveAbandonedCart } from '@/lib/utmTracker';
  const CartContext = createContext<CartContextType | undefined>(undefined);
  
  export function CartProvider({ children }: { children: ReactNode }) {
-   const [items, setItems] = useState<CartItem[]>(() => {
-     const stored = localStorage.getItem('cart');
-     return stored ? JSON.parse(stored) : [];
-   });
+   const [items, setItems] = useState<CartItem[]>(() => safeParseCart());
  
    const [isCartOpen, setIsCartOpen] = useState(false);
-   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(() => {
-     const stored = localStorage.getItem('appliedCoupon');
-     return stored ? JSON.parse(stored) : null;
-   });
-   const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(() => {
-     const stored = localStorage.getItem('selectedShipping');
-     return stored ? JSON.parse(stored) : null;
-   });
+   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(() => safeParseCoupon());
+   const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(() => safeParseShipping());
    const [shippingZip, setShippingZip] = useState(() => {
-     return localStorage.getItem('shippingZip') || '';
+     try {
+       return localStorage.getItem('shippingZip') || '';
+     } catch {
+       return '';
+     }
    });
  
   // Save cart to localStorage
   useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(items));
+    safeSetItem('cart', JSON.stringify(items));
   }, [items]);
 
   // Track abandoned carts (debounced)
@@ -59,19 +109,9 @@ import { saveAbandonedCart } from '@/lib/utmTracker';
         product: { id: i.product.id, name: i.product.name, slug: i.product.slug },
         variant: { id: i.variant.id, size: i.variant.size, color: i.variant.color },
         quantity: i.quantity,
-        price: Number(i.product.sale_price || i.product.base_price),
+        price: getCartItemUnitPrice(i),
       }));
-       const sub = items.reduce((sum, item) => {
-         let variantPrice: number;
-         if (item.variant.sale_price && Number(item.variant.sale_price) > 0) {
-           variantPrice = Number(item.variant.sale_price);
-         } else if (item.variant.base_price && Number(item.variant.base_price) > 0) {
-           variantPrice = Number(item.variant.base_price);
-         } else {
-           variantPrice = Number(item.product.sale_price || item.product.base_price) + Number(item.variant.price_modifier || 0);
-         }
-         return sum + variantPrice * item.quantity;
-       }, 0);
+      const sub = items.reduce((sum, item) => sum + getCartItemUnitPrice(item) * item.quantity, 0);
       saveAbandonedCart(cartData, sub);
     }, 30000); // Save after 30s of inactivity
     return () => { if (abandonedTimeout.current) clearTimeout(abandonedTimeout.current); };
@@ -79,22 +119,22 @@ import { saveAbandonedCart } from '@/lib/utmTracker';
  
    useEffect(() => {
      if (appliedCoupon) {
-       localStorage.setItem('appliedCoupon', JSON.stringify(appliedCoupon));
+       safeSetItem('appliedCoupon', JSON.stringify(appliedCoupon));
      } else {
-       localStorage.removeItem('appliedCoupon');
+       try { localStorage.removeItem('appliedCoupon'); } catch { /* noop */ }
      }
    }, [appliedCoupon]);
  
    useEffect(() => {
      if (selectedShipping) {
-       localStorage.setItem('selectedShipping', JSON.stringify(selectedShipping));
+       safeSetItem('selectedShipping', JSON.stringify(selectedShipping));
      } else {
-       localStorage.removeItem('selectedShipping');
+       try { localStorage.removeItem('selectedShipping'); } catch { /* noop */ }
      }
    }, [selectedShipping]);
  
    useEffect(() => {
-     localStorage.setItem('shippingZip', shippingZip);
+     safeSetItem('shippingZip', shippingZip);
    }, [shippingZip]);
  
    const addItem = (product: Product, variant: ProductVariant, quantity = 1) => {
@@ -137,16 +177,7 @@ import { saveAbandonedCart } from '@/lib/utmTracker';
    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
  
    const subtotal = items.reduce((sum, item) => {
-     let variantPrice: number;
-     if (item.variant.sale_price && Number(item.variant.sale_price) > 0) {
-       variantPrice = Number(item.variant.sale_price);
-     } else if (item.variant.base_price && Number(item.variant.base_price) > 0) {
-       variantPrice = Number(item.variant.base_price);
-     } else {
-       const productPrice = item.product.sale_price || item.product.base_price;
-       variantPrice = Number(productPrice) + Number(item.variant.price_modifier || 0);
-     }
-     return sum + variantPrice * item.quantity;
+    return sum + getCartItemUnitPrice(item) * item.quantity;
    }, 0);
  
    const applyCoupon = (coupon: Coupon) => {
@@ -157,13 +188,15 @@ import { saveAbandonedCart } from '@/lib/utmTracker';
      setAppliedCoupon(null);
    };
  
-   const discount = appliedCoupon
-     ? appliedCoupon.discount_type === 'percentage'
-       ? (subtotal * appliedCoupon.discount_value) / 100
-       : appliedCoupon.discount_value
-     : 0;
+  const rawDiscount = appliedCoupon
+    ? appliedCoupon.discount_type === 'percentage'
+      ? (subtotal * appliedCoupon.discount_value) / 100
+      : appliedCoupon.discount_value
+    : 0;
+
+  const discount = Math.min(subtotal, Math.max(0, rawDiscount));
  
-   const total = subtotal - discount + (selectedShipping?.price || 0);
+  const total = Math.max(0, subtotal - discount) + (selectedShipping?.price || 0);
  
    return (
      <CartContext.Provider value={{

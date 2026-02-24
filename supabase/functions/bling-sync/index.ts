@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getFirstImportFields, getConfigAwareUpdateFields, DEFAULT_SYNC_CONFIG } from "../_shared/bling-sync-fields.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import type { BlingSyncConfig } from "../_shared/bling-sync-fields.ts";
 
 const corsHeaders = {
@@ -16,7 +17,7 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 async function fetchWithRateLimit(url: string, options: RequestInit): Promise<Response> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(url, options);
+    const res = await fetchWithTimeout(url, options);
     if (res.status === 429) {
       const waitMs = (attempt + 1) * 1500;
       console.log(`Rate limited, waiting ${waitMs}ms before retry...`);
@@ -25,7 +26,7 @@ async function fetchWithRateLimit(url: string, options: RequestInit): Promise<Re
     }
     return res;
   }
-  return fetch(url, options);
+  return fetchWithTimeout(url, options);
 }
 
 const STANDARD_SIZES = ['33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44'];
@@ -90,7 +91,7 @@ async function getValidToken(supabase: any): Promise<string> {
   const expiresAt = settings.bling_token_expires_at ? new Date(settings.bling_token_expires_at) : new Date(0);
   if (expiresAt.getTime() - 300000 < Date.now() && settings.bling_refresh_token) {
     const basicAuth = btoa(`${settings.bling_client_id}:${settings.bling_client_secret}`);
-    const tokenResponse = await fetch(BLING_TOKEN_URL, {
+    const tokenResponse = await fetchWithTimeout(BLING_TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${basicAuth}`, Accept: "application/json" },
       body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: settings.bling_refresh_token }),
@@ -256,7 +257,7 @@ async function downloadAndReuploadImage(supabase: any, imageUrl: string, product
     }
 
     // Download image
-    const response = await fetch(imageUrl);
+    const response = await fetchWithTimeout(imageUrl);
     if (!response.ok) {
       console.warn(`[sync] Failed to download image: ${response.status} - ${imageUrl.substring(0, 100)}`);
       // Return URL without signature as fallback (will be broken but at least clean)
@@ -833,7 +834,7 @@ async function createOrder(supabase: any, token: string, orderId: string) {
     parcelas: [{ valor: order.total_amount, dataVencimento: new Date().toISOString().split("T")[0], observacao: "Pagamento online" }],
     observacoes: `Pedido ${order.order_number} - Loja Online`, observacoesInternas: order.notes || "", numeroPedidoCompra: order.order_number,
   };
-  const response = await fetch(`${BLING_API_URL}/pedidos/vendas`, { method: "POST", headers, body: JSON.stringify(blingOrder) });
+  const response = await fetchWithTimeout(`${BLING_API_URL}/pedidos/vendas`, { method: "POST", headers, body: JSON.stringify(blingOrder) });
   const data = await response.json();
   if (!response.ok) throw new Error(`Bling API error [${response.status}]: ${JSON.stringify(data)}`);
   return { bling_order_id: data?.data?.id };
@@ -841,11 +842,11 @@ async function createOrder(supabase: any, token: string, orderId: string) {
 
 async function generateNfe(token: string, blingOrderId: number) {
   const headers = blingHeaders(token);
-  const response = await fetch(`${BLING_API_URL}/nfe`, { method: "POST", headers, body: JSON.stringify({ tipo: 1, idPedidoVenda: blingOrderId }) });
+  const response = await fetchWithTimeout(`${BLING_API_URL}/nfe`, { method: "POST", headers, body: JSON.stringify({ tipo: 1, idPedidoVenda: blingOrderId }) });
   const data = await response.json();
   if (!response.ok) throw new Error(`Bling NF-e error [${response.status}]: ${JSON.stringify(data)}`);
   const nfeId = data?.data?.id;
-  if (nfeId) await fetch(`${BLING_API_URL}/nfe/${nfeId}/enviar`, { method: "POST", headers });
+  if (nfeId) await fetchWithTimeout(`${BLING_API_URL}/nfe/${nfeId}/enviar`, { method: "POST", headers });
   return { nfe_id: nfeId };
 }
 
@@ -864,13 +865,13 @@ serve(async (req) => {
         const storesHeaders = blingHeaders(token);
         const stores: any[] = [];
         try {
-          const res = await fetch(`${BLING_API_URL}/canais-de-venda`, { headers: storesHeaders });
+          const res = await fetchWithTimeout(`${BLING_API_URL}/canais-de-venda`, { headers: storesHeaders });
           const json = await res.json();
           if (res.ok && json?.data?.length) for (const ch of json.data) stores.push({ id: ch.id, name: ch.descricao || ch.nome || `Canal ${ch.id}`, type: ch.tipo || 'loja_virtual' });
         } catch (_) {}
         if (stores.length === 0) {
           try {
-            const res = await fetch(`${BLING_API_URL}/lojas-virtuais`, { headers: storesHeaders });
+            const res = await fetchWithTimeout(`${BLING_API_URL}/lojas-virtuais`, { headers: storesHeaders });
             const json = await res.json();
             if (res.ok && json?.data?.length) for (const s of json.data) stores.push({ id: s.id, name: s.descricao || s.nome || `Loja ${s.id}`, type: 'loja_virtual' });
           } catch (_) {}

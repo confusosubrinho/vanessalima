@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,7 +134,7 @@ serve(async (req) => {
 
     console.log("Melhor Envio request:", JSON.stringify(body));
 
-    const response = await fetch(`${baseUrl}/api/v2/me/shipment/calculate`, {
+    const response = await fetchWithTimeout(`${baseUrl}/api/v2/me/shipment/calculate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

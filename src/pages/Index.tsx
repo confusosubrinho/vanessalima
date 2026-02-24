@@ -59,8 +59,8 @@ const Index = () => {
           <SectionFallback />
           <SectionFallback />
         </>
-      ) : (
-        pagesSections?.map((section) => {
+      ) : pagesSections && pagesSections.length > 0 ? (
+        pagesSections.map((section) => {
           const Component = SECTION_COMPONENTS[section.section_type];
           if (!Component) return null;
           return (
@@ -71,6 +71,11 @@ const Index = () => {
             </Suspense>
           );
         })
+      ) : (
+        <div className="container-custom py-16 text-center">
+          <p className="text-muted-foreground mb-4">Nenhuma seção configurada para a página inicial.</p>
+          <p className="text-sm text-muted-foreground">Acesse o painel admin para configurar banners, categorias e produtos em destaque.</p>
+        </div>
       )}
     </StoreLayout>
   );

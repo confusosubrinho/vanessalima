@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,7 +31,7 @@ async function yampiRequest(
   const opts: RequestInit = { method, headers: yampiHeaders };
   if (body) opts.body = JSON.stringify(body);
   console.log(`[YAMPI] ${method} ${path}`, body ? JSON.stringify(body).slice(0, 400) : "");
-  const res = await fetch(url, opts);
+  const res = await fetchWithTimeout(url, opts);
   let data: unknown;
   try { data = await res.json(); } catch { data = { raw_text: await res.text().catch(() => "") }; }
   if (!res.ok) console.error(`[YAMPI] ERROR ${res.status} ${path}:`, JSON.stringify(data));

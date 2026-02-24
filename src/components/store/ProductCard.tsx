@@ -7,6 +7,7 @@ import { VariantSelectorModal } from './VariantSelectorModal';
 import { useFavorites } from '@/hooks/useFavorites';
 import { useToast } from '@/hooks/use-toast';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
+import { useStoreSettings } from '@/hooks/useProducts';
 import { getPixPrice, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,19 +18,8 @@ interface ProductCardProps {
 }
 
 function useShowVariantsOnGrid() {
-  const { data } = useQuery({
-    queryKey: ['store-settings-grid'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('store_settings')
-        .select('show_variants_on_grid')
-        .limit(1)
-        .maybeSingle();
-      return (data as any)?.show_variants_on_grid ?? true;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-  return data ?? true;
+  const { data } = useStoreSettings();
+  return (data as any)?.show_variants_on_grid ?? true;
 }
 
 export function ProductCard({ product }: ProductCardProps) {

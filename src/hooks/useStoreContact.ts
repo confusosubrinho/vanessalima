@@ -13,19 +13,39 @@ export interface StoreContact {
   header_logo_url: string;
 }
 
-export function useStoreContact() {
+/** Dados públicos da loja (view). Uma única key para compartilhar cache no header, footer, etc. */
+export function useStoreSettingsPublic() {
   return useQuery({
-    queryKey: ['store-contact'],
+    queryKey: ['store-settings-public'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('store_settings_public' as any)
-        .select('store_name, contact_email, contact_phone, contact_whatsapp, address, full_address, cnpj, logo_url, header_logo_url')
+        .select('*')
         .maybeSingle();
       if (error) throw error;
-      return (data as unknown as StoreContact) || null;
+      return (data as any) || null;
     },
     staleTime: 1000 * 60 * 10,
+    refetchOnMount: false,
   });
+}
+
+export function useStoreContact() {
+  const { data, ...rest } = useStoreSettingsPublic();
+  const contact = data
+    ? ({
+        store_name: data.store_name,
+        contact_email: data.contact_email,
+        contact_phone: data.contact_phone,
+        contact_whatsapp: data.contact_whatsapp,
+        address: data.address,
+        full_address: data.full_address,
+        cnpj: data.cnpj,
+        logo_url: data.logo_url,
+        header_logo_url: data.header_logo_url,
+      } as StoreContact)
+    : null;
+  return { data: contact, ...rest };
 }
 
 /** Format phone for display: 42991120205 → (42) 99112-0205 */

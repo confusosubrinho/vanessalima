@@ -525,6 +525,21 @@ export default function AdminLayout() {
       return;
     }
 
+    const { data: member } = await supabase
+      .from('admin_members')
+      .select('is_active')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+
+    if (member !== null) {
+      if (!member.is_active) {
+        navigate('/admin/login');
+        return;
+      }
+      setIsAdmin(true);
+      return;
+    }
+
     const { data: roles } = await supabase
       .from('user_roles')
       .select('role')

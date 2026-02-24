@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getConfigAwareUpdateFields, DEFAULT_SYNC_CONFIG } from "../_shared/bling-sync-fields.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import type { BlingSyncConfig } from "../_shared/bling-sync-fields.ts";
 
 const corsHeaders = {
@@ -78,7 +79,7 @@ async function getValidToken(supabase: any): Promise<string> {
 
   if (isExpired && settings.bling_refresh_token) {
     const basicAuth = btoa(`${settings.bling_client_id}:${settings.bling_client_secret}`);
-    const tokenResponse = await fetch(BLING_TOKEN_URL, {
+    const tokenResponse = await fetchWithTimeout(BLING_TOKEN_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -145,7 +146,7 @@ async function findVariantByBlingIdOrSku(supabase: any, blingId: number, token?:
   // SKU fallback
   if (token) {
     try {
-      const res = await fetch(`${BLING_API_URL}/produtos/${blingId}`, { headers: blingHeaders(token) });
+      const res = await fetchWithTimeout(`${BLING_API_URL}/produtos/${blingId}`, { headers: blingHeaders(token) });
       if (res.ok) {
         const json = await res.json();
         const sku = json?.data?.codigo;
@@ -195,7 +196,7 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
   // Fetch stock from Bling API
   if (!token) return "no_token";
   try {
-    const res = await fetch(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${blingProductId}`, { headers: blingHeaders(token) });
+    const res = await fetchWithTimeout(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${blingProductId}`, { headers: blingHeaders(token) });
     const json = await res.json();
     const stock = json?.data?.[0]?.saldoVirtualTotal ?? null;
     if (stock !== null) {
@@ -220,7 +221,7 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
 
     if (!existing) {
       // Try to resolve via parent
-      const res = await fetch(`${BLING_API_URL}/produtos/${blingProductId}`, { headers });
+      const res = await fetchWithTimeout(`${BLING_API_URL}/produtos/${blingProductId}`, { headers });
       if (!res.ok) { console.error(`[webhook] Product detail fetch failed for ${blingProductId}: ${res.status}`); return; }
       const json = await res.json();
       const detail = json?.data;
@@ -244,7 +245,7 @@ async function syncSingleProduct(supabase: any, blingProductId: number, token: s
     }
 
     // Fetch detail
-    const res = await fetch(`${BLING_API_URL}/produtos/${blingProductId}`, { headers });
+    const res = await fetchWithTimeout(`${BLING_API_URL}/produtos/${blingProductId}`, { headers });
     if (!res.ok) { console.error(`[webhook] Product detail fetch failed for ${blingProductId}: ${res.status}`); return; }
     const json = await res.json();
     const detail = json?.data;
@@ -290,7 +291,7 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
     const varIds = detail.variacoes.map((v: any) => v.id);
     const idsParam = varIds.map((id: number) => `idsProdutos[]=${id}`).join("&");
     await sleep(300);
-    const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
+    const stockRes = await fetchWithTimeout(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
     const stockJson = await stockRes.json();
     for (const s of (stockJson?.data || [])) {
       const varBlingId = s.produto?.id;
@@ -305,7 +306,7 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
     }
   } else {
     await sleep(300);
-    const stockRes = await fetch(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${blingProductId}`, { headers });
+    const stockRes = await fetchWithTimeout(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${blingProductId}`, { headers });
     const stockJson = await stockRes.json();
     const qty = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
     await supabase.from("product_variants").update({ stock_quantity: qty }).eq("product_id", productId);
@@ -390,7 +391,7 @@ async function batchStockSync(supabase: any) {
     const idsParam = batch.map(id => `idsProdutos[]=${id}`).join("&");
     try {
       if (i > 0) await sleep(350);
-      const res = await fetch(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
+      const res = await fetchWithTimeout(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
       const json = await res.json();
       if (!res.ok) {
         console.error(`[cron] Stock batch error:`, JSON.stringify(json));
@@ -487,6 +488,17 @@ serve(async (req) => {
     const isCronViaBody = payload?.action === "cron_stock_sync";
 
     if (isCronViaParam || isCronViaBody) {
+      const cronSecret = Deno.env.get("BLING_CRON_SECRET");
+      if (cronSecret) {
+        const providedSecret = url.searchParams.get("secret") ?? payload?.secret ?? "";
+        if (providedSecret !== cronSecret) {
+          console.warn("[cron] Unauthorized: missing or invalid secret");
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
       console.log("[cron] Starting periodic stock sync...");
       const result = await batchStockSync(supabase);
       return new Response(JSON.stringify({ ok: true, ...result }), {

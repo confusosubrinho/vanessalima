@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck, Bell, Star } from 'lucide-react';
+import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck, Bell, Star, RefreshCw } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StoreLayout } from '@/components/store/StoreLayout';
 import { Button } from '@/components/ui/button';
@@ -24,15 +24,17 @@ import { ProductDetailSkeleton } from '@/components/store/Skeletons';
 import { StockNotifyModal } from '@/components/store/StockNotifyModal';
 import { useRecentProducts, useRelatedProducts } from '@/hooks/useRecentProducts';
 import { resolveImageUrl } from '@/lib/imageUrl';
+import { sanitizeHtml } from '@/lib/sanitizeHtml';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { Helmet } from 'react-helmet-async';
 
 export default function ProductDetail() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { slug } = useParams<{ slug: string }>();
-  const { data: product, isLoading } = useProduct(slug || '');
+  const { data: product, isLoading, isError, refetch } = useProduct(slug || '');
   const { addItem, setIsCartOpen } = useCart();
   const { toast } = useToast();
   const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
@@ -124,6 +126,24 @@ export default function ProductDetail() {
     return (
       <StoreLayout>
         <ProductDetailSkeleton />
+      </StoreLayout>
+    );
+  }
+
+  if (isError) {
+    return (
+      <StoreLayout>
+        <div className="container-custom py-16 text-center">
+          <h1 className="text-xl font-semibold mb-2">Não foi possível carregar o produto</h1>
+          <p className="text-muted-foreground mb-4">Tente novamente em instantes.</p>
+          <Button variant="outline" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Tentar novamente
+          </Button>
+          <Button asChild variant="ghost" className="ml-2">
+            <Link to="/">Voltar para a loja</Link>
+          </Button>
+        </div>
       </StoreLayout>
     );
   }
@@ -334,7 +354,7 @@ export default function ProductDetail() {
           <div className="prose prose-sm max-w-none text-muted-foreground">
             {product.description ? (
               /<[a-z][\s\S]*>/i.test(product.description) ? (
-                <div dangerouslySetInnerHTML={{ __html: product.description }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(product.description) }} />
               ) : (
                 <p className="whitespace-pre-line">{product.description}</p>
               )
@@ -465,6 +485,10 @@ export default function ProductDetail() {
 
   return (
     <StoreLayout>
+      <Helmet>
+        <title>{(product.seo_title || product.name)} | {storeName}</title>
+        <meta name="description" content={product.seo_description || product.description?.replace(/<[^>]*>/g, '').slice(0, 160) || ''} />
+      </Helmet>
       {/* SEO: JSON-LD */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
@@ -620,6 +644,8 @@ export default function ProductDetail() {
                       }`}
                       style={{ backgroundColor: hex || '#ccc' }}
                       title={name || ''}
+                      aria-label={`Cor ${name || ''}`}
+                      aria-pressed={selectedColor === name}
                     />
                   ))}
                 </div>
@@ -655,6 +681,8 @@ export default function ProductDetail() {
                           ? 'border-border/50 text-muted-foreground opacity-60 hover:border-primary/50'
                           : 'border-border hover:border-primary'
                       }`}
+                      aria-label={`Tamanho ${size}${!isAvailable ? ', esgotado' : ''}`}
+                      aria-pressed={selectedSize === size}
                     >
                       <span className={isOOS ? 'line-through' : ''}>{size}</span>
                       {isLowStock && selectedSize !== size && (
@@ -674,14 +702,14 @@ export default function ProductDetail() {
               <label className="block font-medium mb-2">Quantidade</label>
               <div className="flex items-center gap-4">
                 <div className="flex items-center border rounded-lg">
-                  <Button variant="ghost" size="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))}>
+                  <Button variant="ghost" size="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))} aria-label="Diminuir quantidade">
                     <Minus className="h-4 w-4" />
                   </Button>
-                  <span className="w-12 text-center font-medium">{quantity}</span>
+                  <span className="w-12 text-center font-medium" aria-live="polite">{quantity}</span>
                   <Button variant="ghost" size="icon" onClick={() => {
                     const maxStock = selectedVariant?.stock_quantity || 99;
                     setQuantity(Math.min(quantity + 1, maxStock));
-                  }}>
+                  }} aria-label="Aumentar quantidade">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>

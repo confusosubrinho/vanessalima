@@ -29,6 +29,8 @@ export const NATIVE_SECTION_KEYS = [
 export function useHomePageSections() {
   return useQuery({
     queryKey: ['home-page-sections'],
+    staleTime: 1000 * 60 * 5,
+    refetchOnMount: false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('home_page_sections' as any)
@@ -38,13 +40,13 @@ export function useHomePageSections() {
       if (error) throw error;
       return (data as unknown as HomePageSection[]) || [];
     },
-    staleTime: 1000 * 60 * 5,
   });
 }
 
 export function useAdminHomePageSections() {
   return useQuery({
     queryKey: ['admin-home-page-sections'],
+    staleTime: 1000 * 60, // 1 min no admin
     queryFn: async () => {
       const { data, error } = await supabase
         .from('home_page_sections' as any)

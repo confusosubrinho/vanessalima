@@ -13,9 +13,10 @@ import { useQuery } from '@tanstack/react-query';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { HelpHint } from '@/components/HelpHint';
+import { getCartItemUnitPrice } from '@/lib/cartPricing';
 
 export default function Cart() {
-  const { items, subtotal, removeItem, updateQuantity, clearCart, discount, selectedShipping, setSelectedShipping, total } = useCart();
+  const { items, subtotal, removeItem, updateQuantity, clearCart, discount, selectedShipping, total } = useCart();
   const { data: pricingConfig } = usePricingConfig();
 
   // Fetch fresh stock data for cart items
@@ -168,13 +169,8 @@ export default function Cart() {
                       </Button>
                     </div>
                     <div className="text-right">
-                      {item.product.sale_price && (
-                        <p className="text-sm text-muted-foreground line-through">
-                          {formatPrice(Number(item.product.base_price) * item.quantity)}
-                        </p>
-                      )}
                       <p className="font-bold text-lg">
-                        {formatPrice(Number(item.product.sale_price || item.product.base_price) * item.quantity)}
+                        {formatPrice(getCartItemUnitPrice(item) * item.quantity)}
                       </p>
                       <p className="text-xs text-muted-foreground">{currentStock} disponível(is)</p>
                     </div>

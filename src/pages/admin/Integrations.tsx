@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useStoreSettings } from '@/hooks/useProducts';
 import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi, Eye, EyeOff, Save, Copy, Stethoscope, ClipboardCopy } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -497,22 +498,12 @@ function DomainSettings() {
   const [callbackPath, setCallbackPath] = useState('/admin/integrations/appmax/callback');
   const [saving, setSaving] = useState(false);
 
-  const { data: storeSettings } = useQuery({
-    queryKey: ['store-settings-domain'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('store_settings')
-        .select('id, public_base_url, appmax_callback_path')
-        .limit(1)
-        .maybeSingle();
-      return data as any;
-    },
-  });
+  const { data: storeSettings } = useStoreSettings();
 
   useEffect(() => {
     if (storeSettings) {
-      setBaseUrl(storeSettings.public_base_url || '');
-      setCallbackPath(storeSettings.appmax_callback_path || '/admin/integrations/appmax/callback');
+      setBaseUrl((storeSettings as any).public_base_url || '');
+      setCallbackPath((storeSettings as any).appmax_callback_path || '/admin/integrations/appmax/callback');
     }
   }, [storeSettings]);
 
@@ -534,7 +525,7 @@ function DomainSettings() {
       if (storeSettings?.id) {
         await supabase.from('store_settings').update(payload as any).eq('id', storeSettings.id);
       }
-      queryClient.invalidateQueries({ queryKey: ['store-settings-domain'] });
+      queryClient.invalidateQueries({ queryKey: ['store-settings'] });
       toast({ title: 'URLs salvas!' });
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
@@ -551,7 +542,7 @@ function DomainSettings() {
       if (storeSettings?.id) {
         await supabase.from('store_settings').update({ public_base_url: origin } as any).eq('id', storeSettings.id);
       }
-      queryClient.invalidateQueries({ queryKey: ['store-settings-domain'] });
+      queryClient.invalidateQueries({ queryKey: ['store-settings'] });
       toast({ title: 'Domínio atualizado!', description: origin });
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' });

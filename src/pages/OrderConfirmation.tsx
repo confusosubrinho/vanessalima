@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import logo from '@/assets/logo.png';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/integrations/supabase/types';
 
 const statusLabels: Record<string, { label: string; description: string; color: string }> = {
   pending: {
@@ -124,7 +126,16 @@ export default function OrderConfirmation() {
     setIsLoading(true);
     const fetchOrder = async () => {
       try {
-        const { data } = await supabase
+        const guestToken = confirmState.guestToken;
+        const client = guestToken
+          ? createClient<Database>(
+              import.meta.env.VITE_SUPABASE_URL,
+              import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              { global: { headers: { "x-order-token": guestToken } } }
+            )
+          : supabase;
+
+        const { data } = await client
           .from('orders')
           .select('id, order_number, status, payment_method, total_amount, created_at')
           .eq('id', id)
@@ -148,7 +159,7 @@ export default function OrderConfirmation() {
       }
     };
     fetchOrder();
-  }, [confirmState.orderId, urlOrderId]);
+  }, [confirmState.orderId, urlOrderId, confirmState.guestToken]);
 
   // BUG #6: Realtime for logged-in users, polling for guests
   useEffect(() => {
@@ -159,12 +170,16 @@ export default function OrderConfirmation() {
 
     if (guestToken) {
       // Guest: poll every 10s since realtime won't work without RLS match
+      const guestClient = createClient<Database>(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        { global: { headers: { "x-order-token": guestToken } } }
+      );
       const poll = async () => {
-        const { data } = await supabase
+        const { data } = await guestClient
           .from('orders')
           .select('status')
           .eq('id', id)
-          .eq('access_token', guestToken)
           .single();
         if (data?.status && data.status !== orderStatus) {
           setOrderStatus(data.status);

@@ -5,6 +5,7 @@ import { Phone, Mail, MapPin } from 'lucide-react';
 import logo from '@/assets/logo.png';
 import { SocialIcons } from './SocialIcons';
 import { useStoreContact, formatPhone } from '@/hooks/useStoreContact';
+import { sanitizeHtml } from '@/lib/sanitizeHtml';
 
 interface PaymentMethod {
   id: string;
@@ -54,7 +55,7 @@ export function Footer() {
     const content = seal.image_url ? (
       <img src={seal.image_url} alt={seal.title || 'Selo'} className="h-8 object-contain" />
     ) : seal.html_code ? (
-      <div dangerouslySetInnerHTML={{ __html: seal.html_code }} />
+      <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(seal.html_code) }} />
     ) : (
       <span className="text-xs font-bold">{seal.title}</span>
     );

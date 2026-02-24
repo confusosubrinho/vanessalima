@@ -16,6 +16,7 @@ import { getInstallmentOptions, formatCurrency as formatPricingCurrency, type Pr
 import { HelpHint } from '@/components/HelpHint';
 import { CouponInput } from '@/components/store/CouponInput';
 import logo from '@/assets/logo.png';
+import { getCartItemUnitPrice } from '@/lib/cartPricing';
 
 type Step = 'identification' | 'shipping' | 'payment';
 
@@ -326,8 +327,8 @@ export default function Checkout() {
         product_name: item.product.name,
         variant_info: `Tam: ${item.variant.size}${item.variant.color ? ' | Cor: ' + item.variant.color : ''}`,
         quantity: item.quantity,
-        unit_price: Number(item.product.sale_price || item.product.base_price) + Number(item.variant.price_modifier || 0),
-        total_price: (Number(item.product.sale_price || item.product.base_price) + Number(item.variant.price_modifier || 0)) * item.quantity,
+        unit_price: getCartItemUnitPrice(item),
+        total_price: getCartItemUnitPrice(item) * item.quantity,
       }));
 
       const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
@@ -343,7 +344,7 @@ export default function Checkout() {
         sku: item.product.sku || item.product.id,
         name: item.product.name,
         quantity: item.quantity,
-        price: Number(item.product.sale_price || item.product.base_price) + Number(item.variant.price_modifier || 0),
+        price: getCartItemUnitPrice(item),
         variant_id: item.variant.id,
       }));
 
@@ -367,6 +368,7 @@ export default function Checkout() {
         products: productsForAppmax,
         coupon_code: appliedCoupon?.code || null,
         discount_amount: discount,
+        order_access_token: guestToken,
       };
 
       if (formData.paymentMethod === 'card') {
@@ -374,6 +376,8 @@ export default function Checkout() {
           const tokenizeResponse = await supabase.functions.invoke('process-payment', {
             body: {
               action: 'tokenize_card',
+              order_id: order.id,
+              order_access_token: guestToken,
               card_number: formData.cardNumber.replace(/\s/g, ''),
               card_holder: formData.cardHolder,
               expiration_month: expiryMonth,
@@ -904,7 +908,7 @@ export default function Checkout() {
               
               <div className="space-y-3 max-h-[400px] overflow-y-auto mb-4">
                 {items.map((item) => {
-                  const unitPrice = Number(item.product.sale_price || item.product.base_price) + Number(item.variant.price_modifier || 0);
+                  const unitPrice = getCartItemUnitPrice(item);
                   const maxQty = item.variant.stock_quantity || 99;
                   return (
                     <div key={item.variant.id} className="flex gap-3 items-start">

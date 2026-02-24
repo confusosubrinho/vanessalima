@@ -1,7 +1,8 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle, Store, ChevronDown, RefreshCw, Power, PowerOff, Edit3, X, AlertCircle, Clock, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle, Store, ChevronDown, RefreshCw, Power, PowerOff, Edit3, X, AlertCircle, Clock, Loader2, Package } from 'lucide-react';
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
@@ -763,7 +764,15 @@ export default function Products() {
               {isLoading ? (
                 <TableRow><TableCell colSpan={7} className="text-center py-8">Carregando...</TableCell></TableRow>
               ) : paginatedProducts.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum produto encontrado</TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={7} className="p-0">
+                    <AdminEmptyState
+                      icon={Package}
+                      title="Nenhum produto"
+                      description={filteredProducts.length === 0 ? 'Nenhum produto encontrado. Cadastre o primeiro produto ou ajuste os filtros.' : 'Nenhum produto nesta página.'}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : (
                 paginatedProducts.map(product => (
                   <TableRow key={product.id} className={selectedIds.has(product.id) || selectAllGlobal ? 'bg-muted/30' : ''}>

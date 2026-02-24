@@ -33,28 +33,19 @@ export default function CheckoutReturn() {
     if (!sessionId || order) return;
 
     const fetchOrder = async () => {
-      // Find recovered cart -> then find order by checking recent orders
-      const { data: cart } = await supabase
-        .from("abandoned_carts" as any)
-        .select("recovered, session_id")
-        .eq("session_id", sessionId)
+      const { data: linkedOrder } = await supabase
+        .from("orders")
+        .select("id, order_number, status, total_amount, customer_email")
+        .eq("provider", "yampi")
+        .eq("checkout_session_id", sessionId)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      if ((cart as any)?.recovered) {
-        // Find the most recent order from yampi provider
-        const { data: recentOrder } = await supabase
-          .from("orders")
-          .select("id, order_number, status, total_amount, customer_email")
-          .eq("provider", "yampi")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (recentOrder) {
-          setOrder(recentOrder as OrderInfo);
-          setLoading(false);
-          return;
-        }
+      if (linkedOrder) {
+        setOrder(linkedOrder as OrderInfo);
+        setLoading(false);
+        return;
       }
 
       if (attempts < MAX_ATTEMPTS) {

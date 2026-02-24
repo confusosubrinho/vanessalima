@@ -4,6 +4,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout } from "./fetchWithTimeout.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -231,7 +232,7 @@ export async function getAppToken(
       const tokenUrl = `${authUrl}/oauth2/token`;
       console.log(`[getAppToken] Attempt ${attempt}: POST ${tokenUrl} with client_id=${maskSecret(clientId)}`);
       
-      const res = await fetch(tokenUrl, {
+      const res = await fetchWithTimeout(tokenUrl, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -329,7 +330,7 @@ export async function appmaxRequest(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithTimeout(url, {
         method,
         headers: {
           "Content-Type": "application/json",

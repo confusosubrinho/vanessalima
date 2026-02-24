@@ -105,11 +105,28 @@ Deno.serve(async (req) => {
         const newWeight = statusWeight[newStatus] || 0;
 
         if (newWeight > currentWeight || newStatus === "cancelled") {
-          await supabase.from("orders").update({
-            status: newStatus,
-            last_webhook_event: eventType,
-            updated_at: new Date().toISOString(),
-          }).eq("id", order.id);
+          if (newStatus === "cancelled") {
+            const { error: rpcError } = await supabase.rpc("cancel_order_return_stock", {
+              p_order_id: order.id,
+            });
+            if (rpcError) {
+              await logAppmax(supabase, "warn", `cancel_order_return_stock falhou: ${rpcError.message}`, {
+                order_id: order.id,
+                appmax_order_id: appmaxOrderId,
+              });
+            }
+            await supabase.from("orders").update({
+              status: "cancelled",
+              last_webhook_event: eventType,
+              updated_at: new Date().toISOString(),
+            }).eq("id", order.id);
+          } else {
+            await supabase.from("orders").update({
+              status: newStatus,
+              last_webhook_event: eventType,
+              updated_at: new Date().toISOString(),
+            }).eq("id", order.id);
+          }
 
           await supabase.from("order_events").update({ order_id: order.id }).eq("event_hash", eventHash);
 

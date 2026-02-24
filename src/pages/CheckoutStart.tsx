@@ -4,14 +4,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
 import { captureAttribution, getAttribution } from "@/lib/attribution";
 import { Loader2, ShieldCheck, Lock, CreditCard } from "lucide-react";
+import { getCartItemUnitPrice } from "@/lib/cartPricing";
 
 export default function CheckoutStart() {
   const navigate = useNavigate();
-  const { items, subtotal, clearCart } = useCart();
+  const { items, subtotal, discount, selectedShipping, clearCart } = useCart();
   const [error, setError] = useState<string | null>(null);
 
   const formatPrice = (price: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(price);
+
+  const shippingCost = selectedShipping?.price ?? 0;
+  const totalValue = subtotal - discount + shippingCost;
+
+  useEffect(() => {
+    if (items.length === 0) {
+      navigate("/carrinho");
+      return;
+    }
+  }, [items.length, navigate]);
 
   useEffect(() => {
     captureAttribution();
@@ -98,15 +109,33 @@ export default function CheckoutStart() {
                     </div>
                     <p className="text-sm font-medium whitespace-nowrap">
                       {formatPrice(
-                        Number(item.product.sale_price || item.product.base_price) * item.quantity
+                        getCartItemUnitPrice(item) * item.quantity
                       )}
                     </p>
                   </div>
                 ))}
               </div>
-              <div className="border-t pt-2 flex justify-between font-semibold">
-                <span>Total</span>
-                <span>{formatPrice(subtotal)}</span>
+              <div className="border-t pt-2 space-y-1">
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span>{formatPrice(subtotal)}</span>
+                </div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-sm text-primary">
+                    <span>Desconto</span>
+                    <span>-{formatPrice(discount)}</span>
+                  </div>
+                )}
+                {selectedShipping && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Frete</span>
+                    <span>{selectedShipping.price === 0 ? "Grátis" : formatPrice(selectedShipping.price)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-semibold pt-1">
+                  <span>Total</span>
+                  <span>{formatPrice(totalValue)}</span>
+                </div>
               </div>
             </div>
 

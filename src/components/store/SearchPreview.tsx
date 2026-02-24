@@ -3,21 +3,33 @@ import { Link } from 'react-router-dom';
 import { Search, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
-import { Product } from '@/types/database';
 import { resolveImageUrl } from '@/lib/imageUrl';
+import { useSearchPreviewProducts } from '@/hooks/useProducts';
+
+const DEBOUNCE_MS = 400;
 
 interface SearchPreviewProps {
   onSearch: (query: string) => void;
+  onFocus?: () => void;
   className?: string;
 }
 
-export function SearchPreview({ onSearch, className }: SearchPreviewProps) {
+export function SearchPreview({ onSearch, onFocus, className }: SearchPreviewProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setDebouncedQuery('');
+      return;
+    }
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const { data: results = [], isLoading, isFetched } = useSearchPreviewProducts(debouncedQuery);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -30,41 +42,9 @@ export function SearchPreview({ onSearch, className }: SearchPreviewProps) {
   }, []);
 
   useEffect(() => {
-    const searchProducts = async () => {
-      if (query.length < 2) {
-        setResults([]);
-        setIsOpen(false);
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        // Escape special SQL LIKE characters to prevent query errors
-        const sanitized = query.replace(/[%_\\]/g, '\\$&');
-        const { data, error } = await supabase
-          .from('products')
-          .select(`
-            *,
-            images:product_images(*)
-          `)
-          .eq('is_active', true)
-          .ilike('name', `%${sanitized}%`)
-          .limit(6);
-
-        if (error) throw error;
-        setResults((data || []) as Product[]);
-        setIsOpen(true);
-      } catch (error) {
-        console.error('Search error:', error);
-        setResults([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    const debounce = setTimeout(searchProducts, 300);
-    return () => clearTimeout(debounce);
-  }, [query]);
+    if (debouncedQuery && isFetched) setIsOpen(true);
+    if (query.length < 2) setIsOpen(false);
+  }, [debouncedQuery, isFetched, query.length]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +70,10 @@ export function SearchPreview({ onSearch, className }: SearchPreviewProps) {
             placeholder="O que deseja procurar?"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => query.length >= 2 && results.length > 0 && setIsOpen(true)}
+            onFocus={() => {
+              if (query.length >= 2 && results.length > 0) setIsOpen(true);
+              onFocus?.();
+            }}
             className="w-full h-12 pl-5 pr-12 text-base rounded-full border-2 border-muted bg-muted/50 focus:bg-background focus:border-primary"
           />
           <Button

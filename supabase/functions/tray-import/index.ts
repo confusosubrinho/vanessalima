@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,7 +101,7 @@ async function downloadAndConvertToWebP(
     if (!url.startsWith('http')) return null;
 
     console.log(`Downloading image: ${url}`);
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url);
     if (!response.ok) {
       console.error(`Failed to download ${url}: ${response.status}`);
       return null;

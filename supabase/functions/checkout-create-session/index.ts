@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -113,7 +114,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 7. Register abandoned cart + #11 reserve stock
+    // 7. Register abandoned cart
     const sessionId = crypto.randomUUID();
 
     await supabase.from("abandoned_carts").insert({
@@ -129,17 +130,6 @@ Deno.serve(async (req) => {
       utm_content: attribution?.utm_content || null,
     });
 
-    // #11 Reserve stock temporarily (will be debited by webhook on payment, or released by cleanup)
-    for (const item of items) {
-      const variant = variants.find((v) => v.id === item.variant_id)!;
-      await supabase.rpc("decrement_stock", { p_variant_id: variant.id, p_quantity: item.quantity });
-      await supabase.from("inventory_movements").insert({
-        variant_id: variant.id,
-        type: "reserve",
-        quantity: item.quantity,
-      });
-    }
-
     // 8. Provider-specific: Yampi
     if (provider === "yampi") {
       try {
@@ -149,6 +139,19 @@ Deno.serve(async (req) => {
 
         if (!alias || !userToken || !userSecretKey) {
           throw new Error("Credenciais Yampi não configuradas");
+        }
+
+        // Validate all items have yampi_sku_id (required for Yampi payment link)
+        const missingYampiSkus = items.filter((item) => {
+          const variant = variants.find((v) => v.id === item.variant_id);
+          return !variant || variant.yampi_sku_id == null || variant.yampi_sku_id === 0;
+        });
+        if (missingYampiSkus.length > 0) {
+          const msg = "Um ou mais itens não estão vinculados ao catálogo Yampi. Use o checkout da loja.";
+          if (checkoutConfig.fallback_to_native) {
+            return jsonRes({ redirect_url: "/checkout", fallback: true, error: msg });
+          }
+          return jsonRes({ error: msg }, 400);
         }
 
         const yampiBase = `https://api.dooki.com.br/v2/${alias}`;
@@ -166,13 +169,13 @@ Deno.serve(async (req) => {
 
             if (variant.yampi_sku_id) {
               const unitPrice = variant.sale_price ?? variant.base_price ?? product.sale_price ?? product.base_price;
-              await fetch(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
+              await fetchWithTimeout(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
                 method: "PUT",
                 headers: yampiHeaders,
                 body: JSON.stringify({
                   price_cost: unitPrice,
                   price_sale: unitPrice,
-                  quantity: variant.stock_quantity - item.quantity,
+                  quantity: variant.stock_quantity,
                 }),
               });
             }
@@ -211,7 +214,7 @@ Deno.serve(async (req) => {
         let lastError = "Erro ao criar link Yampi";
 
         for (const attempt of attempts) {
-          const linkRes = await fetch(attempt.url, {
+          const linkRes = await fetchWithTimeout(attempt.url, {
             method: "POST",
             headers: yampiHeaders,
             body: JSON.stringify(attempt.body),
@@ -228,19 +231,7 @@ Deno.serve(async (req) => {
           if (linkRes.status !== 404) break;
         }
 
-        if (!linkData) {
-          // Release reserved stock on failure
-          for (const item of items) {
-            const variant = variants.find((v) => v.id === item.variant_id)!;
-            await supabase.rpc("increment_stock", { p_variant_id: variant.id, p_quantity: item.quantity });
-            await supabase.from("inventory_movements").insert({
-              variant_id: variant.id,
-              type: "release",
-              quantity: item.quantity,
-            });
-          }
-          throw new Error(lastError);
-        }
+        if (!linkData) throw new Error(lastError);
 
         const redirectUrl = (linkData?.data as Record<string, unknown> | undefined)?.link_url
           || linkData?.link_url

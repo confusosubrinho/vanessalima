@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Eye, Mail, Phone, Calendar, DollarSign, ArrowUpDown, ShoppingBag, Download, Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Search, Eye, Mail, Phone, Calendar, DollarSign, ArrowUpDown, ShoppingBag, Download, Upload, Loader2, CheckCircle, AlertCircle, Users } from 'lucide-react';
+import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -75,10 +76,11 @@ export default function Customers() {
     return new Date(date).toLocaleDateString('pt-BR');
   };
 
-  // Apply filters
+  // Apply filters (null-safe: full_name/email can be null)
+  const searchLower = searchQuery.toLowerCase();
   let filteredCustomers = customers?.filter(c =>
-    c.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (c.full_name ?? '').toLowerCase().includes(searchLower) ||
+    (c.email ?? '').toLowerCase().includes(searchLower)
   ) || [];
 
   // Date filter
@@ -122,10 +124,10 @@ export default function Customers() {
       filteredCustomers.sort((a, b) => (a.total_orders || 0) - (b.total_orders || 0));
       break;
     case 'name-asc':
-      filteredCustomers.sort((a, b) => a.full_name.localeCompare(b.full_name));
+      filteredCustomers.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? ''));
       break;
     case 'name-desc':
-      filteredCustomers.sort((a, b) => b.full_name.localeCompare(a.full_name));
+      filteredCustomers.sort((a, b) => (b.full_name ?? '').localeCompare(a.full_name ?? ''));
       break;
     case 'newest':
     default:
@@ -516,8 +518,13 @@ export default function Customers() {
               </TableRow>
             ) : filteredCustomers?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  Nenhum cliente encontrado
+                <TableCell colSpan={6} className="p-0">
+                  <AdminEmptyState
+                    icon={Users}
+                    title="Nenhum cliente"
+                    description={hasActiveFilters ? 'Nenhum cliente corresponde aos filtros. Tente alterar os critérios.' : 'Ainda não há clientes cadastrados.'}
+                    action={hasActiveFilters ? { label: 'Limpar filtros', onClick: clearFilters } : undefined}
+                  />
                 </TableCell>
               </TableRow>
             ) : (

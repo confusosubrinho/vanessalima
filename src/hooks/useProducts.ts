@@ -3,10 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { Product, Category, Banner, StoreSettings } from '@/types/database';
 import { logApiError } from '@/lib/errorLogger';
  
- export function useProducts(categorySlug?: string) {
-   return useQuery({
-     queryKey: ['products', categorySlug],
-     queryFn: async () => {
+export function useProducts(categorySlug?: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['products', categorySlug],
+    enabled: options?.enabled !== false,
+    staleTime: 1000 * 60 * 5, // 5 min - reduz requisições ao navegar
+    queryFn: async () => {
        let query = supabase
          .from('products')
          .select(`
@@ -52,11 +54,65 @@ import { logApiError } from '@/lib/errorLogger';
      },
    });
  }
- 
- export function useProduct(slug: string) {
+
+ export function useSearchProducts(searchTerm: string) {
+   const escaped = searchTerm.replace(/[%_\\]/g, '\\$&');
    return useQuery({
-     queryKey: ['product', slug],
+     queryKey: ['products', 'search', searchTerm],
+     enabled: searchTerm.length > 0,
      queryFn: async () => {
+       const { data, error } = await supabase
+         .from('products')
+         .select(`
+           *,
+           category:categories(*),
+           images:product_images(*),
+           variants:product_variants(*)
+         `)
+         .eq('is_active', true)
+         .or(`name.ilike.%${escaped}%,description.ilike.%${escaped}%`)
+         .order('created_at', { ascending: false })
+         .limit(100);
+       if (error) throw error;
+       return (data as Product[]) || [];
+     },
+     staleTime: 1000 * 60 * 2,
+   });
+ }
+
+/** Busca leve para o dropdown do header; resultado em cache evita nova requisição ao digitar de novo. */
+export function useSearchPreviewProducts(searchTerm: string) {
+  const trimmed = searchTerm.trim();
+  const escaped = trimmed.replace(/[%_\\]/g, '\\$&');
+  return useQuery({
+    queryKey: ['products', 'search-preview', trimmed],
+    enabled: trimmed.length >= 2,
+    staleTime: 1000 * 60 * 2, // 2 min - mesma busca não repete request
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
+          id,
+          name,
+          slug,
+          base_price,
+          sale_price,
+          images:product_images(url, is_primary)
+        `)
+        .eq('is_active', true)
+        .ilike('name', `%${escaped}%`)
+        .limit(6);
+      if (error) throw error;
+      return (data as Product[]) || [];
+    },
+  });
+}
+
+export function useProduct(slug: string) {
+  return useQuery({
+    queryKey: ['product', slug],
+    staleTime: 1000 * 60 * 5, // 5 min - produto não muda a todo momento
+    queryFn: async () => {
        const { data, error } = await supabase
          .from('products')
          .select(`
@@ -100,9 +156,11 @@ import { logApiError } from '@/lib/errorLogger';
   }
  
   export function useCategories() {
-    return useQuery({
-      queryKey: ['categories'],
-      queryFn: async () => {
+  return useQuery({
+    queryKey: ['categories'],
+    staleTime: 1000 * 60 * 10, // 10 min - catálogo raramente muda
+    refetchOnMount: false,
+    queryFn: async () => {
         const { data, error } = await supabase
           .from('categories')
           .select('*')
@@ -110,15 +168,15 @@ import { logApiError } from '@/lib/errorLogger';
           .order('display_order', { ascending: true });
         
         if (error) throw error;
-        return data as Category[];
-      },
-      staleTime: 1000 * 60 * 10,
-    });
-  }
- 
+      return data as Category[];
+    },
+  });
+}
+
   export function useBanners() {
     return useQuery({
       queryKey: ['banners'],
+      refetchOnMount: false,
       queryFn: async () => {
         const { data, error } = await supabase
           .from('banners')
@@ -136,6 +194,8 @@ import { logApiError } from '@/lib/errorLogger';
   export function useStoreSettings() {
     return useQuery({
       queryKey: ['store-settings'],
+      staleTime: 1000 * 60 * 10,
+      refetchOnMount: false,
       queryFn: async () => {
         const { data, error } = await supabase
           .from('store_settings')
@@ -145,6 +205,5 @@ import { logApiError } from '@/lib/errorLogger';
         if (error) throw error;
         return data as StoreSettings;
       },
-      staleTime: 1000 * 60 * 10,
     });
   }

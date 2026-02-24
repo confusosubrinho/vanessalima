@@ -13,14 +13,11 @@
     <link rel="dns-prefetch" href="https://sojrvsbqkrbxoymlwtii.supabase.co" />
     <link rel="preconnect" href="https://sojrvsbqkrbxoymlwtii.supabase.co" crossorigin />
 
-    <!-- Optimized font loading - only critical weights -->
+    <!-- Fonts load non-blocking; preconnect above speeds up connection -->
     <link href="https://fonts.googleapis.com/css2?family=Maven+Pro:wght@500;600;700&family=Lato:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
     <noscript>
       <link href="https://fonts.googleapis.com/css2?family=Maven+Pro:wght@500;600;700&family=Lato:wght@400;700&display=swap" rel="stylesheet" />
     </noscript>
-
-    <!-- Preload LCP candidate -->
-    <link rel="modulepreload" href="/src/main.tsx" />
 
     <!-- Open Graph -->
     
@@ -45,7 +42,6 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- Appmax JS for PCI-compliant card tokenization -->
-    <script src="https://scripts.appmax.com.br/appmax.min.js" async></script>
+    <!-- Appmax loaded only on checkout/cart via AppmaxScriptLoader -->
   </body>
 </html>

@@ -7,6 +7,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "../_shared/appmax.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ─── In-memory rate limiting ───
@@ -39,7 +40,7 @@ async function appmaxFetch(
   method = "POST"
 ) {
   const url = `${baseUrl}/v1/${endpoint}`;
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -109,21 +110,39 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── Authentication required for transactional actions ───
+    // ─── Auth OR guest order token for transactional actions ───
+    // Guest checkout is allowed when the caller proves ownership of the order via access_token.
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return errorResponse("Autenticação necessária", 401);
+    const hasBearer = !!authHeader?.startsWith("Bearer ");
+    const orderIdFromPayload = (payload as any)?.order_id as string | undefined;
+    const orderAccessToken = (payload as any)?.order_access_token as string | undefined;
+
+    if (!hasBearer) {
+      if (!orderIdFromPayload || !orderAccessToken) {
+        return errorResponse("Autenticação necessária", 401);
+      }
+      const { data: orderRow } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("id", orderIdFromPayload)
+        .eq("access_token", orderAccessToken)
+        .maybeSingle();
+      if (!orderRow) {
+        return errorResponse("Acesso negado ao pedido", 403);
+      }
     }
 
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const jwtToken = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(jwtToken);
-    if (claimsError || !claimsData?.claims?.sub) {
-      return errorResponse("Token inválido ou expirado", 401);
+    if (hasBearer) {
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader! } },
+      });
+      const jwtToken = authHeader!.replace("Bearer ", "");
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(jwtToken);
+      if (claimsError || !claimsData?.claims?.sub) {
+        return errorResponse("Token inválido ou expirado", 401);
+      }
     }
 
     // ─── Get OAuth token via shared helper (encrypted cache) ───
@@ -136,7 +155,7 @@ Deno.serve(async (req) => {
       const clientSecret = Deno.env.get("APPMAX_CLIENT_SECRET");
       if (!clientId || !clientSecret) throw new Error("Credenciais Appmax não configuradas");
       const authUrl = appmaxEnv === "sandbox" ? "https://auth.sandboxappmax.com.br" : "https://auth.appmax.com.br";
-      const resp = await fetch(`${authUrl}/oauth2/token`, {
+      const resp = await fetchWithTimeout(`${authUrl}/oauth2/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret }).toString(),
@@ -199,6 +218,7 @@ Deno.serve(async (req) => {
         validatedDiscount = coupon.discount_type === "percentage"
           ? (expectedSubtotal * coupon.discount_value) / 100
           : coupon.discount_value;
+        validatedDiscount = Math.min(expectedSubtotal, Math.max(0, validatedDiscount));
 
         if (Math.abs(validatedDiscount - discount_amount) > 0.1) {
           return errorResponse("Valor do desconto divergente. Recarregue a página.", 400);
