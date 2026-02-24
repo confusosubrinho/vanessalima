@@ -111,6 +111,7 @@ const allMenuItems: MenuItem[] = [
       { title: 'Loja', url: '/admin/configuracoes', permission: 'settings.read' },
       { title: 'Juros e Cartões', url: '/admin/precos', permission: 'settings.read' },
       { title: 'Integrações', url: '/admin/integracoes', permission: 'settings.read' },
+      { title: 'Checkout Transparente', url: '/admin/checkout-transparente', permission: 'settings.read' },
       { title: 'Notificações', url: '/admin/notificacoes' },
       { title: 'Equipe & Acessos', url: '/admin/equipe', permission: 'team.read' },
       { title: 'Log de Auditoria', url: '/admin/logs/auditoria', permission: 'settings.read' },
