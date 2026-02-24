@@ -114,6 +114,7 @@ Deno.serve(async (req) => {
         const createBrand = await yampiRequest(yampiBase, yampiHeaders, "/catalog/brands", "POST", {
           name: "Minha Marca",
           active: true,
+          featured: false,
         });
         if (createBrand.ok) {
           brandId = (createBrand.data?.data as Record<string, unknown>)?.id as number || (createBrand.data?.id as number);
