@@ -35,12 +35,11 @@ export default function CheckoutReturn() {
     const fetchOrder = async () => {
       const { data: linkedOrder } = await supabase
         .from("orders")
-        .select("id, order_number, status, total_amount, customer_email")
-        .eq("provider", "yampi")
-        .eq("checkout_session_id", sessionId)
+        .select("id, order_number, status, total_amount, customer_email, provider")
+        .eq("external_reference", sessionId)
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle();
+        .maybeSingle() as any;
 
       if (linkedOrder) {
         setOrder(linkedOrder as OrderInfo);
