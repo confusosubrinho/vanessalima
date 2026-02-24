@@ -16,6 +16,22 @@ interface ProductCardProps {
   product: Product;
 }
 
+function useShowVariantsOnGrid() {
+  const { data } = useQuery({
+    queryKey: ['store-settings-grid'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('store_settings')
+        .select('show_variants_on_grid')
+        .limit(1)
+        .maybeSingle();
+      return (data as any)?.show_variants_on_grid ?? true;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  return data ?? true;
+}
+
 export function ProductCard({ product }: ProductCardProps) {
   const sizeScrollRef = useRef<HTMLDivElement>(null);
   const [variantModalOpen, setVariantModalOpen] = useState(false);
@@ -23,6 +39,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { data: pricingConfig } = usePricingConfig();
+  const showVariants = useShowVariantsOnGrid();
   const pixDiscountPercent = pricingConfig?.pix_discount ?? 5;
 
   // Fetch average rating for this product
@@ -221,7 +238,7 @@ export function ProductCard({ product }: ProductCardProps) {
             })()}
           </div>
 
-          {sizes.length > 0 && (
+          {showVariants && sizes.length > 0 && (
             <div className="mt-2">
               <p className="text-[11px] text-muted-foreground mb-1 font-medium">Tamanho</p>
               <div ref={sizeScrollRef} className="flex gap-1 overflow-x-auto touch-pan-x cursor-grab active:cursor-grabbing select-none" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>

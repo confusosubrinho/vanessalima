@@ -1,0 +1,1 @@
+ALTER TABLE public.store_settings ADD COLUMN show_variants_on_grid boolean NOT NULL DEFAULT true;

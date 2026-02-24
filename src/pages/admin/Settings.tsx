@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Store, Phone, Save, Upload, Image, AlertTriangle, Shield, RefreshCw } from 'lucide-react';
+import { Store, Phone, Save, Upload, Image, AlertTriangle, Shield, RefreshCw, LayoutGrid } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { ErrorLogsPanel } from '@/components/admin/ErrorLogsPanel';
 import { TwoFactorSetup } from '@/components/admin/TwoFactorSetup';
 import { APP_VERSION } from '@/lib/appVersion';
@@ -32,7 +33,7 @@ export default function Settings() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [purging, setPurging] = useState(false);
   
-  const [formData, setFormData] = useState<Partial<StoreSettings>>({
+  const [formData, setFormData] = useState<Partial<StoreSettings & { show_variants_on_grid: boolean }>>({
     store_name: '',
     logo_url: '',
     contact_email: '',
@@ -40,6 +41,7 @@ export default function Settings() {
     contact_whatsapp: '',
     address: '',
     free_shipping_threshold: 399,
+    show_variants_on_grid: true,
   });
 
   const { data: settings, isLoading } = useQuery({
@@ -66,6 +68,7 @@ export default function Settings() {
         contact_whatsapp: settings.contact_whatsapp || '',
         address: settings.address || '',
         free_shipping_threshold: settings.free_shipping_threshold || 399,
+        show_variants_on_grid: (settings as any).show_variants_on_grid ?? true,
       });
     }
   }, [settings]);
@@ -218,6 +221,28 @@ export default function Settings() {
                       />
                     </div>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LayoutGrid className="h-5 w-5" />
+                  Exibição do Grid de Produtos
+                </CardTitle>
+                <CardDescription>Configure o que aparece nos cards de produto</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Mostrar variações no grid</Label>
+                    <p className="text-xs text-muted-foreground">Exibe os tamanhos disponíveis nos cards de produto</p>
+                  </div>
+                  <Switch
+                    checked={formData.show_variants_on_grid ?? true}
+                    onCheckedChange={(checked) => setFormData({ ...formData, show_variants_on_grid: checked })}
+                  />
                 </div>
               </CardContent>
             </Card>
