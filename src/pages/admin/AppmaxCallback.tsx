@@ -54,7 +54,7 @@ export default function AppmaxCallbackPage() {
       const d = data as any;
       setDetectedEnv(d.environment || '');
 
-      if (d.status === 'connected' && d.merchant_client_id) {
+      if (d.status === 'connected') {
         connectedRef.current = true;
         setStatus('connected');
         setExternalId(d.external_id || '');
@@ -282,7 +282,7 @@ export default function AppmaxCallbackPage() {
               </div>
               <p className="font-medium text-primary">Conectado com sucesso!</p>
               <p className="text-sm text-muted-foreground text-center">
-                Credenciais do merchant foram recebidas e salvas com segurança.
+                A integração com a Appmax foi concluída com sucesso.
               </p>
               {envLabel && (
                 <p className="text-xs text-muted-foreground">
