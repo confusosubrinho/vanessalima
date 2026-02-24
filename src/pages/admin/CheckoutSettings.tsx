@@ -201,26 +201,52 @@ export default function CheckoutSettings() {
     }
   };
 
+  const [syncProgress, setSyncProgress] = useState("");
+
   const syncCatalog = async () => {
     setSyncing(true);
+    setSyncProgress("Iniciando...");
+    const BATCH_SIZE = 10;
+    let offset = 0;
+    let syncRunId: string | null = null;
+    let totalCreated = 0, totalSkus = 0, totalUpdated = 0, totalErrors = 0;
+
     try {
-      const { data, error } = await supabase.functions.invoke("yampi-catalog-sync", {
-        body: { only_active: true },
-      });
-      if (error) throw error;
+      while (true) {
+        setSyncProgress(`Processando produtos ${offset + 1}-${offset + BATCH_SIZE}...`);
+        const { data, error } = await supabase.functions.invoke("yampi-catalog-sync", {
+          body: { only_active: true, offset, limit: BATCH_SIZE, sync_run_id: syncRunId },
+        });
+        if (error) throw error;
+
+        syncRunId = data?.sync_run_id || syncRunId;
+        totalCreated += data?.created_products || 0;
+        totalSkus += data?.created_skus || 0;
+        totalUpdated += data?.updated_skus || 0;
+        totalErrors += data?.errors_count || 0;
+
+        const total = data?.total_products || 0;
+        const processed = offset + (data?.processed || 0);
+        setSyncProgress(`${processed}/${total} produtos processados`);
+
+        if (!data?.has_more) break;
+        offset += BATCH_SIZE;
+      }
+
       queryClient.invalidateQueries({ queryKey: ["checkout-test-logs"] });
       queryClient.invalidateQueries({ queryKey: ["unmapped-yampi-products"] });
       queryClient.invalidateQueries({ queryKey: ["unmapped-yampi-variants"] });
       refetchSyncRun();
       toast({
         title: "Sincronização concluída!",
-        description: `${data?.created_products || 0} produtos criados, ${data?.created_skus || 0} SKUs criados, ${data?.updated_skus || 0} atualizados, ${data?.errors_count || 0} erros`,
-        variant: data?.errors_count > 0 ? "destructive" : "default",
+        description: `${totalCreated} produtos criados, ${totalSkus} SKUs criados, ${totalUpdated} atualizados, ${totalErrors} erros`,
+        variant: totalErrors > 0 ? "destructive" : "default",
       });
     } catch (err: unknown) {
       toast({ title: "Erro na sincronização", description: (err as Error).message, variant: "destructive" });
     } finally {
       setSyncing(false);
+      setSyncProgress("");
     }
   };
 
@@ -472,7 +498,7 @@ export default function CheckoutSettings() {
                 disabled={syncing}
               >
                 {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
-                {syncing ? "Sincronizando..." : "Sincronizar catálogo (ativos)"}
+                {syncing ? (syncProgress || "Sincronizando...") : "Sincronizar catálogo (ativos)"}
               </Button>
             </div>
           </div>
