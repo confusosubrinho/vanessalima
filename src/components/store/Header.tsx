@@ -430,7 +430,7 @@ export function Header() {
                       </div>
                       
                       <Button asChild className="w-full" size="sm">
-                        <Link to="/checkout" onClick={() => setIsCartOpen(false)}>Finalizar Compra</Link>
+                        <Link to="/checkout/start" onClick={() => setIsCartOpen(false)}>Finalizar Compra</Link>
                       </Button>
                       <Button asChild variant="outline" className="w-full" size="sm">
                         <Link to="/carrinho" onClick={() => setIsCartOpen(false)}>Ver Carrinho Completo</Link>
