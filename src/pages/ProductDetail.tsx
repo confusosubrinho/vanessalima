@@ -14,6 +14,7 @@ import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentOptions, getPixDiscountAmount, shouldApplyPixDiscount, getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { ShippingCalculator } from '@/components/store/ShippingCalculator';
 import { ProductCarousel } from '@/components/store/ProductCarousel';
+import { ProductImageLightbox } from '@/components/store/ProductImageLightbox';
 import { ProductReviews } from '@/components/store/ProductReviews';
 import { PaymentMethodsModal } from '@/components/store/PaymentMethodsModal';
 import { BuyTogether } from '@/components/store/BuyTogether';
@@ -40,6 +41,8 @@ export default function ProductDetail() {
   const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
   const haptics = useHaptics();
   const [selectedImage, setSelectedImage] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -119,6 +122,13 @@ export default function ProductDetail() {
     },
     enabled: !!product?.id,
   });
+
+  // Auto-refetch uma vez ao entrar na página em erro (mitiga cache/transiente ao navegar da home ou grid)
+  useEffect(() => {
+    if (!slug || !isError) return;
+    const t = setTimeout(() => refetch(), 600);
+    return () => clearTimeout(t);
+  }, [slug, isError, refetch]);
 
   if (isLoading) {
     return (
@@ -225,8 +235,10 @@ export default function ProductDetail() {
           : Number(product.sale_price || product.base_price) + Number(selectedVariant.price_modifier || 0))
     : Number(product.sale_price || product.base_price);
   const pixDiscountPercent = pricingConfig?.pix_discount ?? storeSettings?.pix_discount ?? 5;
-  const hasProductSale = hasDiscount;
-  const applyPix = pricingConfig ? shouldApplyPixDiscount(pricingConfig, hasProductSale) : true;
+  // Considerar promoção no produto OU na variante selecionada (preço atual é sale_price)
+  const variantOnSale = !!(selectedVariant?.sale_price != null && Number(selectedVariant.sale_price) > 0 && currentPrice === Number(selectedVariant.sale_price));
+  const hasProductSale = hasDiscount || variantOnSale;
+  const applyPix = pricingConfig ? shouldApplyPixDiscount(pricingConfig, hasProductSale) : !hasProductSale;
   const pixDiscountAmount = pricingConfig ? getPixDiscountAmount(currentPrice, pricingConfig, hasProductSale) : (applyPix ? currentPrice * (pixDiscountPercent / 100) : 0);
   const installmentOptions = pricingConfig ? getInstallmentOptions(currentPrice, pricingConfig) : [];
   const installmentDisplay = pricingConfig ? getInstallmentDisplay(currentPrice, pricingConfig) : null;
@@ -565,26 +577,49 @@ export default function ProductDetail() {
                   <Badge className="bg-primary text-primary-foreground border-0 px-3 py-1">Destaque</Badge>
                 )}
               </div>
-              <img
-                src={resolveImageUrl(images[selectedImage]?.url)}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
+              <button
+                type="button"
+                onClick={() => {
+                  setLightboxIndex(selectedImage);
+                  setLightboxOpen(true);
+                }}
+                className="w-full h-full block focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-lg"
+                aria-label="Ampliar imagem"
+              >
+                <img
+                  src={resolveImageUrl(images[selectedImage]?.url)}
+                  alt={product.name}
+                  className="w-full h-full object-cover cursor-zoom-in"
+                />
+              </button>
             </div>
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {images.map((image, index) => (
                   <button
                     key={image.id}
-                    onClick={() => setSelectedImage(index)}
+                    onClick={() => {
+                      setSelectedImage(index);
+                      setLightboxIndex(index);
+                      setLightboxOpen(true);
+                    }}
                     className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-colors ${
                       index === selectedImage ? 'border-primary' : 'border-transparent'
-                    }`}
+                    } focus:outline-none focus:ring-2 focus:ring-primary cursor-zoom-in`}
                   >
                     <img src={resolveImageUrl(image.url)} alt={`${product.name} - ${index + 1}`} className="w-full h-full object-cover" />
                   </button>
                 ))}
               </div>
+            )}
+            {images.length > 0 && (
+              <ProductImageLightbox
+                images={images.map((img: { id: string; url: string; alt_text?: string | null }) => ({ id: img.id, url: img.url, alt_text: img.alt_text }))}
+                initialIndex={lightboxIndex}
+                open={lightboxOpen}
+                onClose={() => setLightboxOpen(false)}
+                productName={product.name}
+              />
             )}
 
             {/* Tabs on desktop only */}

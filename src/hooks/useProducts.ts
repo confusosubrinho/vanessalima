@@ -128,6 +128,9 @@ export function useProduct(slug: string) {
        return data as Product;
      },
      enabled: !!slug,
+     refetchOnMount: 'always', // evita tela de erro por cache antigo ao navegar de outro produto
+     retry: 2,
+     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 3000),
    });
  }
  

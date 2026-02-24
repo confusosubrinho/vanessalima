@@ -187,30 +187,80 @@ export function HeaderCustomizer() {
         </CardContent>
       </Card>
 
-      {/* Menu em destaque */}
+      {/* Categoria em Destaque (botão do menu) */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Menu em Destaque</CardTitle>
-          <CardDescription>Botão destacado no menu de navegação</CardDescription>
+          <CardTitle className="text-base">Categoria em Destaque</CardTitle>
+          <CardDescription>Botão destacado no menu de navegação. Escolha o ícone, o nome e vincule a uma categoria (ou use um link personalizado).</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div>
+            <Label>Vincular à categoria</Label>
+            <Select
+              value={(() => {
+                const url = currentForm.header_highlight_url || '';
+                const m = url.match(/^\/categoria\/([^/]+)\/?$/);
+                if (m) {
+                  const cat = (categories || []).find(c => c.slug === m[1]);
+                  return cat ? cat.id : 'none';
+                }
+                return 'none';
+              })()}
+              onValueChange={(v) => {
+                if (v === 'none') return;
+                const cat = (categories || []).find(c => c.id === v);
+                if (cat) {
+                  updateForm({
+                    header_highlight_url: `/categoria/${cat.slug}`,
+                    header_highlight_text: cat.name,
+                  });
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Nenhuma (link personalizado)</SelectItem>
+                {(categories || []).map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <Label>Texto</Label>
+              <Label>Nome no menu</Label>
               <Input
                 value={currentForm.header_highlight_text}
                 onChange={e => updateForm({ header_highlight_text: e.target.value })}
-                placeholder="Ex: Promoções"
+                placeholder="Ex: Promoções, Bijuterias"
               />
             </div>
-            <div>
-              <Label>Link</Label>
-              <Input
-                value={currentForm.header_highlight_url}
-                onChange={e => updateForm({ header_highlight_url: e.target.value })}
-                placeholder="/categoria/slug"
-              />
-            </div>
+            {(() => {
+              const url = currentForm.header_highlight_url || '';
+              const isCategoryLink = /^\/categoria\/[^/]+/.test(url);
+              if (isCategoryLink) {
+                return (
+                  <div>
+                    <Label>Link</Label>
+                    <p className="text-sm text-muted-foreground mt-1.5 py-2 px-3 bg-muted rounded-md">{url}</p>
+                  </div>
+                );
+              }
+              return (
+                <div>
+                  <Label>Link (personalizado)</Label>
+                  <Input
+                    value={currentForm.header_highlight_url}
+                    onChange={e => updateForm({ header_highlight_url: e.target.value })}
+                    placeholder="/categoria/slug ou /promocoes"
+                  />
+                </div>
+              );
+            })()}
           </div>
           <div>
             <Label>Ícone</Label>

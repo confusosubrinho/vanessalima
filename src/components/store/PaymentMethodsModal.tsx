@@ -87,9 +87,13 @@ export function PaymentMethodsModal({
             <div className="text-center p-6 bg-muted/50 rounded-lg">
               <QrCode className="h-12 w-12 mx-auto text-primary mb-4" />
               <p className="text-2xl font-bold text-primary">{formatPrice(pixPrice)}</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {pixDiscount}% de desconto no PIX
-              </p>
+              {pixDiscount > 0 ? (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {pixDiscount}% de desconto no PIX
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">À vista no PIX</p>
+              )}
             </div>
             
             <div className="space-y-2 text-sm">

@@ -548,14 +548,52 @@ export function Header() {
                           <div className="flex gap-6">
                             <div className="w-1/3">
                               <h3 className="font-bold text-lg mb-3">{category.name}</h3>
-                              <p className="text-sm text-muted-foreground mb-4">{category.description}</p>
-                              <Link
-                                to={`/categoria/${category.slug}`}
-                                className="inline-flex items-center text-primary font-medium hover:underline"
-                                onClick={() => { setActiveCatSlug(null); }}
-                              >
-                                Ver todos os produtos →
-                              </Link>
+                              {(() => {
+                                const childCategories = (categories || []).filter(
+                                  (c: { parent_category_id?: string | null }) => c.parent_category_id === category.id
+                                ).sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+                                if (childCategories.length > 0) {
+                                  return (
+                                    <>
+                                      <ul className="space-y-1.5 mb-4">
+                                        {childCategories.map((child: { id: string; name: string; slug: string; image_url?: string | null }) => (
+                                          <li key={child.id}>
+                                            <Link
+                                              to={`/categoria/${child.slug}`}
+                                              className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md hover:bg-muted text-sm font-medium text-foreground hover:text-primary transition-colors"
+                                              onClick={() => setActiveCatSlug(null)}
+                                            >
+                                              {child.image_url && (
+                                                <img src={child.image_url} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0" />
+                                              )}
+                                              {child.name}
+                                            </Link>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                      <Link
+                                        to={`/categoria/${category.slug}`}
+                                        className="inline-flex items-center text-primary font-medium hover:underline text-sm"
+                                        onClick={() => setActiveCatSlug(null)}
+                                      >
+                                        Ver todos os produtos →
+                                      </Link>
+                                    </>
+                                  );
+                                }
+                                return (
+                                  <>
+                                    <p className="text-sm text-muted-foreground mb-4">{category.description}</p>
+                                    <Link
+                                      to={`/categoria/${category.slug}`}
+                                      className="inline-flex items-center text-primary font-medium hover:underline"
+                                      onClick={() => { setActiveCatSlug(null); }}
+                                    >
+                                      Ver todos os produtos →
+                                    </Link>
+                                  </>
+                                );
+                              })()}
                             </div>
                             
                             {/* Products grid in mega menu */}

@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { ErrorBoundary } from "@/components/store/ErrorBoundary";
 import { ScrollToTop } from "@/components/store/ScrollToTop";
@@ -18,6 +18,11 @@ import NotFound from "./pages/NotFound";
 
 // Lazy load non-critical pages
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
+
+function ProductDetailKeyed() {
+  const { slug } = useParams();
+  return <ProductDetail key={slug ?? ""} />;
+}
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const SizePage = lazy(() => import("./pages/SizePage"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -144,7 +149,7 @@ const App = () => {
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/produto/:slug" element={<ProductDetail />} />
+              <Route path="/produto/:slug" element={<ProductDetailKeyed />} />
               <Route path="/categoria/:slug" element={<CategoryPage />} />
               <Route path="/conta" element={<MyAccount />} />
               <Route path="/auth" element={<Auth />} />
