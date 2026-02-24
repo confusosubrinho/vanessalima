@@ -29,6 +29,8 @@ export default function CheckoutSettings() {
   const [syncing, setSyncing] = useState(false);
   const [syncingCategories, setSyncingCategories] = useState(false);
   const [syncingVariations, setSyncingVariations] = useState(false);
+  const [syncingImages, setSyncingImages] = useState(false);
+  const [imageProgress, setImageProgress] = useState("");
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "";
 
   // Queries
@@ -286,6 +288,46 @@ export default function CheckoutSettings() {
     }
   };
 
+  const syncImages = async () => {
+    setSyncingImages(true);
+    setImageProgress("Iniciando...");
+    const BATCH_SIZE = 5;
+    let offset = 0;
+    let totalUploaded = 0, totalSkipped = 0, totalErrors = 0;
+
+    try {
+      while (true) {
+        setImageProgress(`Processando SKUs ${offset + 1}-${offset + BATCH_SIZE}...`);
+        const { data, error } = await supabase.functions.invoke("yampi-sync-images", {
+          body: { offset, limit: BATCH_SIZE },
+        });
+        if (error) throw error;
+
+        totalUploaded += data?.uploaded || 0;
+        totalSkipped += data?.skipped || 0;
+        totalErrors += data?.errors || 0;
+
+        const total = data?.total || 0;
+        const processed = offset + (data?.processed || 0);
+        setImageProgress(`${processed}/${total} SKUs processados`);
+
+        if (!data?.has_more) break;
+        offset += BATCH_SIZE;
+      }
+
+      toast({
+        title: "Imagens sincronizadas!",
+        description: `${totalUploaded} enviadas, ${totalSkipped} puladas, ${totalErrors} erros`,
+        variant: totalErrors > 0 ? "destructive" : "default",
+      });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao sincronizar imagens", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSyncingImages(false);
+      setImageProgress("");
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -499,6 +541,15 @@ export default function CheckoutSettings() {
               >
                 {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Database className="h-3 w-3 mr-1" />}
                 {syncing ? (syncProgress || "Sincronizando...") : "Sincronizar catálogo (ativos)"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={syncImages}
+                disabled={syncingImages}
+              >
+                {syncingImages ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
+                {syncingImages ? (imageProgress || "Enviando...") : "Sincronizar imagens"}
               </Button>
             </div>
           </div>
