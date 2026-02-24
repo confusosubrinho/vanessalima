@@ -31,6 +31,12 @@ export default function CheckoutSettings() {
   const [syncingVariations, setSyncingVariations] = useState(false);
   const [syncingImages, setSyncingImages] = useState(false);
   const [imageProgress, setImageProgress] = useState("");
+  const [imageLogs, setImageLogs] = useState<Array<{
+    sku_id: number; product_id: string; product_name?: string;
+    source_url: string; yampi_returned_url: string | null;
+    head_status: number | null; status: string; error?: string;
+  }>>([]);
+  const [showImageLogs, setShowImageLogs] = useState(false);
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "";
 
   // Queries
@@ -291,9 +297,12 @@ export default function CheckoutSettings() {
   const syncImages = async () => {
     setSyncingImages(true);
     setImageProgress("Iniciando...");
+    setImageLogs([]);
+    setShowImageLogs(true);
     const BATCH_SIZE = 5;
     let offset = 0;
     let totalUploaded = 0, totalSkipped = 0, totalErrors = 0;
+    const allLogs: typeof imageLogs = [];
 
     try {
       while (true) {
@@ -306,6 +315,11 @@ export default function CheckoutSettings() {
         totalUploaded += data?.uploaded || 0;
         totalSkipped += data?.skipped || 0;
         totalErrors += data?.errors || 0;
+
+        if (data?.logs) {
+          allLogs.push(...data.logs);
+          setImageLogs([...allLogs]);
+        }
 
         const total = data?.total || 0;
         const processed = offset + (data?.processed || 0);
@@ -702,6 +716,75 @@ export default function CheckoutSettings() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Image Sync Logs */}
+      {showImageLogs && imageLogs.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Upload className="h-4 w-4" />
+                Logs de Imagens ({imageLogs.length})
+              </CardTitle>
+              <Button size="sm" variant="ghost" onClick={() => setShowImageLogs(false)}>
+                Fechar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-80 overflow-y-auto border rounded">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[10px]">Produto</TableHead>
+                    <TableHead className="text-[10px]">SKU ID</TableHead>
+                    <TableHead className="text-[10px]">Source URL</TableHead>
+                    <TableHead className="text-[10px]">Yampi URL</TableHead>
+                    <TableHead className="text-[10px]">HEAD</TableHead>
+                    <TableHead className="text-[10px]">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {imageLogs.map((log, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="text-[10px] max-w-[120px] truncate" title={log.product_name}>
+                        {log.product_name || log.product_id?.slice(0, 8)}
+                      </TableCell>
+                      <TableCell className="text-[10px] font-mono">{log.sku_id}</TableCell>
+                      <TableCell className="text-[10px] max-w-[150px] truncate" title={log.source_url}>
+                        {log.source_url}
+                      </TableCell>
+                      <TableCell className="text-[10px] max-w-[150px] truncate" title={log.yampi_returned_url || "—"}>
+                        {log.yampi_returned_url || "—"}
+                      </TableCell>
+                      <TableCell className="text-[10px]">
+                        {log.head_status !== null ? (
+                          <Badge variant={log.head_status === 200 ? "default" : "destructive"} className="text-[9px]">
+                            {log.head_status}
+                          </Badge>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-[10px]">
+                        <Badge
+                          variant={log.status === "success" ? "default" : log.status === "skipped" ? "secondary" : "destructive"}
+                          className="text-[9px]"
+                        >
+                          {log.status}
+                        </Badge>
+                        {log.error && (
+                          <p className="text-[9px] text-destructive mt-0.5 max-w-[200px] truncate" title={log.error}>
+                            {log.error}
+                          </p>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Test Logs */}
       <Card>
