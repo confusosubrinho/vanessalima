@@ -74,13 +74,18 @@ export default function Checkout() {
   // Use central pricing config
   const { data: pricingConfig } = usePricingConfig();
   const pc: PricingConfig = pricingConfig || {
-    id: '', is_active: true, max_installments: 6, interest_free_installments: 3,
+    id: '', is_active: true, max_installments: 6, interest_free_installments: 3, interest_free_installments_sale: null,
     card_cash_rate: 0, pix_discount: 5, cash_discount: 5, pix_discount_applies_to_sale_products: true,
     interest_mode: 'fixed', monthly_rate_fixed: 0, monthly_rate_by_installment: {}, min_installment_value: 25,
     rounding_mode: 'adjust_last', transparent_checkout_fee_enabled: false, transparent_checkout_fee_percent: 0,
     gateway_fee_1x_percent: 4.99, gateway_fee_additional_per_installment_percent: 2.49,
     gateway_fee_starts_at_installment: 2, gateway_fee_mode: 'linear_per_installment',
   };
+
+  const hasAnySaleItem = items.some(hasSaleDiscount);
+  const effectiveInterestFree = (hasAnySaleItem && (pc as any).interest_free_installments_sale != null)
+    ? (pc as any).interest_free_installments_sale
+    : pc.interest_free_installments;
 
   const [formData, setFormData] = useState({
     email: '',
@@ -239,7 +244,7 @@ export default function Checkout() {
     ? Math.max(0, total - finalTotal)
     : 0;
 
-  const installmentOptions = getInstallmentOptions(total, pc).map(opt => ({
+  const installmentOptions = getInstallmentOptions(total, pc, hasAnySaleItem).map(opt => ({
     value: opt.n,
     label: opt.label,
     total: opt.total,
@@ -312,7 +317,7 @@ export default function Checkout() {
       let orderTotal: number;
       if (formData.paymentMethod === 'pix') {
         orderTotal = finalTotal;
-      } else if (formData.paymentMethod === 'card' && selectedInstallments > pc.interest_free_installments) {
+      } else if (formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree) {
         const selected = installmentOptions.find(o => o.value === selectedInstallments);
         orderTotal = selected ? selected.total : finalTotal;
       } else {
@@ -801,8 +806,8 @@ export default function Checkout() {
                         <Label htmlFor="payment-card" className="cursor-pointer flex-1">
                           <span className="font-medium">Cartão de Crédito</span>
                           <p className="text-sm text-muted-foreground">
-                            Em até {pc.interest_free_installments}x sem juros
-                            {pc.max_installments > pc.interest_free_installments && ` ou até ${pc.max_installments}x`}
+                            Em até {effectiveInterestFree}x sem juros
+                            {pc.max_installments > effectiveInterestFree && ` ou até ${pc.max_installments}x`}
                           </p>
                         </Label>
                         <span className="font-medium">{formatPrice(total)}</span>
@@ -906,7 +911,7 @@ export default function Checkout() {
                         Processando pagamento...
                       </>
                     ) : (
-                      `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > pc.interest_free_installments
+                      `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree
                         ? (installmentOptions.find(o => o.value === selectedInstallments)?.total || finalTotal)
                         : finalTotal
                       )}`

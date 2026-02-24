@@ -240,8 +240,8 @@ export default function ProductDetail() {
   const hasProductSale = hasDiscount || variantOnSale;
   const applyPix = pricingConfig ? shouldApplyPixDiscount(pricingConfig, hasProductSale) : !hasProductSale;
   const pixDiscountAmount = pricingConfig ? getPixDiscountAmount(currentPrice, pricingConfig, hasProductSale) : (applyPix ? currentPrice * (pixDiscountPercent / 100) : 0);
-  const installmentOptions = pricingConfig ? getInstallmentOptions(currentPrice, pricingConfig) : [];
-  const installmentDisplay = pricingConfig ? getInstallmentDisplay(currentPrice, pricingConfig) : null;
+  const installmentOptions = pricingConfig ? getInstallmentOptions(currentPrice, pricingConfig, hasProductSale) : [];
+  const installmentDisplay = pricingConfig ? getInstallmentDisplay(currentPrice, pricingConfig, hasProductSale) : null;
   const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : false;
 
   // When user selects a variant that has a linked image, switch main image to that variant's image
@@ -673,7 +673,11 @@ export default function ProductDetail() {
               <PaymentMethodsModal
                 basePrice={currentPrice}
                 maxInstallments={pricingConfig?.max_installments ?? 6}
-                installmentsWithoutInterest={pricingConfig?.interest_free_installments ?? 3}
+                installmentsWithoutInterest={(
+                  hasProductSale && pricingConfig?.interest_free_installments_sale != null
+                    ? pricingConfig.interest_free_installments_sale
+                    : pricingConfig?.interest_free_installments ?? 3
+                )}
                 installmentInterestRate={pricingConfig?.monthly_rate_fixed ?? 0}
                 minInstallmentValue={pricingConfig?.min_installment_value ?? 25}
                 pixDiscount={applyPix ? pixDiscountPercent : 0}

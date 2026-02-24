@@ -95,6 +95,7 @@ Deno.serve(async (req) => {
       return jsonResponse({
         max_installments: pricingConfig?.max_installments || 6,
         interest_free_installments: pricingConfig?.interest_free_installments || 3,
+        interest_free_installments_sale: pricingConfig?.interest_free_installments_sale ?? null,
         interest_mode: pricingConfig?.interest_mode || "fixed",
         monthly_rate_fixed: Number(pricingConfig?.monthly_rate_fixed) || 0,
         monthly_rate_by_installment: pricingConfig?.monthly_rate_by_installment || {},
@@ -280,10 +281,23 @@ Deno.serve(async (req) => {
         return errorResponse(priceErrors.join("; "), 400);
       }
 
+      const { data: orderRow } = await supabase
+        .from("orders")
+        .select("shipping_cost")
+        .eq("id", order_id)
+        .maybeSingle();
+      const orderShippingCost = Number(orderRow?.shipping_cost ?? 0);
+
       // Calculate server total
       const serverDiscount = validatedCouponId ? validatedDiscount : 0;
       let serverTotal: number;
       let clientShippingCost: number;
+
+      const hasAnySaleItem = serverSubtotalSale > 0;
+      const effectiveInterestFree =
+        hasAnySaleItem && pricingConfig?.interest_free_installments_sale != null
+          ? Number(pricingConfig.interest_free_installments_sale)
+          : Number(pricingConfig?.interest_free_installments || 3);
 
       if (payment_method === "pix") {
         const pixDiscountPct = Number(pricingConfig?.pix_discount || 0) / 100;
@@ -301,9 +315,25 @@ Deno.serve(async (req) => {
         }
         clientShippingCost = Math.max(0, amount - productTotalAfterPix);
         serverTotal = productTotalAfterPix + clientShippingCost;
+      } else if (payment_method === "credit-card" || payment_method === "card") {
+        const baseAmount = serverSubtotal - serverDiscount + orderShippingCost;
+        const n = Math.max(1, Number(installments) || 1);
+
+        if (n > effectiveInterestFree) {
+          const monthlyRatePct = pricingConfig?.interest_mode === "by_installment"
+            ? Number((pricingConfig?.monthly_rate_by_installment || {})[String(n)] ?? pricingConfig?.monthly_rate_fixed ?? 0)
+            : Number(pricingConfig?.monthly_rate_fixed || 0);
+          const monthlyRate = monthlyRatePct / 100;
+          const i = monthlyRate;
+          const rawInstallment = (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1) * baseAmount;
+          const totalExact = rawInstallment * n;
+          const totalRounded = Math.round(totalExact * 100) / 100;
+          serverTotal = totalRounded;
+        } else {
+          serverTotal = baseAmount;
+        }
       } else {
-        clientShippingCost = Math.max(0, amount - (serverSubtotal - serverDiscount));
-        serverTotal = serverSubtotal - serverDiscount + clientShippingCost;
+        serverTotal = serverSubtotal - serverDiscount + orderShippingCost;
       }
 
       // Allow 1% tolerance for rounding

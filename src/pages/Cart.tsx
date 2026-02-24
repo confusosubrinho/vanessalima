@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { HelpHint } from '@/components/HelpHint';
-import { getCartItemUnitPrice } from '@/lib/cartPricing';
+import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
 
 export default function Cart() {
   const { items, subtotal, removeItem, updateQuantity, clearCart, discount, selectedShipping, total } = useCart();
@@ -223,7 +223,7 @@ export default function Cart() {
                   <span className="animate-price-update" key={total.toFixed(2)}>{formatPrice(total)}</span>
                 </div>
                 {(() => {
-                  const display = pricingConfig ? getInstallmentDisplay(total, pricingConfig) : null;
+                  const display = pricingConfig ? getInstallmentDisplay(total, pricingConfig, items.some(hasSaleDiscount)) : null;
                   return display ? (
                     <div className="space-y-0.5">
                       <p className="text-sm font-medium text-foreground/80">{display.primaryText}</p>

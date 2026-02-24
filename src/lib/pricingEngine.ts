@@ -5,6 +5,8 @@ export interface PricingConfig {
   is_active: boolean;
   max_installments: number;
   interest_free_installments: number;
+  /** When set, products on sale use this for "sem juros" instead of interest_free_installments. */
+  interest_free_installments_sale?: number | null;
   card_cash_rate: number;
   pix_discount: number;
   cash_discount: number;
@@ -86,6 +88,7 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
     is_active: d.is_active,
     max_installments: d.max_installments,
     interest_free_installments: d.interest_free_installments,
+    interest_free_installments_sale: d.interest_free_installments_sale != null ? Number(d.interest_free_installments_sale) : null,
     card_cash_rate: Number(d.card_cash_rate) || 0,
     pix_discount: Number(d.pix_discount) || 0,
     cash_discount: Number(d.cash_discount) || 0,
@@ -206,20 +209,31 @@ export function calculateInstallments(
  * Get customer-facing installment options.
  * "sem juros" is purely visual for the customer — the gateway cost is separate.
  */
-export function getCustomerInstallments(price: number, config: PricingConfig): InstallmentOption[] {
-  return getInstallmentOptions(price, config);
+export function getCustomerInstallments(price: number, config: PricingConfig, hasProductSaleDiscount?: boolean): InstallmentOption[] {
+  return getInstallmentOptions(price, config, hasProductSaleDiscount);
+}
+
+/**
+ * Effective config for installment display: when product is on sale and interest_free_installments_sale is set, use it.
+ */
+function getEffectiveConfigForInstallments(config: PricingConfig, hasProductSaleDiscount?: boolean): PricingConfig {
+  if (hasProductSaleDiscount && config.interest_free_installments_sale != null)
+    return { ...config, interest_free_installments: config.interest_free_installments_sale };
+  return config;
 }
 
 /**
  * Get all installment options for a given price.
+ * @param hasProductSaleDiscount - when true and config has interest_free_installments_sale, that value is used for "sem juros"
  */
-export function getInstallmentOptions(price: number, config: PricingConfig): InstallmentOption[] {
+export function getInstallmentOptions(price: number, config: PricingConfig, hasProductSaleDiscount?: boolean): InstallmentOption[] {
+  const effective = getEffectiveConfigForInstallments(config, hasProductSaleDiscount);
   const options: InstallmentOption[] = [];
 
-  for (let n = 1; n <= config.max_installments; n++) {
-    const result = calculateInstallments(price, config, 'card', n);
+  for (let n = 1; n <= effective.max_installments; n++) {
+    const result = calculateInstallments(price, effective, 'card', n);
 
-    if (n > 1 && result.installmentValue < config.min_installment_value) break;
+    if (n > 1 && result.installmentValue < effective.min_installment_value) break;
 
     const suffix = result.hasInterest ? ` (total ${formatCurrency(result.total)})` : ' sem juros';
 
@@ -250,13 +264,12 @@ export interface InstallmentDisplay {
 
 /**
  * Get the unified installment display for a given price.
- * This is the ONLY function for installment text across the entire site.
+ * @param hasProductSaleDiscount - when true and config has interest_free_installments_sale, that value is used for "sem juros"
  */
-export function getInstallmentDisplay(price: number, config: PricingConfig): InstallmentDisplay {
-  // Always use the configured interest_free_installments, ignoring min_installment_value.
-  // This ensures "6x sem juros" is always displayed when config says 6, regardless of product price.
-  const bestN = config.interest_free_installments;
-  const maxN = config.max_installments;
+export function getInstallmentDisplay(price: number, config: PricingConfig, hasProductSaleDiscount?: boolean): InstallmentDisplay {
+  const effective = getEffectiveConfigForInstallments(config, hasProductSaleDiscount);
+  const bestN = effective.interest_free_installments;
+  const maxN = effective.max_installments;
 
   if (bestN >= 2 && price > 0) {
     const installmentAmount = Math.floor((price / bestN) * 100) / 100;

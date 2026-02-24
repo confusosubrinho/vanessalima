@@ -70,13 +70,6 @@ export function ProductImageLightbox({
     []
   );
 
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) onClose();
-    },
-    [onClose]
-  );
-
   const zoomIn = useCallback(() => {
     setScale((s) => Math.min(MAX_SCALE, s + SCALE_STEP));
   }, []);
@@ -123,8 +116,8 @@ export function ProductImageLightbox({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90"
-      onClick={handleBackdropClick}
+      className="fixed inset-0 z-[100] bg-black/90"
+      onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="Visualização ampliada da imagem"
@@ -133,15 +126,15 @@ export function ProductImageLightbox({
       <Button
         variant="ghost"
         size="icon"
-        className="absolute top-4 right-4 z-10 rounded-full bg-white/10 text-white hover:bg-white/20 h-10 w-10"
-        onClick={onClose}
+        className="absolute top-4 right-4 z-10 rounded-full bg-white/10 text-white hover:bg-white/20 h-10 w-10 pointer-events-auto"
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
         aria-label="Fechar"
       >
         <X className="h-5 w-5" />
       </Button>
 
       {/* Zoom controls */}
-      <div className="absolute top-4 left-4 z-10 flex items-center gap-1 rounded-lg bg-white/10 p-1">
+      <div className="absolute top-4 left-4 z-10 flex items-center gap-1 rounded-lg bg-white/10 p-1 pointer-events-auto">
         <Button
           variant="ghost"
           size="icon"
@@ -173,7 +166,7 @@ export function ProductImageLightbox({
           <Button
             variant="ghost"
             size="icon"
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 rounded-full bg-white/10 text-white hover:bg-white/20 h-12 w-12"
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 rounded-full bg-white/10 text-white hover:bg-white/20 h-12 w-12 pointer-events-auto"
             onClick={(e) => {
               e.stopPropagation();
               setIndex((i) => Math.max(0, i - 1));
@@ -188,7 +181,7 @@ export function ProductImageLightbox({
           <Button
             variant="ghost"
             size="icon"
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 rounded-full bg-white/10 text-white hover:bg-white/20 h-12 w-12"
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 rounded-full bg-white/10 text-white hover:bg-white/20 h-12 w-12 pointer-events-auto"
             onClick={(e) => {
               e.stopPropagation();
               setIndex((i) => Math.min(images.length - 1, i + 1));
@@ -203,34 +196,39 @@ export function ProductImageLightbox({
         </>
       )}
 
-      {/* Image container - click here does NOT close (only backdrop) */}
+      {/* Image container - pointer-events-none so backdrop receives clicks; only image has pointer-events-auto */}
       <div
-        className="absolute inset-0 flex items-center justify-center overflow-hidden p-4"
-        onClick={(e) => e.stopPropagation()}
+        className="absolute inset-0 flex items-center justify-center overflow-hidden p-4 pointer-events-none"
         onWheel={handleWheel}
-        style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
       >
         {currentImage && (
-          <img
-            src={resolveImageUrl(currentImage.url)}
-            alt={currentImage.alt_text || `${productName} - ${index + 1}`}
-            className="max-w-full max-h-full object-contain select-none"
-            style={{
-              transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
-              touchAction: 'none',
-            }}
-            draggable={false}
-          />
+          <div
+            className="pointer-events-auto max-w-full max-h-full flex items-center justify-center"
+            style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+            onWheel={handleWheel}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerLeave={onPointerUp}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={resolveImageUrl(currentImage.url)}
+              alt={currentImage.alt_text || `${productName} - ${index + 1}`}
+              className="max-w-full max-h-full object-contain select-none"
+              style={{
+                transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
+                touchAction: 'none',
+              }}
+              draggable={false}
+            />
+          </div>
         )}
       </div>
 
       {/* Counter */}
       {hasMultiple && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 rounded-full bg-white/10 px-4 py-2 text-sm text-white">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 rounded-full bg-white/10 px-4 py-2 text-sm text-white pointer-events-none">
           {index + 1} / {images.length}
         </div>
       )}

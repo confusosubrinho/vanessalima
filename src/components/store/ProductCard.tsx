@@ -234,7 +234,7 @@ export function ProductCard({ product }: ProductCardProps) {
               </>
             )}
             {pricingConfig && (() => {
-              const display = getInstallmentDisplay(currentPrice, pricingConfig);
+              const display = getInstallmentDisplay(currentPrice, pricingConfig, hasDiscount);
               return (
                 <div className="pt-0.5">
                   <p className="text-[11px] font-medium text-foreground/80">{display.primaryText}</p>

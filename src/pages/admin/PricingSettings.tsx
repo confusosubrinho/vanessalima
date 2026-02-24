@@ -40,6 +40,7 @@ export default function PricingSettings() {
   const [form, setForm] = useState({
     max_installments: 12,
     interest_free_installments: 3,
+    interest_free_installments_sale: null as number | null,
     card_cash_rate: 0,
     pix_discount: 5,
     cash_discount: 5,
@@ -65,6 +66,7 @@ export default function PricingSettings() {
       setForm({
         max_installments: config.max_installments || 12,
         interest_free_installments: config.interest_free_installments || 3,
+        interest_free_installments_sale: config.interest_free_installments_sale != null ? Number(config.interest_free_installments_sale) : null,
         card_cash_rate: Number(config.card_cash_rate) || 0,
         pix_discount: Number(config.pix_discount) || 5,
         cash_discount: Number(config.cash_discount) || 5,
@@ -241,6 +243,21 @@ export default function PricingSettings() {
                     onChange={e => setForm(f => ({ ...f, interest_free_installments: parseInt(e.target.value) || 0 }))}
                   />
                   <p className="text-[10px] text-muted-foreground">Cliente vê "sem juros" até esta parcela. 0 = nenhuma.</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Parcelas sem juros em promoção</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={form.max_installments}
+                    placeholder="Igual ao geral"
+                    value={form.interest_free_installments_sale ?? ''}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setForm(f => ({ ...f, interest_free_installments_sale: v === '' ? null : Math.max(0, parseInt(v) || 0) }));
+                    }}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Para produtos em promoção. Vazio = usa o valor geral acima.</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Valor mín. parcela (R$)</Label>

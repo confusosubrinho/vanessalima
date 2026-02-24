@@ -229,7 +229,7 @@ export function ProductCarousel({
                           {formatPrice(currentPrice)}
                         </p>
                         {pricingConfig && (() => {
-                          const display = getInstallmentDisplay(currentPrice, pricingConfig);
+                          const display = getInstallmentDisplay(currentPrice, pricingConfig, hasDiscount);
                           return (
                             <>
                               <p className={`text-sm font-medium ${isDark && !cardBg ? 'text-secondary-foreground/80' : 'text-foreground/80'}`}>
