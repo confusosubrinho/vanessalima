@@ -531,6 +531,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
               gateway_fee_additional_per_installment_percent: (storeSettings as any).gateway_fee_additional_per_installment_percent ?? 2.49,
               gateway_fee_starts_at_installment: (storeSettings as any).gateway_fee_starts_at_installment ?? 2,
               gateway_fee_mode: (storeSettings as any).gateway_fee_mode || 'linear_per_installment',
+              pix_discount_applies_to_sale_products: (storeSettings as any).pix_discount_applies_to_sale_products ?? true,
             };
 
             const pixPrice = sellPrice * (1 - pricingConfig.pix_discount / 100);

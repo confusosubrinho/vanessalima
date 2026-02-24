@@ -97,7 +97,7 @@ export default function Orders() {
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' }) => {
       if (status === 'cancelled') {
-        const { data, error } = await supabase.rpc('cancel_order_return_stock', { p_order_id: id });
+        const { data, error } = await supabase.rpc('cancel_order_return_stock' as any, { p_order_id: id });
         if (error) throw error;
         if (data && typeof data === 'object' && (data as { success?: boolean }).success === false) {
           const msg = (data as { message?: string }).message || 'Não foi possível cancelar o pedido.';
@@ -524,13 +524,13 @@ export default function Orders() {
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
-              {(selectedOrder.customer_email || selectedOrder.provider) && (
+              {((selectedOrder as any).customer_email || (selectedOrder as any).provider) && (
                 <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  {selectedOrder.customer_email && (
-                    <span>Email: {selectedOrder.customer_email}</span>
+                  {(selectedOrder as any).customer_email && (
+                    <span>Email: {(selectedOrder as any).customer_email}</span>
                   )}
-                  {selectedOrder.provider && (
-                    <Badge variant="outline" className="text-xs">{selectedOrder.provider === 'yampi' ? 'Yampi' : 'Appmax'}</Badge>
+                  {(selectedOrder as any).provider && (
+                    <Badge variant="outline" className="text-xs">{(selectedOrder as any).provider === 'yampi' ? 'Yampi' : 'Appmax'}</Badge>
                   )}
                 </div>
               )}
