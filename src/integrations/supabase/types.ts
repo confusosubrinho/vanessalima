@@ -943,6 +943,9 @@ export type Database = {
       coupons: {
         Row: {
           applicable_category_id: string | null
+          applicable_product_ids: string[] | null
+          applicable_states: string[] | null
+          applicable_zip_prefixes: string[] | null
           bulk_count: number | null
           bulk_prefix: string | null
           code: string
@@ -961,6 +964,9 @@ export type Database = {
         }
         Insert: {
           applicable_category_id?: string | null
+          applicable_product_ids?: string[] | null
+          applicable_states?: string[] | null
+          applicable_zip_prefixes?: string[] | null
           bulk_count?: number | null
           bulk_prefix?: string | null
           code: string
@@ -979,6 +985,9 @@ export type Database = {
         }
         Update: {
           applicable_category_id?: string | null
+          applicable_product_ids?: string[] | null
+          applicable_states?: string[] | null
+          applicable_zip_prefixes?: string[] | null
           bulk_count?: number | null
           bulk_prefix?: string | null
           code?: string
@@ -2802,6 +2811,7 @@ export type Database = {
           created_at: string
           facebook_pixel_id: string | null
           facebook_url: string | null
+          favicon_url: string | null
           free_shipping_threshold: number | null
           full_address: string | null
           google_analytics_id: string | null
@@ -2860,6 +2870,7 @@ export type Database = {
           created_at?: string
           facebook_pixel_id?: string | null
           facebook_url?: string | null
+          favicon_url?: string | null
           free_shipping_threshold?: number | null
           full_address?: string | null
           google_analytics_id?: string | null
@@ -2918,6 +2929,7 @@ export type Database = {
           created_at?: string
           facebook_pixel_id?: string | null
           facebook_url?: string | null
+          favicon_url?: string | null
           free_shipping_threshold?: number | null
           full_address?: string | null
           google_analytics_id?: string | null

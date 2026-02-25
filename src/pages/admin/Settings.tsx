@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Store, Phone, Save, Upload, Shield, LayoutGrid, Activity } from 'lucide-react';
+import { Store, Phone, Save, Upload, Shield, LayoutGrid, Activity, Image as ImageIcon } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { TwoFactorSetup } from '@/components/admin/TwoFactorSetup';
 import { HelpHint } from '@/components/HelpHint';
@@ -348,7 +348,7 @@ export default function Settings() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Image className="h-5 w-5" />
+                  <ImageIcon className="h-5 w-5" />
                   Personalização do Footer
                 </CardTitle>
                 <CardDescription>Configure dados da empresa, selos de segurança e formas de pagamento que aparecem no rodapé</CardDescription>

@@ -550,8 +550,8 @@ export function Header() {
                               <h3 className="font-bold text-lg mb-3">{category.name}</h3>
                               {(() => {
                                 const childCategories = (categories || []).filter(
-                                  (c: { parent_category_id?: string | null }) => c.parent_category_id === category.id
-                                ).sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+                                  (c: any) => c.parent_category_id === category.id
+                                ).sort((a: any, b: any) => (a.display_order ?? 0) - (b.display_order ?? 0));
                                 if (childCategories.length > 0) {
                                   return (
                                     <>

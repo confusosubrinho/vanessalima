@@ -46,7 +46,7 @@ export function useStoreContact() {
         cnpj: data.cnpj,
         logo_url: data.logo_url,
         header_logo_url: data.header_logo_url,
-        favicon_url: data.favicon_url,
+        favicon_url: (data as any).favicon_url,
       } as StoreContact)
     : null;
   return { data: contact, ...rest };
