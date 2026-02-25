@@ -67,12 +67,12 @@ export default function PricingSettings() {
       setForm({
         max_installments: config.max_installments || 12,
         interest_free_installments: config.interest_free_installments || 3,
-        interest_free_installments_sale: config.interest_free_installments_sale != null ? Number(config.interest_free_installments_sale) : null,
+        interest_free_installments_sale: (config as any).interest_free_installments_sale != null ? Number((config as any).interest_free_installments_sale) : null,
         card_cash_rate: Number(config.card_cash_rate) || 0,
         pix_discount: Number(config.pix_discount) || 5,
         cash_discount: Number(config.cash_discount) || 5,
         pix_discount_applies_to_sale_products: config.pix_discount_applies_to_sale_products !== false,
-        interest_mode: config.interest_mode || 'fixed',
+        interest_mode: (config.interest_mode || 'fixed') as 'fixed' | 'by_installment',
         monthly_rate_fixed: Number(config.monthly_rate_fixed) || 0,
         min_installment_value: Number(config.min_installment_value) || 25,
         rounding_mode: config.rounding_mode || 'adjust_last',
@@ -81,7 +81,7 @@ export default function PricingSettings() {
         gateway_fee_1x_percent: Number(config.gateway_fee_1x_percent) ?? 4.99,
         gateway_fee_additional_per_installment_percent: Number(config.gateway_fee_additional_per_installment_percent) ?? 2.49,
         gateway_fee_starts_at_installment: Number(config.gateway_fee_starts_at_installment) || 2,
-        gateway_fee_mode: config.gateway_fee_mode || 'linear_per_installment',
+        gateway_fee_mode: (config.gateway_fee_mode || 'linear_per_installment') as 'linear_per_installment' | 'price_table',
       });
 
       const rates = config.monthly_rate_by_installment || {};
@@ -119,7 +119,7 @@ export default function PricingSettings() {
           before_data: beforeData as unknown,
           after_data: payload as unknown,
           changed_by: (await supabase.auth.getUser()).data.user?.id,
-        });
+        } as any);
       } else {
         const { error } = await supabase
           .from('payment_pricing_config')

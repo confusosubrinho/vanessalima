@@ -175,7 +175,7 @@ export default function SocialLinksPage() {
     } else {
       const maxOrder = links?.reduce((max, l) => Math.max(max, l.sort_order), 0) || 0;
       const { error } = await supabase.from('social_links')
-        .insert({ ...data, sort_order: maxOrder + 1 });
+        .insert({ ...data, sort_order: maxOrder + 1 } as any);
       if (error) throw error;
       toast({ title: 'Rede adicionada!' });
     }

@@ -96,7 +96,7 @@ export default function Coupons() {
         if (error) throw error;
         await logAudit({ action: 'update', resourceType: 'coupon', resourceId: editingCoupon.id, resourceName: String(couponData.code) });
       } else {
-        const { error } = await supabase.from('coupons').insert(couponData);
+        const { error } = await supabase.from('coupons').insert(couponData as any);
         if (error) throw error;
         await logAudit({ action: 'create', resourceType: 'coupon', resourceName: String(couponData.code) });
       }
@@ -146,7 +146,7 @@ export default function Coupons() {
       max_uses: coupon.max_uses ? String(coupon.max_uses) : '',
       expiry_date: coupon.expiry_date ? coupon.expiry_date.split('T')[0] : '',
       is_active: coupon.is_active,
-      type: (coupon as { type?: string }).type || 'standard',
+      type: ((coupon as any).type || 'standard') as 'standard' | 'free_shipping' | 'first_purchase',
       applicable_category_id: (coupon as { applicable_category_id?: string }).applicable_category_id || '',
       applicable_states: Array.isArray(states) ? states.join(', ') : '',
       applicable_zip_prefixes: Array.isArray(zips) ? zips.join(', ') : '',
