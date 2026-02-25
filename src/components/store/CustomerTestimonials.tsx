@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useHorizontalScrollAxisLock } from '@/hooks/useHorizontalScrollAxisLock';
 
 interface TestimonialConfig {
   is_active: boolean;
@@ -34,7 +35,7 @@ interface Testimonial {
 }
 
 export function CustomerTestimonials() {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useHorizontalScrollAxisLock();
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
 
@@ -42,7 +43,7 @@ export function CustomerTestimonials() {
     queryKey: ['testimonials-config'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('homepage_testimonials_config' as any)
+        .from('homepage_testimonials_config')
         .select('*')
         .limit(1)
         .single();
@@ -55,7 +56,7 @@ export function CustomerTestimonials() {
     queryKey: ['testimonials'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('homepage_testimonials' as any)
+        .from('homepage_testimonials')
         .select('*, product:products(id, name, slug, images:product_images(url, is_primary))')
         .eq('is_active', true)
         .order('display_order', { ascending: true });

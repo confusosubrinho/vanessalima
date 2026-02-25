@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Upload, Search, Pencil, Trash2, Image as ImageIcon, Video, Link as LinkIcon } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Upload, Search, Pencil, Trash2, Image as ImageIcon, Video, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { compressImageToWebP } from '@/lib/imageCompressor';
 
@@ -36,6 +46,23 @@ interface BannerImage {
   source: 'banner' | 'highlight';
 }
 
+interface StorageFile {
+  name: string;
+  url: string;
+  type: 'image' | 'video';
+  sizeBytes?: number;
+}
+
+const PAGE_SIZE = 24;
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
 export default function MediaGallery() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -44,6 +71,11 @@ export default function MediaGallery() {
   const [altText, setAltText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
+  const [page, setPage] = useState(0);
+  const [deleteProductImage, setDeleteProductImage] = useState<ProductImage | null>(null);
+  const [deleteStorageFile, setDeleteStorageFile] = useState<string | null>(null);
+
+  useEffect(() => setPage(0), [activeTab, search]);
 
   // All product_images with product names
   const { data: productImages, isLoading: loadingProducts } = useQuery({
@@ -106,11 +138,15 @@ export default function MediaGallery() {
         .from('product-media')
         .list('', { limit: 500, sortBy: { column: 'created_at', order: 'desc' } });
       if (error) throw error;
-      return (data || []).map(file => ({
-        name: file.name,
-        url: supabase.storage.from('product-media').getPublicUrl(file.name).data.publicUrl,
-        type: (file.metadata?.mimetype?.startsWith('video/') ? 'video' : 'image') as 'image' | 'video',
-      }));
+      return (data || []).map(file => {
+        const meta = file.metadata as { mimetype?: string; size?: number } | undefined;
+        return {
+          name: file.name,
+          url: supabase.storage.from('product-media').getPublicUrl(file.name).data.publicUrl,
+          type: (meta?.mimetype?.startsWith('video/') ? 'video' : 'image') as 'image' | 'video',
+          sizeBytes: typeof meta?.size === 'number' ? meta.size : undefined,
+        } as StorageFile;
+      });
     },
   });
 
@@ -124,11 +160,27 @@ export default function MediaGallery() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['media-gallery-product-images'] });
-      toast({ title: 'Alt text atualizado!' });
+      toast({ title: 'Título/Alt para SEO atualizado!' });
       setEditingImage(null);
     },
     onError: (e: Error) => {
       toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteProductImageMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('product_images').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['media-gallery-product-images'] });
+      toast({ title: 'Imagem removida do produto' });
+      setDeleteProductImage(null);
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Erro ao excluir', description: e.message, variant: 'destructive' });
+      setDeleteProductImage(null);
     },
   });
 
@@ -158,7 +210,9 @@ export default function MediaGallery() {
       toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
     } else {
       queryClient.invalidateQueries({ queryKey: ['media-gallery-storage'] });
+      queryClient.invalidateQueries({ queryKey: ['media-gallery-product-images'] });
       toast({ title: 'Arquivo excluído!' });
+      setDeleteStorageFile(null);
     }
   };
 
@@ -207,6 +261,46 @@ export default function MediaGallery() {
 
   const isLoading = loadingProducts || loadingStorage;
 
+  // Pagination
+  const paginatedAll = filteredAll.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const paginatedProducts = filteredProducts.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const paginatedBanners = filteredBanners.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const paginatedStorage = filteredStorage.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const totalPagesAll = Math.ceil(filteredAll.length / PAGE_SIZE) || 1;
+  const totalPagesProducts = Math.ceil(filteredProducts.length / PAGE_SIZE) || 1;
+  const totalPagesBanners = Math.ceil(filteredBanners.length / PAGE_SIZE) || 1;
+  const totalPagesStorage = Math.ceil(filteredStorage.length / PAGE_SIZE) || 1;
+
+  const currentTotal = activeTab === 'all' ? filteredAll.length : activeTab === 'products' ? filteredProducts.length : activeTab === 'banners' ? filteredBanners.length : filteredStorage.length;
+  const totalPages = activeTab === 'all' ? totalPagesAll : activeTab === 'products' ? totalPagesProducts : activeTab === 'banners' ? totalPagesBanners : totalPagesStorage;
+  const from = page * PAGE_SIZE + 1;
+  const to = Math.min((page + 1) * PAGE_SIZE, currentTotal);
+
+  function PaginationBar() {
+    if (currentTotal <= PAGE_SIZE) return null;
+    return (
+      <div className="flex items-center justify-between border-t pt-4 mt-4">
+        <p className="text-sm text-muted-foreground">
+          {currentTotal > 0 ? `${from}-${to} de ${currentTotal}` : 'Nenhum item'}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+            <ChevronLeft className="h-4 w-4" />
+            Anterior
+          </Button>
+          <span className="text-sm text-muted-foreground px-2">
+            Página {page + 1} de {totalPages}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
+            Próxima
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -254,42 +348,48 @@ export default function MediaGallery() {
           {isLoading ? (
             <div className="text-center py-12 text-muted-foreground">Carregando...</div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {filteredAll.map((img) => (
-                <div key={img.key} className="group relative rounded-lg border overflow-hidden bg-muted/30">
-                  <AspectRatio ratio={1}>
-                    <img src={img.url} alt={img.alt || img.label} className="w-full h-full object-cover" />
-                  </AspectRatio>
-                  <div className="absolute top-2 left-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {img.source === 'product' ? 'Produto' : img.source === 'banner' ? 'Banner' : 'Destaque'}
-                    </Badge>
-                  </div>
-                  {img.alt && (
-                    <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-1.5 py-0.5 rounded">
-                      SEO ✓
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {paginatedAll.map((img) => (
+                  <div key={img.key} className="group relative rounded-lg border overflow-hidden bg-muted/30">
+                    <AspectRatio ratio={1}>
+                      <img src={img.url} alt={img.alt || img.label} className="w-full h-full object-cover" />
+                    </AspectRatio>
+                    <div className="absolute top-2 left-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {img.source === 'product' ? 'Produto' : img.source === 'banner' ? 'Banner' : 'Destaque'}
+                      </Badge>
                     </div>
-                  )}
-                  {img.productImage && (
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => openEditSeo(img.productImage!)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                    {img.alt && (
+                      <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-1.5 py-0.5 rounded">
+                        SEO ✓
+                      </div>
+                    )}
+                    {img.productImage && (
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                        <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => openEditSeo(img.productImage!)} title="Editar título/SEO">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => setDeleteProductImage(img.productImage!)} title="Excluir imagem">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    <div className="p-2">
+                      <p className="text-xs text-muted-foreground truncate" title={img.label}>{img.label}</p>
                     </div>
-                  )}
-                  <div className="p-2">
-                    <p className="text-xs text-muted-foreground truncate" title={img.label}>{img.label}</p>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              <PaginationBar />
+            </>
           )}
         </TabsContent>
 
         {/* PRODUCTS TAB */}
         <TabsContent value="products">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredProducts.map((pi) => (
+            {paginatedProducts.map((pi) => (
               <div key={pi.id} className="group relative rounded-lg border overflow-hidden bg-muted/30">
                 <AspectRatio ratio={1}>
                   <img src={pi.url} alt={pi.alt_text || pi.product_name} className="w-full h-full object-cover" />
@@ -304,9 +404,12 @@ export default function MediaGallery() {
                 ) : (
                   <div className="absolute top-2 right-2 bg-destructive text-white text-xs px-1.5 py-0.5 rounded">Sem ALT</div>
                 )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => openEditSeo(pi)}>
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                  <Button size="icon" variant="secondary" className="h-8 w-8" onClick={() => openEditSeo(pi)} title="Editar título/SEO">
                     <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => setDeleteProductImage(pi)} title="Excluir imagem">
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
                 <div className="p-2">
@@ -315,12 +418,13 @@ export default function MediaGallery() {
               </div>
             ))}
           </div>
+          <PaginationBar />
         </TabsContent>
 
         {/* BANNERS TAB */}
         <TabsContent value="banners">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {filteredBanners.map((bi) => (
+            {paginatedBanners.map((bi) => (
               <div key={bi.id} className="relative rounded-lg border overflow-hidden bg-muted/30">
                 <AspectRatio ratio={bi.source === 'highlight' ? 1 : 16/9}>
                   <img src={bi.url} alt={bi.title || ''} className="w-full h-full object-cover" />
@@ -336,12 +440,13 @@ export default function MediaGallery() {
               </div>
             ))}
           </div>
+          <PaginationBar />
         </TabsContent>
 
         {/* STORAGE TAB */}
         <TabsContent value="storage">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredStorage.map((file) => (
+            {paginatedStorage.map((file) => (
               <div key={file.name} className="group relative rounded-lg border overflow-hidden bg-muted/30">
                 <AspectRatio ratio={1}>
                   {file.type === 'video' ? (
@@ -350,23 +455,32 @@ export default function MediaGallery() {
                     <img src={file.url} alt={file.name} className="w-full h-full object-cover" />
                   )}
                 </AspectRatio>
-                <div className="absolute top-2 left-2">
-                  <Badge variant="outline" className="text-xs bg-background/80">
+                <div className="absolute top-2 left-2 flex flex-col gap-1">
+                  <Badge variant="outline" className="text-xs bg-background/80 w-fit">
                     {file.type === 'video' ? <Video className="h-3 w-3 mr-1" /> : <ImageIcon className="h-3 w-3 mr-1" />}
                     {file.type === 'video' ? 'Video' : 'IMG'}
                   </Badge>
+                  {file.sizeBytes != null && (
+                    <Badge variant="secondary" className="text-[10px] w-fit">
+                      {formatBytes(file.sizeBytes)}
+                    </Badge>
+                  )}
                 </div>
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => handleDelete(file.name)}>
+                  <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => setDeleteStorageFile(file.name)} title="Excluir arquivo">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
                 <div className="p-2">
                   <p className="text-xs text-muted-foreground truncate" title={file.name}>{file.name}</p>
+                  {file.sizeBytes != null && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{formatBytes(file.sizeBytes)}</p>
+                  )}
                 </div>
               </div>
             ))}
           </div>
+          <PaginationBar />
         </TabsContent>
       </Tabs>
 
@@ -374,7 +488,7 @@ export default function MediaGallery() {
       <Dialog open={!!editingImage} onOpenChange={(o) => !o && setEditingImage(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar SEO da Imagem</DialogTitle>
+            <DialogTitle>Título / Alt para SEO</DialogTitle>
           </DialogHeader>
           {editingImage && (
             <div className="space-y-4">
@@ -387,7 +501,7 @@ export default function MediaGallery() {
                 Produto: <strong>{editingImage.product_name}</strong>
               </div>
               <div className="space-y-2">
-                <Label>Texto alternativo (alt text)</Label>
+                <Label>Título da imagem / Texto alternativo (alt)</Label>
                 <Textarea
                   value={altText}
                   onChange={(e) => setAltText(e.target.value)}
@@ -395,7 +509,7 @@ export default function MediaGallery() {
                   rows={3}
                 />
                 <p className="text-xs text-muted-foreground">
-                  O alt text é essencial para SEO. Descreva o conteúdo da imagem de forma clara e concisa.
+                  Use um texto claro e objetivo. Melhora o SEO e a acessibilidade.
                 </p>
               </div>
               <div className="flex justify-end gap-2">
@@ -411,6 +525,48 @@ export default function MediaGallery() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Confirm delete product image */}
+      <AlertDialog open={!!deleteProductImage} onOpenChange={(o) => !o && setDeleteProductImage(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir imagem do produto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A imagem será removida deste produto. O arquivo no storage não será apagado. Você pode desfazer editando o produto e adicionando a imagem novamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteProductImage && deleteProductImageMutation.mutate(deleteProductImage.id)}
+            >
+              {deleteProductImageMutation.isPending ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm delete storage file */}
+      <AlertDialog open={!!deleteStorageFile} onOpenChange={(o) => !o && setDeleteStorageFile(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir arquivo do storage?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O arquivo será removido permanentemente. Se estiver em uso em algum produto ou banner, a imagem deixará de aparecer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteStorageFile && handleDelete(deleteStorageFile)}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

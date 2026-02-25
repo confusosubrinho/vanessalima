@@ -44,7 +44,7 @@ export default function AbandonedCarts() {
     queryKey: ['abandoned-carts'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('abandoned_carts' as any)
+        .from('abandoned_carts')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100);
@@ -84,7 +84,7 @@ export default function AbandonedCarts() {
     const msg = `Olá${cart.customer_name ? ' ' + cart.customer_name : ''}! Notamos que você deixou itens no carrinho: ${items}. Total: ${formatPrice(cart.subtotal)}. Podemos ajudar a finalizar sua compra?`;
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(msg)}`, '_blank');
 
-    await supabase.from('abandoned_carts' as any).update({
+    await supabase.from('abandoned_carts').update({
       contacted_via: 'whatsapp',
       contacted_at: new Date().toISOString(),
     } as any).eq('id', cart.id);
@@ -99,7 +99,7 @@ export default function AbandonedCarts() {
     const subject = 'Você esqueceu algo no carrinho! 🛒';
     window.open(`mailto:${cart.email}?subject=${encodeURIComponent(subject)}`, '_blank');
 
-    await supabase.from('abandoned_carts' as any).update({
+    await supabase.from('abandoned_carts').update({
       contacted_via: 'email',
       contacted_at: new Date().toISOString(),
     } as any).eq('id', cart.id);
@@ -107,7 +107,7 @@ export default function AbandonedCarts() {
   };
 
   const markRecovered = async (id: string) => {
-    await supabase.from('abandoned_carts' as any).update({
+    await supabase.from('abandoned_carts').update({
       recovered: true,
       recovered_at: new Date().toISOString(),
     } as any).eq('id', id);

@@ -55,7 +55,7 @@ export function StockNotifyModal({
 
     setLoading(true);
     try {
-      const { error } = await supabase.from('stock_notifications' as any).insert({
+      const { error } = await supabase.from('stock_notifications').insert({
         product_id: productId,
         variant_id: variantId || null,
         variant_info: variantInfo || null,

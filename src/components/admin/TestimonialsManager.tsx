@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Plus, Pencil, Trash2, GripVertical, Star, Upload, X, ShoppingBag } from 'lucide-react';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { compressToAvatar } from '@/lib/imageCompressor';
+import type { Database } from '@/integrations/supabase/types';
 
 interface TestimonialConfig {
   id: string;
@@ -84,7 +85,7 @@ export function TestimonialsManager() {
   const { data: config } = useQuery({
     queryKey: ['admin-testimonials-config'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('homepage_testimonials_config' as any).select('*').limit(1).single();
+      const { data, error } = await supabase.from('homepage_testimonials_config').select('*').limit(1).single();
       if (error) throw error;
       return data as unknown as TestimonialConfig;
     },
@@ -93,7 +94,7 @@ export function TestimonialsManager() {
   const updateConfig = useMutation({
     mutationFn: async (updates: Partial<TestimonialConfig>) => {
       if (!config?.id) return;
-      const { error } = await supabase.from('homepage_testimonials_config' as any).update(updates as any).eq('id', config.id);
+      const { error } = await supabase.from('homepage_testimonials_config').update(updates as Database['public']['Tables']['homepage_testimonials_config']['Update']).eq('id', config.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -108,7 +109,7 @@ export function TestimonialsManager() {
     queryKey: ['admin-testimonials'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('homepage_testimonials' as any)
+        .from('homepage_testimonials')
         .select('*, product:products(id, name, images:product_images(url, is_primary))')
         .order('display_order', { ascending: true });
       if (error) throw error;
@@ -134,7 +135,7 @@ export function TestimonialsManager() {
     items: testimonials || [],
     onReorder: (reordered) => {
       const updates = reordered.map((item, i) => ({ id: item.id, display_order: i }));
-      Promise.all(updates.map(u => supabase.from('homepage_testimonials' as any).update({ display_order: u.display_order } as any).eq('id', u.id)))
+      Promise.all(updates.map(u => supabase.from('homepage_testimonials').update({ display_order: u.display_order } as Database['public']['Tables']['homepage_testimonials']['Update']).eq('id', u.id)))
         .then(() => {
           queryClient.invalidateQueries({ queryKey: ['admin-testimonials'] });
           queryClient.invalidateQueries({ queryKey: ['testimonials'] });
@@ -153,10 +154,10 @@ export function TestimonialsManager() {
         display_order: editingItem?.display_order ?? (testimonials?.length || 0),
       };
       if (editingItem) {
-        const { error } = await supabase.from('homepage_testimonials' as any).update(payload as any).eq('id', editingItem.id);
+        const { error } = await supabase.from('homepage_testimonials').update(payload as Database['public']['Tables']['homepage_testimonials']['Update']).eq('id', editingItem.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('homepage_testimonials' as any).insert(payload as any);
+        const { error } = await supabase.from('homepage_testimonials').insert(payload as Database['public']['Tables']['homepage_testimonials']['Insert']);
         if (error) throw error;
       }
     },
@@ -172,7 +173,7 @@ export function TestimonialsManager() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('homepage_testimonials' as any).delete().eq('id', id);
+      const { error } = await supabase.from('homepage_testimonials').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

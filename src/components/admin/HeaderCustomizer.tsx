@@ -352,7 +352,7 @@ function AnnouncementBarConfig() {
   const { data: config, isLoading } = useQuery({
     queryKey: ['admin-announcement-bar'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('announcement_bar' as any).select('*').limit(1).maybeSingle();
+      const { data, error } = await supabase.from('announcement_bar').select('*').limit(1).maybeSingle();
       if (error) throw error;
       return data as unknown as AnnConfig | null;
     },
@@ -365,7 +365,7 @@ function AnnouncementBarConfig() {
 
   const saveMutation = useMutation({
     mutationFn: async (d: AnnConfig) => {
-      const { error } = await supabase.from('announcement_bar' as any).update({
+      const { error } = await supabase.from('announcement_bar').update({
         is_active: d.is_active, messages: d.messages as any, bg_color: d.bg_color, text_color: d.text_color,
         font_size: d.font_size, autoplay: d.autoplay, autoplay_speed: d.autoplay_speed, closeable: d.closeable,
       }).eq('id', d.id);

@@ -37,7 +37,7 @@ export function useHomeSections() {
     queryKey: ['home-sections'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('home_sections' as any)
+        .from('home_sections')
         .select('*')
         .eq('is_active', true)
         .order('display_order', { ascending: true });
@@ -53,7 +53,7 @@ export function useAdminHomeSections() {
     queryKey: ['admin-home-sections'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('home_sections' as any)
+        .from('home_sections')
         .select('*')
         .order('display_order', { ascending: true });
       if (error) throw error;

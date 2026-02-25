@@ -42,7 +42,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import logoFallback from '@/assets/logo.png';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useQuery } from '@tanstack/react-query';
+import { useStoreSettings } from '@/hooks/useProducts';
 import { useAdminRole } from '@/hooks/useAdminRole';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { hasPermission } from '@/lib/permissions';
@@ -114,12 +114,9 @@ const allMenuItems: MenuItem[] = [
       { title: 'Checkout Transparente', url: '/admin/checkout-transparente', permission: 'settings.read' },
       { title: 'Notificações', url: '/admin/notificacoes' },
       { title: 'Equipe & Acessos', url: '/admin/equipe', permission: 'team.read' },
-      { title: 'Log de Auditoria', url: '/admin/logs/auditoria', permission: 'settings.read' },
+      { title: 'Sistema & Logs', url: '/admin/sistema', permission: 'settings.read' },
       { title: 'Código Externo', url: '/admin/configuracoes/codigo', permission: 'settings.read' },
       { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes', permission: 'settings.read' },
-      { title: 'Logs do Sistema', url: '/admin/logs', permission: 'settings.read' },
-      { title: 'Saúde do Sistema', url: '/admin/saude', permission: 'settings.read' },
-      { title: 'Otimização & Limpeza', url: '/admin/otimizacao', permission: 'settings.read' },
       { title: 'Central de Ajuda', url: '/admin/ajuda' },
     ]
   },
@@ -132,21 +129,6 @@ const mobileTabItems = [
   { title: 'Pedidos', url: '/admin/pedidos', icon: ShoppingCart },
   { title: 'Vendas', url: '/admin/vendas', icon: BarChart3 },
 ];
-
-function useStoreLogo() {
-  return useQuery({
-    queryKey: ['store-logo'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('store_settings')
-        .select('header_logo_url, logo_url, store_name')
-        .limit(1)
-        .maybeSingle();
-      return data;
-    },
-    staleTime: 1000 * 60 * 10,
-  });
-}
 
 function useFilteredMenu() {
   const { role, can } = useAdminRole();
@@ -180,7 +162,7 @@ function AdminSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const [openGroups, setOpenGroups] = useState<string[]>([]);
-  const { data: storeSettings } = useStoreLogo();
+  const { data: storeSettings } = useStoreSettings();
   const logoSrc = storeSettings?.header_logo_url || storeSettings?.logo_url || logoFallback;
   const menuItems = useFilteredMenu();
 
@@ -301,7 +283,7 @@ function MobileMenuSheet() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<string[]>([]);
-  const { data: storeSettings } = useStoreLogo();
+  const { data: storeSettings } = useStoreSettings();
   const logoSrc = storeSettings?.header_logo_url || storeSettings?.logo_url || logoFallback;
   const menuItems = useFilteredMenu();
 
@@ -486,7 +468,7 @@ export default function AdminLayout() {
   const { data: setupData } = useQuery({
     queryKey: ['store-setup'],
     queryFn: async () => {
-      const { data } = await supabase.from('store_setup' as any).select('*').limit(1).maybeSingle();
+      const { data } = await supabase.from('store_setup').select('*').limit(1).maybeSingle();
       return data;
     },
     enabled: isAdmin === true,

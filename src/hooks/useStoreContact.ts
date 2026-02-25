@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 
 export interface StoreContact {
   store_name: string;
@@ -11,22 +12,24 @@ export interface StoreContact {
   cnpj: string;
   logo_url: string;
   header_logo_url: string;
+  favicon_url?: string;
 }
 
-/** Dados públicos da loja (view). Uma única key para compartilhar cache no header, footer, etc. */
+/** Dados públicos da loja (view). Uma única key para compartilhar cache no header, footer, etc.
+ * staleTime baixo e refetchOnMount para que logo/identidade atualizados no painel apareçam logo no site. */
 export function useStoreSettingsPublic() {
   return useQuery({
     queryKey: ['store-settings-public'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('store_settings_public' as any)
+        .from('store_settings_public')
         .select('*')
         .maybeSingle();
       if (error) throw error;
-      return (data as any) || null;
+      return (data as Database['public']['Views']['store_settings_public']['Row'] | null) || null;
     },
-    staleTime: 1000 * 60 * 10,
-    refetchOnMount: false,
+    staleTime: 1000 * 60 * 2, // 2 min: refetch com mais frequência para refletir logo/identidade
+    refetchOnMount: true,     // sempre buscar dados frescos ao montar (header/footer)
   });
 }
 
@@ -43,6 +46,7 @@ export function useStoreContact() {
         cnpj: data.cnpj,
         logo_url: data.logo_url,
         header_logo_url: data.header_logo_url,
+        favicon_url: data.favicon_url,
       } as StoreContact)
     : null;
   return { data: contact, ...rest };

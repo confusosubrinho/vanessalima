@@ -76,28 +76,35 @@ export function CartProductSuggestions({ compact = false }: CartProductSuggestio
           const img = product.images?.find(i => i.is_primary) || product.images?.[0];
           const price = Number(product.sale_price || product.base_price);
           return (
-            <div key={product.id} className={`border rounded-lg overflow-hidden bg-background group ${compact ? 'flex-shrink-0 w-[120px] snap-start' : ''}`}>
-              <Link to={`/produto/${product.slug}`} className="block">
-                <div className="aspect-square overflow-hidden bg-muted">
-                  <img
-                    src={resolveImageUrl(img?.url)}
-                    alt={product.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                  />
-                </div>
-              </Link>
+            <Link
+              key={product.id}
+              to={`/produto/${product.slug}`}
+              className={`block border rounded-lg overflow-hidden bg-background group ${compact ? 'flex-shrink-0 w-[120px] snap-start' : ''}`}
+            >
+              <div className="aspect-square overflow-hidden bg-muted">
+                <img
+                  src={resolveImageUrl(img?.url)}
+                  alt={product.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                />
+              </div>
               <div className="p-1.5">
                 <p className="text-[10px] font-medium line-clamp-1">{product.name}</p>
                 <p className="text-[10px] font-bold text-primary mt-0.5">{formatPrice(price)}</p>
                 <button
-                  onClick={() => setSelectedProduct(product)}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSelectedProduct(product);
+                  }}
                   className="w-full mt-1 flex items-center justify-center gap-1 text-[10px] bg-primary text-primary-foreground py-1 rounded hover:bg-primary/90 transition-colors"
                 >
                   <ShoppingBag className="h-2.5 w-2.5" />
                   Adicionar
                 </button>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>

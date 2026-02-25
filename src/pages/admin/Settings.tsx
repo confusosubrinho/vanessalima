@@ -9,17 +9,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Store, Phone, Save, Upload, Image, AlertTriangle, Shield, RefreshCw, LayoutGrid } from 'lucide-react';
+import { Store, Phone, Save, Upload, Shield, LayoutGrid, Activity } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
-import { ErrorLogsPanel } from '@/components/admin/ErrorLogsPanel';
 import { TwoFactorSetup } from '@/components/admin/TwoFactorSetup';
-import { APP_VERSION } from '@/lib/appVersion';
 import { HelpHint } from '@/components/HelpHint';
+import { Link } from 'react-router-dom';
 
 interface StoreSettings {
   id: string;
   store_name: string | null;
   logo_url: string | null;
+  favicon_url: string | null;
   contact_email: string | null;
   contact_phone: string | null;
   contact_whatsapp: string | null;
@@ -31,11 +31,12 @@ export default function Settings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [logoUploading, setLogoUploading] = useState(false);
-  const [purging, setPurging] = useState(false);
+  const [faviconUploading, setFaviconUploading] = useState(false);
   
   const [formData, setFormData] = useState<Partial<StoreSettings & { show_variants_on_grid: boolean }>>({
     store_name: '',
     logo_url: '',
+    favicon_url: '',
     contact_email: '',
     contact_phone: '',
     contact_whatsapp: '',
@@ -63,6 +64,7 @@ export default function Settings() {
       setFormData({
         store_name: settings.store_name || '',
         logo_url: settings.logo_url || '',
+        favicon_url: (settings as any).favicon_url || '',
         contact_email: settings.contact_email || '',
         contact_phone: settings.contact_phone || '',
         contact_whatsapp: settings.contact_whatsapp || '',
@@ -98,6 +100,27 @@ export default function Settings() {
     }
   }, [toast]);
 
+  const handleFaviconUpload = useCallback(async (file: File) => {
+    setFaviconUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `favicon-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('product-media')
+        .upload(fileName, file);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-media')
+        .getPublicUrl(fileName);
+      setFormData(prev => ({ ...prev, favicon_url: publicUrl }));
+      toast({ title: 'Favicon enviado!' });
+    } catch (error: any) {
+      toast({ title: 'Erro ao enviar', description: error.message, variant: 'destructive' });
+    } finally {
+      setFaviconUploading(false);
+    }
+  }, [toast]);
+
   const saveMutation = useMutation({
     mutationFn: async (data: Partial<StoreSettings>) => {
       if (settings?.id) {
@@ -115,6 +138,7 @@ export default function Settings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['store-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['store-settings-public'] });
       toast({ title: 'Configurações salvas!' });
     },
     onError: (error: any) => {
@@ -149,28 +173,11 @@ export default function Settings() {
                <Shield className="h-3 w-3 mr-1" />
                Segurança
              </TabsTrigger>
-              <TabsTrigger value="errors" className="text-destructive">
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                Logs
-              </TabsTrigger>
-              <TabsTrigger value="cache">
-                <RefreshCw className="h-3 w-3 mr-1" />
-                Cache
-              </TabsTrigger>
            </TabsList>
 
            {/* Security Tab */}
            <TabsContent value="security">
              <TwoFactorSetup />
-           </TabsContent>
-
-           {/* Error Logs Tab */}
-           <TabsContent value="errors">
-             <Card>
-               <CardContent className="pt-6">
-                 <ErrorLogsPanel />
-               </CardContent>
-             </Card>
            </TabsContent>
 
           <TabsContent value="general" className="space-y-4">
@@ -217,6 +224,38 @@ export default function Settings() {
                         value={formData.logo_url || ''}
                         onChange={(e) => setFormData({ ...formData, logo_url: e.target.value })}
                         placeholder="Ou cole a URL do logo"
+                        className="text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Favicon</Label>
+                  <p className="text-xs text-muted-foreground">Ícone exibido na aba do navegador (recomendado 32×32 ou 16×16)</p>
+                  <div className="flex items-start gap-4">
+                    {formData.favicon_url && (
+                      <img src={formData.favicon_url} alt="Favicon" className="h-10 w-10 object-contain rounded border p-1" />
+                    )}
+                    <div className="flex-1 space-y-2">
+                      <label className="cursor-pointer block">
+                        <div className="border-2 border-dashed rounded-lg p-3 text-center hover:border-primary transition-colors">
+                          <Upload className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                          <p className="text-xs text-muted-foreground">
+                            {faviconUploading ? 'Enviando...' : 'Clique para enviar o favicon'}
+                          </p>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*,.ico"
+                          className="hidden"
+                          onChange={(e) => e.target.files?.[0] && handleFaviconUpload(e.target.files[0])}
+                          disabled={faviconUploading}
+                        />
+                      </label>
+                      <Input
+                        value={formData.favicon_url || ''}
+                        onChange={(e) => setFormData({ ...formData, favicon_url: e.target.value })}
+                        placeholder="Ou cole a URL do favicon"
                         className="text-xs"
                       />
                     </div>
@@ -345,52 +384,24 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
-           {/* Cache Tab */}
-           <TabsContent value="cache">
-             <Card>
-               <CardHeader>
-                 <CardTitle className="flex items-center gap-2">
-                   <RefreshCw className="h-5 w-5" />
-                   Gerenciamento de Cache
-                 </CardTitle>
-                 <CardDescription>Force todos os visitantes a carregar a versão mais recente do site</CardDescription>
-               </CardHeader>
-               <CardContent className="space-y-4">
-                 <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                   <p className="text-sm font-medium">Versão atual: <code className="bg-background px-2 py-0.5 rounded text-xs">{APP_VERSION}</code></p>
-                   <p className="text-xs text-muted-foreground">
-                     Ao clicar no botão abaixo, todos os usuários que estiverem com uma versão antiga serão forçados a recarregar automaticamente.
-                   </p>
-                 </div>
-                 <Button
-                   onClick={async () => {
-                     setPurging(true);
-                     try {
-                       const newVersion = Date.now().toString();
-                       const { data: s } = await supabase.from('store_settings').select('id').limit(1).maybeSingle();
-                       if (s?.id) {
-                         await supabase.from('store_settings').update({ app_version: newVersion } as any).eq('id', s.id);
-                       } else {
-                         await supabase.from('store_settings').insert({ app_version: newVersion } as any);
-                       }
-                       toast({ title: 'Cache limpo!', description: 'Todos os visitantes carregarão a versão mais recente.' });
-                     } catch (err: any) {
-                       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
-                     } finally {
-                       setPurging(false);
-                     }
-                   }}
-                   disabled={purging}
-                   variant="destructive"
-                   className="w-full"
-                 >
-                   <RefreshCw className={`h-4 w-4 mr-2 ${purging ? 'animate-spin' : ''}`} />
-                   {purging ? 'Limpando...' : 'Forçar Atualização para Todos'}
-                 </Button>
-               </CardContent>
-             </Card>
-           </TabsContent>
         </Tabs>
+
+        <Card className="mt-6 bg-muted/30">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">Logs, saúde e cache</p>
+                  <p className="text-sm text-muted-foreground">Logs de erros, logs do sistema, auditoria, saúde do sistema e limpeza de cache estão em um único lugar.</p>
+                </div>
+              </div>
+              <Button variant="outline" asChild>
+                <Link to="/admin/sistema">Abrir Sistema & Logs</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="flex justify-end mt-6">
           <Button type="submit" disabled={saveMutation.isPending}>

@@ -20,6 +20,7 @@ import {
   Mail, CheckSquare, Ruler, Camera, PanelTop,
   Rows3
 } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
 
 // ─── Section type icons & labels ───
 
@@ -188,7 +189,7 @@ export function HomePageBuilder() {
   const reorderMutation = useMutation({
     mutationFn: async (reordered: HomePageSection[]) => {
       const updates = reordered.map((s, i) =>
-        supabase.from('home_page_sections' as any).update({ display_order: i } as any).eq('id', s.id)
+        supabase.from('home_page_sections').update({ display_order: i } as Database['public']['Tables']['home_page_sections']['Update']).eq('id', s.id)
       );
       await Promise.all(updates);
     },
@@ -210,8 +211,8 @@ export function HomePageBuilder() {
   const toggleMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       const { error } = await supabase
-        .from('home_page_sections' as any)
-        .update({ is_active } as any)
+        .from('home_page_sections')
+        .update({ is_active } as Database['public']['Tables']['home_page_sections']['Update'])
         .eq('id', id);
       if (error) throw error;
     },
@@ -234,7 +235,7 @@ export function HomePageBuilder() {
   // Delete
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('home_page_sections' as any).delete().eq('id', id);
+      const { error } = await supabase.from('home_page_sections').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -249,14 +250,14 @@ export function HomePageBuilder() {
   const addSectionMutation = useMutation({
     mutationFn: async (template: TemplateItem) => {
       const key = `${template.section_type}_${Date.now()}`;
-      const { error } = await supabase.from('home_page_sections' as any).insert({
+      const { error } = await supabase.from('home_page_sections').insert({
         section_key: key,
         section_type: template.section_type,
         label: template.label,
         display_order: (sections?.length || 0),
         is_active: true,
         config: {},
-      } as any);
+      } as Database['public']['Tables']['home_page_sections']['Insert']);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -283,14 +284,14 @@ export function HomePageBuilder() {
         newsletter: 'newsletter',
       };
       const key = nativeKeys[template.section_type] || template.section_type;
-      const { error } = await supabase.from('home_page_sections' as any).insert({
+      const { error } = await supabase.from('home_page_sections').insert({
         section_key: key,
         section_type: template.section_type,
         label: template.label,
         display_order: (sections?.length || 0),
         is_active: true,
         config: {},
-      } as any);
+      } as Database['public']['Tables']['home_page_sections']['Insert']);
       if (error) throw error;
     },
     onSuccess: () => {

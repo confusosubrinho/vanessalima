@@ -34,7 +34,7 @@ export function Footer() {
   const { data: paymentMethods } = useQuery({
     queryKey: ['payment-methods'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('payment_methods_display' as any).select('*').eq('is_active', true).order('display_order');
+      const { data, error } = await supabase.from('payment_methods_display').select('*').eq('is_active', true).order('display_order');
       if (error) throw error;
       return (data as unknown as PaymentMethod[]) || [];
     },
@@ -44,7 +44,7 @@ export function Footer() {
   const { data: seals } = useQuery({
     queryKey: ['security-seals'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('security_seals' as any).select('*').eq('is_active', true).order('display_order');
+      const { data, error } = await supabase.from('security_seals').select('*').eq('is_active', true).order('display_order');
       if (error) throw error;
       return (data as unknown as SecuritySeal[]) || [];
     },

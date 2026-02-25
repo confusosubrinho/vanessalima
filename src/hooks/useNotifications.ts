@@ -17,7 +17,7 @@ export function useNotifications(limit = 10) {
     queryKey: ['admin-notifications', limit],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('admin_notifications' as any)
+        .from('admin_notifications')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(limit);
@@ -33,7 +33,7 @@ export function useUnreadCount() {
     queryKey: ['admin-notifications-unread-count'],
     queryFn: async () => {
       const { count, error } = await supabase
-        .from('admin_notifications' as any)
+        .from('admin_notifications')
         .select('id', { count: 'exact', head: true })
         .eq('is_read', false);
       if (error) throw error;
@@ -48,7 +48,7 @@ export function useMarkAsRead() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from('admin_notifications' as any)
+        .from('admin_notifications')
         .update({ is_read: true })
         .eq('id', id);
       if (error) throw error;
@@ -65,7 +65,7 @@ export function useMarkAllAsRead() {
   return useMutation({
     mutationFn: async () => {
       const { error } = await supabase
-        .from('admin_notifications' as any)
+        .from('admin_notifications')
         .update({ is_read: true })
         .eq('is_read', false);
       if (error) throw error;

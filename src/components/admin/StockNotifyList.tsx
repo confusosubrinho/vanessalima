@@ -22,7 +22,7 @@ export function StockNotifyList({ productId, productName, open, onOpenChange }: 
     queryKey: ['stock-notifications', productId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('stock_notifications' as any)
+        .from('stock_notifications')
         .select('*')
         .eq('product_id', productId)
         .eq('is_notified', false)
@@ -37,7 +37,7 @@ export function StockNotifyList({ productId, productName, open, onOpenChange }: 
     queryKey: ['stock-notifications-notified', productId],
     queryFn: async () => {
       const { count, error } = await supabase
-        .from('stock_notifications' as any)
+        .from('stock_notifications')
         .select('*', { count: 'exact', head: true })
         .eq('product_id', productId)
         .eq('is_notified', true);
@@ -51,7 +51,7 @@ export function StockNotifyList({ productId, productName, open, onOpenChange }: 
     setSending(true);
     try {
       const { error } = await supabase
-        .from('stock_notifications' as any)
+        .from('stock_notifications')
         .update({ is_notified: true, notified_at: new Date().toISOString(), status: 'notified' } as any)
         .in('id', ids);
 

@@ -38,6 +38,7 @@ const GOOGLE_FONTS = [
 interface StoreForm {
   store_name: string;
   logo_url: string;
+  favicon_url: string;
   contact_whatsapp: string;
   contact_email: string;
 }
@@ -58,7 +59,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
 
   const [storeForm, setStoreForm] = useState<StoreForm>({
-    store_name: '', logo_url: '', contact_whatsapp: '', contact_email: '',
+    store_name: '', logo_url: '', favicon_url: '', contact_whatsapp: '', contact_email: '',
   });
 
   const [themeForm, setThemeForm] = useState<ThemeForm>({
@@ -99,6 +100,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
         ...prev,
         store_name: currentSettings.store_name === 'Minha Loja' ? '' : (currentSettings.store_name || ''),
         logo_url: currentSettings.logo_url || '',
+        favicon_url: (currentSettings as { favicon_url?: string }).favicon_url || '',
         contact_whatsapp: currentSettings.contact_whatsapp || '',
         contact_email: currentSettings.contact_email || '',
       }));
@@ -110,6 +112,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
       const { error } = await supabase.from('store_settings').update({
         store_name: storeForm.store_name || 'Minha Loja',
         logo_url: storeForm.logo_url || null,
+        favicon_url: storeForm.favicon_url || null,
         contact_whatsapp: storeForm.contact_whatsapp || null,
         contact_email: storeForm.contact_email || null,
       }).neq('id', '00000000-0000-0000-0000-000000000000'); // update all rows
@@ -117,6 +120,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['store-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['store-settings-public'] });
       toast({ title: 'Dados da loja salvos!' });
     },
     onError: (e: Error) => toast({ title: 'Erro', description: e.message, variant: 'destructive' }),
@@ -173,6 +177,23 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
       const { data: { publicUrl } } = supabase.storage.from('product-media').getPublicUrl(fileName);
       setStoreForm(prev => ({ ...prev, logo_url: publicUrl }));
       toast({ title: 'Logo enviado!' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Erro desconhecido';
+      toast({ title: 'Erro', description: msg, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFaviconUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const { file: compressed, fileName } = await compressImageToWebP(file);
+      const { error } = await supabase.storage.from('product-media').upload(`favicon-${fileName}`, compressed);
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('product-media').getPublicUrl(`favicon-${fileName}`);
+      setStoreForm(prev => ({ ...prev, favicon_url: publicUrl }));
+      toast({ title: 'Favicon enviado!' });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Erro desconhecido';
       toast({ title: 'Erro', description: msg, variant: 'destructive' });
@@ -263,6 +284,32 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
                       </label>
                       {storeForm.logo_url && (
                         <Button variant="ghost" size="sm" onClick={() => setStoreForm(p => ({ ...p, logo_url: '' }))}>
+                          <X className="h-3 w-3 mr-1" />Remover
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <Label>Favicon</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-1">Ícone exibido na aba do navegador (PNG ou ICO, recomendado 32×32 ou 16×16)</p>
+                  <div className="flex items-center gap-4 mt-1">
+                    <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center overflow-hidden border">
+                      {storeForm.favicon_url ? (
+                        <img src={storeForm.favicon_url} alt="Favicon" className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="text-muted-foreground text-xl">🔖</span>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="cursor-pointer">
+                        <input type="file" accept="image/*,.ico" className="hidden" onChange={e => e.target.files?.[0] && handleFaviconUpload(e.target.files[0])} />
+                        <Button type="button" variant="outline" size="sm" asChild>
+                          <span><Upload className="h-4 w-4 mr-1" />{uploading ? 'Enviando...' : 'Enviar favicon'}</span>
+                        </Button>
+                      </label>
+                      {storeForm.favicon_url && (
+                        <Button variant="ghost" size="sm" onClick={() => setStoreForm(p => ({ ...p, favicon_url: '' }))}>
                           <X className="h-3 w-3 mr-1" />Remover
                         </Button>
                       )}
@@ -426,6 +473,10 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
                 <div className="flex items-center gap-2 text-sm">
                   <Check className={`h-4 w-4 ${storeForm.logo_url ? 'text-green-500' : 'text-muted-foreground'}`} />
                   <span>{storeForm.logo_url ? 'Logo enviado' : 'Logo não enviado'}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Check className={`h-4 w-4 ${storeForm.favicon_url ? 'text-green-500' : 'text-muted-foreground'}`} />
+                  <span>{storeForm.favicon_url ? 'Favicon enviado' : 'Favicon não enviado'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Check className={`h-4 w-4 ${selectedSegment ? 'text-green-500' : 'text-muted-foreground'}`} />

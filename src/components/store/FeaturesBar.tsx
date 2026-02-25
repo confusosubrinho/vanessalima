@@ -37,7 +37,7 @@ export function FeaturesBar() {
     queryKey: ['features-bar'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('features_bar' as any)
+        .from('features_bar')
         .select('*')
         .eq('is_active', true)
         .order('display_order');

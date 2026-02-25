@@ -160,7 +160,7 @@ export default function Products() {
             after_data: afterData,
           };
         });
-        await supabase.from('product_change_log' as any).insert(logs);
+        await supabase.from('product_change_log').insert(logs);
       }
 
       return ids.length;

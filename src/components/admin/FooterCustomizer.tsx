@@ -36,7 +36,7 @@ function PaymentMethodsSection() {
   const { data: items, isLoading } = useQuery({
     queryKey: ['admin-payment-methods'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('payment_methods_display' as any).select('*').order('display_order');
+      const { data, error } = await supabase.from('payment_methods_display').select('*').order('display_order');
       if (error) throw error;
       return (data as unknown as PaymentMethod[]) || [];
     },
@@ -68,10 +68,10 @@ function PaymentMethodsSection() {
     mutationFn: async () => {
       const payload: any = { name: form.name, image_url: form.image_url || null, link_url: form.link_url || null, is_active: form.is_active, display_order: editing?.display_order ?? (items?.length || 0) };
       if (editing) {
-        const { error } = await supabase.from('payment_methods_display' as any).update(payload).eq('id', editing.id);
+        const { error } = await supabase.from('payment_methods_display').update(payload).eq('id', editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('payment_methods_display' as any).insert(payload);
+        const { error } = await supabase.from('payment_methods_display').insert(payload);
         if (error) throw error;
       }
     },
@@ -86,7 +86,7 @@ function PaymentMethodsSection() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('payment_methods_display' as any).delete().eq('id', id);
+      const { error } = await supabase.from('payment_methods_display').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -99,7 +99,7 @@ function PaymentMethodsSection() {
   const reorder = useMutation({
     mutationFn: async (reordered: PaymentMethod[]) => {
       await Promise.all(reordered.map((item, i) =>
-        supabase.from('payment_methods_display' as any).update({ display_order: i }).eq('id', item.id)
+        supabase.from('payment_methods_display').update({ display_order: i }).eq('id', item.id)
       ));
     },
     onSuccess: () => {
@@ -210,7 +210,7 @@ function SecuritySealsSection() {
   const { data: items, isLoading } = useQuery({
     queryKey: ['admin-security-seals'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('security_seals' as any).select('*').order('display_order');
+      const { data, error } = await supabase.from('security_seals').select('*').order('display_order');
       if (error) throw error;
       return (data as unknown as SecuritySeal[]) || [];
     },
@@ -239,10 +239,10 @@ function SecuritySealsSection() {
     mutationFn: async () => {
       const payload: any = { title: form.title || null, image_url: form.image_url || null, html_code: form.html_code || null, link_url: form.link_url || null, is_active: form.is_active, display_order: editing?.display_order ?? (items?.length || 0) };
       if (editing) {
-        const { error } = await supabase.from('security_seals' as any).update(payload).eq('id', editing.id);
+        const { error } = await supabase.from('security_seals').update(payload).eq('id', editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('security_seals' as any).insert(payload);
+        const { error } = await supabase.from('security_seals').insert(payload);
         if (error) throw error;
       }
     },
@@ -257,7 +257,7 @@ function SecuritySealsSection() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('security_seals' as any).delete().eq('id', id);
+      const { error } = await supabase.from('security_seals').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -270,7 +270,7 @@ function SecuritySealsSection() {
   const reorder = useMutation({
     mutationFn: async (reordered: SecuritySeal[]) => {
       await Promise.all(reordered.map((item, i) =>
-        supabase.from('security_seals' as any).update({ display_order: i }).eq('id', item.id)
+        supabase.from('security_seals').update({ display_order: i }).eq('id', item.id)
       ));
     },
     onSuccess: () => {

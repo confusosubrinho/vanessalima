@@ -16,7 +16,7 @@ export function useHelpArticle(key: string) {
     queryKey: ['help-article', key],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('help_articles' as any)
+        .from('help_articles')
         .select('*')
         .eq('key', key)
         .maybeSingle();
@@ -34,7 +34,7 @@ export function useHelpArticles() {
     queryKey: ['help-articles'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('help_articles' as any)
+        .from('help_articles')
         .select('*')
         .order('key', { ascending: true });
       if (error) throw error;

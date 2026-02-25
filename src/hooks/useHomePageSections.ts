@@ -33,7 +33,7 @@ export function useHomePageSections() {
     refetchOnMount: false,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('home_page_sections' as any)
+        .from('home_page_sections')
         .select('*')
         .eq('is_active', true)
         .order('display_order', { ascending: true });
@@ -49,7 +49,7 @@ export function useAdminHomePageSections() {
     staleTime: 1000 * 60, // 1 min no admin
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('home_page_sections' as any)
+        .from('home_page_sections')
         .select('*')
         .order('display_order', { ascending: true });
       if (error) throw error;

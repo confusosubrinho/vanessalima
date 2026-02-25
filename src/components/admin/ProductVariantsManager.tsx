@@ -711,7 +711,7 @@ function StockNotifyButton({ productId }: { productId: string }) {
     queryKey: ['stock-notify-count', productId],
     queryFn: async () => {
       const { count, error } = await supabase
-        .from('stock_notifications' as any)
+        .from('stock_notifications')
         .select('*', { count: 'exact', head: true })
         .eq('product_id', productId)
         .eq('is_notified', false);

@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
+import { useHorizontalScrollAxisLock } from '@/hooks/useHorizontalScrollAxisLock';
 
 export function ShopBySize() {
+  const scrollRef = useHorizontalScrollAxisLock();
   // Standard shoe sizes to display
   const STANDARD_SIZES = ['33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44'];
 
@@ -38,7 +40,7 @@ export function ShopBySize() {
           <p className="text-muted-foreground mt-1">Encontre seu número perfeito</p>
         </div>
 
-        <div className="flex gap-3 overflow-x-auto scrollbar-hide justify-start md:justify-center pb-2 touch-pan-x cursor-grab active:cursor-grabbing" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
+        <div ref={scrollRef} className="flex gap-3 overflow-x-auto scrollbar-hide justify-start md:justify-center pb-2 touch-pan-x cursor-grab active:cursor-grabbing" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
           {sizes.map((size) => (
             <Link
               key={size}

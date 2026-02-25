@@ -32,7 +32,7 @@ export function ErrorLogsPanel() {
     queryKey: ['admin-error-logs', severityFilter, typeFilter],
     queryFn: async () => {
       let query = supabase
-        .from('error_logs' as any)
+        .from('error_logs')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100);
@@ -53,7 +53,7 @@ export function ErrorLogsPanel() {
   const resolveMutation = useMutation({
     mutationFn: async (id: string) => {
       const { data: { session } } = await supabase.auth.getSession();
-      await supabase.from('error_logs' as any).update({
+      await supabase.from('error_logs').update({
         is_resolved: true,
         resolved_at: new Date().toISOString(),
         resolved_by: session?.user?.id,
@@ -67,7 +67,7 @@ export function ErrorLogsPanel() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await supabase.from('error_logs' as any).delete().eq('id', id);
+      await supabase.from('error_logs').delete().eq('id', id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-error-logs'] });
@@ -77,7 +77,7 @@ export function ErrorLogsPanel() {
 
   const clearResolvedMutation = useMutation({
     mutationFn: async () => {
-      await supabase.from('error_logs' as any).delete().eq('is_resolved', true);
+      await supabase.from('error_logs').delete().eq('is_resolved', true);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-error-logs'] });

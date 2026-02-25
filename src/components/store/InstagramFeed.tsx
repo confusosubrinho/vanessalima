@@ -30,7 +30,7 @@ export function InstagramFeed() {
     queryKey: ['instagram-videos'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('instagram_videos' as any)
+        .from('instagram_videos')
         .select('*, product:products(id, name, slug, images:product_images(url, is_primary))')
         .eq('is_active', true)
         .order('display_order', { ascending: true });

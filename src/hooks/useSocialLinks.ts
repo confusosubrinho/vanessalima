@@ -18,7 +18,7 @@ export function useSocialLinks() {
     queryKey: ['social-links'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('social_links' as any)
+        .from('social_links')
         .select('*')
         .eq('is_active', true)
         .order('sort_order');
@@ -34,7 +34,7 @@ export function useSocialLinksAdmin() {
     queryKey: ['social-links-admin'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('social_links' as any)
+        .from('social_links')
         .select('*')
         .order('sort_order');
       if (error) throw error;

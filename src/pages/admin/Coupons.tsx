@@ -47,6 +47,9 @@ export default function Coupons() {
     is_active: true,
     type: 'standard' as 'standard' | 'free_shipping' | 'first_purchase',
     applicable_category_id: '' as string,
+    applicable_states: '', // UFs separadas por vírgula, ex: SP, RJ
+    applicable_zip_prefixes: '', // CEP prefixos 5 dígitos separados por vírgula
+    applicable_product_ids_raw: '', // UUIDs separados por vírgula
   });
 
   const { data: coupons, isLoading } = useQuery({
@@ -71,7 +74,9 @@ export default function Coupons() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const couponData: any = {
+      const parseList = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
+      const zipPrefixes = parseList(data.applicable_zip_prefixes).map((z) => z.replace(/\D/g, '').slice(0, 5)).filter(Boolean);
+      const couponData: Record<string, unknown> = {
         code: data.code.toUpperCase(),
         discount_type: data.discount_type,
         discount_value: data.type === 'free_shipping' ? 0 : parseFloat(data.discount_value),
@@ -81,16 +86,19 @@ export default function Coupons() {
         is_active: data.is_active,
         type: data.type,
         applicable_category_id: data.applicable_category_id || null,
+        applicable_states: parseList(data.applicable_states).length > 0 ? parseList(data.applicable_states).map((s) => s.toUpperCase().slice(0, 2)) : null,
+        applicable_zip_prefixes: zipPrefixes.length > 0 ? zipPrefixes : null,
+        applicable_product_ids: parseList(data.applicable_product_ids_raw).length > 0 ? parseList(data.applicable_product_ids_raw) : null,
       };
 
       if (editingCoupon) {
         const { error } = await supabase.from('coupons').update(couponData).eq('id', editingCoupon.id);
         if (error) throw error;
-        await logAudit({ action: 'update', resourceType: 'coupon', resourceId: editingCoupon.id, resourceName: couponData.code });
+        await logAudit({ action: 'update', resourceType: 'coupon', resourceId: editingCoupon.id, resourceName: String(couponData.code) });
       } else {
         const { error } = await supabase.from('coupons').insert(couponData);
         if (error) throw error;
-        await logAudit({ action: 'create', resourceType: 'coupon', resourceName: couponData.code });
+        await logAudit({ action: 'create', resourceType: 'coupon', resourceName: String(couponData.code) });
       }
     },
     onSuccess: () => {
@@ -120,12 +128,16 @@ export default function Coupons() {
     setFormData({
       code: '', discount_type: 'percentage', discount_value: '', min_purchase_amount: '',
       max_uses: '', expiry_date: '', is_active: true, type: 'standard', applicable_category_id: '',
+      applicable_states: '', applicable_zip_prefixes: '', applicable_product_ids_raw: '',
     });
     setEditingCoupon(null);
   };
 
   const handleEdit = (coupon: Coupon) => {
     setEditingCoupon(coupon);
+    const states = (coupon as { applicable_states?: string[] }).applicable_states;
+    const zips = (coupon as { applicable_zip_prefixes?: string[] }).applicable_zip_prefixes;
+    const productIds = (coupon as { applicable_product_ids?: string[] }).applicable_product_ids;
     setFormData({
       code: coupon.code,
       discount_type: coupon.discount_type,
@@ -134,8 +146,11 @@ export default function Coupons() {
       max_uses: coupon.max_uses ? String(coupon.max_uses) : '',
       expiry_date: coupon.expiry_date ? coupon.expiry_date.split('T')[0] : '',
       is_active: coupon.is_active,
-      type: (coupon as any).type || 'standard',
-      applicable_category_id: (coupon as any).applicable_category_id || '',
+      type: (coupon as { type?: string }).type || 'standard',
+      applicable_category_id: (coupon as { applicable_category_id?: string }).applicable_category_id || '',
+      applicable_states: Array.isArray(states) ? states.join(', ') : '',
+      applicable_zip_prefixes: Array.isArray(zips) ? zips.join(', ') : '',
+      applicable_product_ids_raw: Array.isArray(productIds) ? productIds.join(', ') : '',
     });
     setIsDialogOpen(true);
   };
@@ -240,6 +255,30 @@ export default function Coupons() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <Label>Válido apenas para produtos (IDs UUID, separados por vírgula)</Label>
+                <Input
+                  value={formData.applicable_product_ids_raw}
+                  onChange={e => setFormData({ ...formData, applicable_product_ids_raw: e.target.value })}
+                  placeholder="Deixe vazio para todos os produtos"
+                />
+              </div>
+              <div>
+                <Label>Válido apenas para estados (UF, separados por vírgula)</Label>
+                <Input
+                  value={formData.applicable_states}
+                  onChange={e => setFormData({ ...formData, applicable_states: e.target.value.toUpperCase() })}
+                  placeholder="Ex: SP, RJ, MG. Vazio = todos"
+                />
+              </div>
+              <div>
+                <Label>Válido apenas para CEPs (prefixos 5 dígitos, separados por vírgula)</Label>
+                <Input
+                  value={formData.applicable_zip_prefixes}
+                  onChange={e => setFormData({ ...formData, applicable_zip_prefixes: e.target.value })}
+                  placeholder="Ex: 01310, 01311. Vazio = todos"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div><Label>Compra Mínima</Label><Input type="number" step="0.01" value={formData.min_purchase_amount} onChange={e => setFormData({ ...formData, min_purchase_amount: e.target.value })} placeholder="0.00" /></div>

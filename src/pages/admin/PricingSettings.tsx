@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CreditCard, Percent, Calculator, Save, Info, Plus, Trash2, ShieldCheck, Landmark } from 'lucide-react';
 import { HelpHint } from '@/components/HelpHint';
 import { invalidatePricingCache, getInstallmentOptions, getGatewayCost, getTransparentCheckoutFee, formatCurrency, type PricingConfig } from '@/lib/pricingEngine';
+import type { Database } from '@/integrations/supabase/types';
 
 interface RateEntry {
   installment: number;
@@ -27,13 +28,13 @@ export default function PricingSettings() {
     queryKey: ['pricing-config-admin'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('payment_pricing_config' as any)
+        .from('payment_pricing_config')
         .select('*')
         .eq('is_active', true)
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as any;
+      return data as Database['public']['Tables']['payment_pricing_config']['Row'] | null;
     },
   });
 
@@ -108,21 +109,21 @@ export default function PricingSettings() {
 
       if (config?.id) {
         const { error } = await supabase
-          .from('payment_pricing_config' as any)
-          .update(payload as any)
+          .from('payment_pricing_config')
+          .update(payload as Database['public']['Tables']['payment_pricing_config']['Update'])
           .eq('id', config.id);
         if (error) throw error;
 
-        await supabase.from('payment_pricing_audit_log' as any).insert({
+        await supabase.from('payment_pricing_audit_log').insert({
           config_id: config.id,
-          before_data: beforeData,
-          after_data: payload,
+          before_data: beforeData as unknown,
+          after_data: payload as unknown,
           changed_by: (await supabase.auth.getUser()).data.user?.id,
-        } as any);
+        });
       } else {
         const { error } = await supabase
-          .from('payment_pricing_config' as any)
-          .insert({ ...payload, is_active: true } as any);
+          .from('payment_pricing_config')
+          .insert({ ...payload, is_active: true } as Database['public']['Tables']['payment_pricing_config']['Insert']);
         if (error) throw error;
       }
     },

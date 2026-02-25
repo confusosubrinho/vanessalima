@@ -33,13 +33,13 @@ export default function HelpEditor() {
     mutationFn: async () => {
       if (editing) {
         const { error } = await supabase
-          .from('help_articles' as any)
+          .from('help_articles')
           .update({ title: form.title, content: form.content, audience: form.audience } as any)
           .eq('id', editing.id);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('help_articles' as any)
+          .from('help_articles')
           .insert(form as any);
         if (error) throw error;
       }
@@ -59,7 +59,7 @@ export default function HelpEditor() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from('help_articles' as any)
+        .from('help_articles')
         .delete()
         .eq('id', id);
       if (error) throw error;

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentDisplay } from '@/lib/pricingEngine';
 import { VariantSelectorModal } from './VariantSelectorModal';
 import { resolveImageUrl } from '@/lib/imageUrl';
+import { useHorizontalScrollAxisLock } from '@/hooks/useHorizontalScrollAxisLock';
 
 interface ProductCarouselProps {
   products: Product[];
@@ -31,42 +32,12 @@ export function ProductCarousel({
   darkBg = false,
   cardBg = false,
 }: ProductCarouselProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useHorizontalScrollAxisLock();
   const { data: settings } = useStoreSettings();
   const { data: pricingConfig } = usePricingConfig();
   const [variantProduct, setVariantProduct] = useState<Product | null>(null);
-  const isDragging = useRef(false);
-  const dragStartX = useRef(0);
-  const dragScrollLeft = useRef(0);
 
-  // Touch/mouse drag support
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onDown = (e: PointerEvent) => {
-      isDragging.current = true;
-      dragStartX.current = e.pageX - el.offsetLeft;
-      dragScrollLeft.current = el.scrollLeft;
-      if (e.pointerType === 'mouse') e.preventDefault();
-    };
-    const onUp = () => { isDragging.current = false; };
-    const onMove = (e: PointerEvent) => {
-      if (!isDragging.current) return;
-      if (e.pointerType === 'mouse') e.preventDefault();
-      const x = e.pageX - el.offsetLeft;
-      el.scrollLeft = dragScrollLeft.current - (x - dragStartX.current) * 1.5;
-    };
-    el.addEventListener('pointerdown', onDown);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointerleave', onUp);
-    el.addEventListener('pointermove', onMove);
-    return () => {
-      el.removeEventListener('pointerdown', onDown);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointerleave', onUp);
-      el.removeEventListener('pointermove', onMove);
-    };
-  }, []);
+  // Botões de scroll usam o mesmo ref
 
   const whatsappNumber = settings?.contact_whatsapp?.replace(/\D/g, '') || '5542991120205';
 
@@ -173,51 +144,51 @@ export function ProductCarousel({
                 const currentPrice = Number(product.sale_price || product.base_price);
 
                 return (
-                  <div key={product.id} className={`flex-shrink-0 w-[200px] sm:w-[240px] md:w-[280px] lg:w-[300px] snap-start group ${cardBg ? 'bg-background rounded-xl shadow-sm hover:shadow-md transition-shadow border p-2 sm:p-3' : ''}`}>
-                    <Link to={`/produto/${product.slug}`} className="block">
-                      <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
+                  <Link
+                    key={product.id}
+                    to={`/produto/${product.slug}`}
+                    className={`flex-shrink-0 w-[200px] sm:w-[240px] md:w-[280px] lg:w-[300px] snap-start group block ${cardBg ? 'bg-background rounded-xl shadow-sm hover:shadow-md transition-shadow border p-2 sm:p-3' : ''}`}
+                  >
+                    <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
+                      <img
+                        src={resolveImageUrl(primaryImage?.url)}
+                        alt={primaryImage?.alt_text || product.name}
+                        className={`w-full h-full object-cover transition-all duration-500 ${
+                          secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-110'
+                        }`}
+                        loading="lazy"
+                        decoding="async"
+                        width={300}
+                        height={400}
+                      />
+                      {secondaryImage && (
                         <img
-                          src={resolveImageUrl(primaryImage?.url)}
-                          alt={primaryImage?.alt_text || product.name}
-                          className={`w-full h-full object-cover transition-all duration-500 ${
-                            secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-110'
-                          }`}
+                          src={resolveImageUrl(secondaryImage.url)}
+                          alt={secondaryImage.alt_text || product.name}
+                          className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
                           loading="lazy"
                           decoding="async"
                           width={300}
                           height={400}
                         />
-                        {secondaryImage && (
-                          <img
-                            src={resolveImageUrl(secondaryImage.url)}
-                            alt={secondaryImage.alt_text || product.name}
-                            className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                            loading="lazy"
-                            decoding="async"
-                            width={300}
-                            height={400}
-                          />
+                      )}
+                      <div className="absolute top-3 left-3 flex flex-col gap-2">
+                        {product.is_new && (
+                          <Badge className="bg-secondary text-secondary-foreground">LANÇAMENTO</Badge>
                         )}
-                        <div className="absolute top-3 left-3 flex flex-col gap-2">
-                          {product.is_new && (
-                            <Badge className="bg-secondary text-secondary-foreground">LANÇAMENTO</Badge>
-                          )}
-                          {product.is_featured && (
-                            <Badge className="bg-secondary text-secondary-foreground">DESTAQUE</Badge>
-                          )}
-                          {hasDiscount && (
-                            <Badge className="badge-sale">-{discountPercentage}%</Badge>
-                          )}
-                        </div>
+                        {product.is_featured && (
+                          <Badge className="bg-secondary text-secondary-foreground">DESTAQUE</Badge>
+                        )}
+                        {hasDiscount && (
+                          <Badge className="badge-sale">-{discountPercentage}%</Badge>
+                        )}
                       </div>
-                    </Link>
+                    </div>
 
                     <div className="text-center space-y-3">
-                      <Link to={`/produto/${product.slug}`}>
-                        <h3 className={`font-medium transition-colors line-clamp-1 ${isDark && !cardBg ? 'text-secondary-foreground hover:text-primary' : 'text-foreground group-hover:text-primary'}`}>
-                          {product.name}
-                        </h3>
-                      </Link>
+                      <h3 className={`font-medium transition-colors line-clamp-1 ${isDark && !cardBg ? 'text-secondary-foreground group-hover:text-primary' : 'text-foreground group-hover:text-primary'}`}>
+                        {product.name}
+                      </h3>
 
                       <div>
                         {hasDiscount && (
@@ -281,7 +252,12 @@ export function ProductCarousel({
                       <div className="space-y-1.5 sm:space-y-2">
                         <Button
                           className="w-full rounded-full text-xs sm:text-sm h-8 sm:h-10"
-                          onClick={(e) => handleQuickBuy(product, e)}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleQuickBuy(product, e);
+                          }}
                         >
                           Comprar
                         </Button>
@@ -302,7 +278,7 @@ export function ProductCarousel({
                         </Button>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>

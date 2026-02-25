@@ -3,18 +3,16 @@ import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCategories } from '@/hooks/useProducts';
-import { useDragScroll } from '@/hooks/useDragScroll';
+import { useHorizontalScrollAxisLock } from '@/hooks/useHorizontalScrollAxisLock';
 import { resolveImageUrl } from '@/lib/imageUrl';
 
 export function CategoryGrid() {
+  const scrollRef = useHorizontalScrollAxisLock();
   const { data: categories, isLoading } = useCategories();
-  const dragRef = useDragScroll();
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (direction: 'left' | 'right') => {
-    const el = dragRef.current || scrollRef.current;
-    if (el) {
-      el.scrollBy({ left: direction === 'left' ? -200 : 200, behavior: 'smooth' });
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: direction === 'left' ? -200 : 200, behavior: 'smooth' });
     }
   };
 
@@ -61,7 +59,7 @@ export function CategoryGrid() {
           </Button>
 
           <div
-            ref={dragRef}
+            ref={scrollRef}
             className="flex gap-6 overflow-x-auto scrollbar-hide pb-4 snap-x snap-mandatory cursor-grab active:cursor-grabbing touch-pan-x"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
           >

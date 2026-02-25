@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, ReactNod
 import { CartItem, Product, ProductVariant, Coupon, ShippingOption } from '@/types/database';
 import { saveAbandonedCart } from '@/lib/utmTracker';
 import { getCartItemUnitPrice } from '@/lib/cartPricing';
+import { computeCouponDiscount } from '@/lib/couponDiscount';
 
 function safeParse<T>(key: string, fallback: T, validate?: (parsed: unknown) => parsed is T): T {
   try {
@@ -188,12 +189,7 @@ function safeSetItem(key: string, value: string): void {
      setAppliedCoupon(null);
    };
  
-  const rawDiscount = appliedCoupon
-    ? appliedCoupon.discount_type === 'percentage'
-      ? (subtotal * appliedCoupon.discount_value) / 100
-      : appliedCoupon.discount_value
-    : 0;
-
+  const rawDiscount = computeCouponDiscount(appliedCoupon, items, subtotal);
   const discount = Math.min(subtotal, Math.max(0, rawDiscount));
  
   const total = Math.max(0, subtotal - discount) + (selectedShipping?.price || 0);

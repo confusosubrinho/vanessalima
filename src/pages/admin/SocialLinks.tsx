@@ -167,14 +167,14 @@ export default function SocialLinksPage() {
 
   const handleSave = async (data: Partial<SocialLink>) => {
     if (editingLink) {
-      const { error } = await (supabase.from('social_links' as any) as any)
+      const { error } = await supabase.from('social_links')
         .update(data)
         .eq('id', editingLink.id);
       if (error) throw error;
       toast({ title: 'Rede atualizada!' });
     } else {
       const maxOrder = links?.reduce((max, l) => Math.max(max, l.sort_order), 0) || 0;
-      const { error } = await (supabase.from('social_links' as any) as any)
+      const { error } = await supabase.from('social_links')
         .insert({ ...data, sort_order: maxOrder + 1 });
       if (error) throw error;
       toast({ title: 'Rede adicionada!' });
@@ -183,20 +183,20 @@ export default function SocialLinksPage() {
   };
 
   const handleToggle = async (id: string, is_active: boolean) => {
-    await (supabase.from('social_links' as any) as any).update({ is_active }).eq('id', id);
+    await supabase.from('social_links').update({ is_active }).eq('id', id);
     invalidate();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Remover esta rede social?')) return;
-    await (supabase.from('social_links' as any) as any).delete().eq('id', id);
+    await supabase.from('social_links').delete().eq('id', id);
     invalidate();
     toast({ title: 'Rede removida!' });
   };
 
   const handleReorder = async (reordered: SocialLink[]) => {
     const updates = reordered.map((item, idx) =>
-      (supabase.from('social_links' as any) as any).update({ sort_order: idx + 1 }).eq('id', item.id)
+      supabase.from('social_links').update({ sort_order: idx + 1 }).eq('id', item.id)
     );
     await Promise.all(updates);
     invalidate();

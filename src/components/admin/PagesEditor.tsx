@@ -39,7 +39,7 @@ export function PagesEditor() {
   const { data: pages, isLoading } = useQuery({
     queryKey: ['admin-page-contents'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('page_contents' as any).select('*').order('page_slug');
+      const { data, error } = await supabase.from('page_contents').select('*').order('page_slug');
       if (error) throw error;
       return (data as unknown as PageContent[]) || [];
     },
@@ -48,7 +48,7 @@ export function PagesEditor() {
   const save = useMutation({
     mutationFn: async () => {
       if (!editing) return;
-      const { error } = await supabase.from('page_contents' as any)
+      const { error } = await supabase.from('page_contents')
         .update({ page_title: form.page_title, content: form.content || null, meta_description: form.meta_description || null })
         .eq('id', editing.id);
       if (error) throw error;

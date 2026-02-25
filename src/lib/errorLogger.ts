@@ -1,4 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
+import { appLogger } from './appLogger';
 
 export type ErrorSeverity = 'info' | 'warning' | 'error' | 'critical';
 export type ErrorType = 'api_error' | 'client_error' | 'auth_error' | 'network_error' | 'render_error';
@@ -7,10 +9,12 @@ interface LogErrorParams {
   type: ErrorType;
   message: string;
   stack?: string;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   severity?: ErrorSeverity;
   pageUrl?: string;
 }
+
+type ErrorLogInsert = Database['public']['Tables']['error_logs']['Insert'];
 
 // In-memory buffer for rate limiting
 const recentErrors = new Map<string, number>();
@@ -23,7 +27,7 @@ export async function logError(params: LogErrorParams) {
     stack,
     context = {},
     severity = 'error',
-    pageUrl = window.location.href,
+    pageUrl = typeof window !== 'undefined' ? window.location.href : '',
   } = params;
 
   // Rate limit: skip duplicate errors
@@ -32,27 +36,31 @@ export async function logError(params: LogErrorParams) {
   if (lastLogged && Date.now() - lastLogged < RATE_LIMIT_MS) return;
   recentErrors.set(errorKey, Date.now());
 
-  // Always log to console
-  const consoleMethod = severity === 'critical' || severity === 'error' ? 'error' : severity === 'warning' ? 'warn' : 'info';
-  console[consoleMethod](`[${type.toUpperCase()}]`, message, context);
+  // Always log via central logger
+  if (severity === 'critical' || severity === 'error') {
+    appLogger.error(`[${type.toUpperCase()}] ${message}`, context);
+  } else if (severity === 'warning') {
+    appLogger.warn(`[${type.toUpperCase()}] ${message}`, context);
+  } else {
+    appLogger.info(`[${type.toUpperCase()}] ${message}`, context);
+  }
 
   // Try to save to database (fire-and-forget)
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    
-    await supabase.from('error_logs' as any).insert({
+    const row: ErrorLogInsert = {
       error_type: type,
       error_message: message.substring(0, 1000),
-      error_stack: stack?.substring(0, 5000) || null,
-      error_context: context,
+      error_stack: stack?.substring(0, 5000) ?? null,
+      error_context: context as Database['public']['Tables']['error_logs']['Row']['error_context'],
       page_url: pageUrl,
-      user_id: session?.user?.id || null,
-      user_agent: navigator.userAgent,
+      user_id: session?.user?.id ?? null,
+      user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
       severity,
-    });
+    };
+    await supabase.from('error_logs').insert(row);
   } catch (e) {
-    // Silently fail - we don't want error logging to cause errors
-    console.warn('[ErrorLogger] Failed to persist error log:', e);
+    appLogger.warn('ErrorLogger: failed to persist error log', e);
   }
 }
 

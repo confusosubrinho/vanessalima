@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Shield, Lock, AlertTriangle } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import { useStoreSettings } from '@/hooks/useProducts';
+import logoFallback from '@/assets/logo.png';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -25,6 +26,9 @@ const LOCKOUT_MINUTES = 15;
 export default function AdminLogin() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { data: storeSettings } = useStoreSettings();
+  const logoSrc = storeSettings?.header_logo_url || storeSettings?.logo_url || logoFallback;
+  const storeName = storeSettings?.store_name || 'Painel Administrativo';
   const [isLoading, setIsLoading] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutUntil, setLockoutUntil] = useState<Date | null>(null);
@@ -91,7 +95,7 @@ export default function AdminLogin() {
 
   const logLoginAttempt = async (email: string, success: boolean) => {
     try {
-      await supabase.from('login_attempts' as any).insert({
+      await supabase.from('login_attempts').insert({
         email: email.toLowerCase(),
         success,
       });
@@ -199,7 +203,7 @@ export default function AdminLogin() {
     <div className="min-h-screen flex items-center justify-center bg-sidebar px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <img src={logo} alt="Vanessa Lima Shoes" className="h-12 mx-auto mb-4" />
+          <img src={logoSrc} alt={storeName} className="h-12 mx-auto mb-4 object-contain max-w-[200px]" />
           <CardTitle className="flex items-center justify-center gap-2">
             <Shield className="h-5 w-5" />
             Painel Administrativo

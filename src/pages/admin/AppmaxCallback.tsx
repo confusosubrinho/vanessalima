@@ -27,7 +27,7 @@ export default function AppmaxCallbackPage() {
 
   useEffect(() => {
     supabase
-      .from('appmax_installations' as any)
+      .from('appmax_installations')
       .select('authorize_token')
       .eq('external_key', externalKey)
       .maybeSingle()
@@ -41,7 +41,7 @@ export default function AppmaxCallbackPage() {
     setChecking(true);
     try {
       const { data, error } = await supabase
-        .from('appmax_installations' as any)
+        .from('appmax_installations')
         .select('status, external_id, last_error, environment, merchant_client_id')
         .eq('external_key', externalKey)
         .order('updated_at', { ascending: false })
@@ -188,7 +188,7 @@ export default function AppmaxCallbackPage() {
 
       // Load diagnostic
       const { data: diag } = await supabase
-        .from('appmax_handshake_logs' as any)
+        .from('appmax_handshake_logs')
         .select('created_at, http_status, message, payload, request_id')
         .eq('stage', 'callback')
         .eq('external_key', externalKey)

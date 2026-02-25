@@ -313,7 +313,7 @@ function InstagramVideosSection() {
   const { data: videos, isLoading } = useQuery({
     queryKey: ['admin-instagram-videos'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('instagram_videos' as any).select('*').order('display_order', { ascending: true });
+      const { data, error } = await supabase.from('instagram_videos').select('*').order('display_order', { ascending: true });
       if (error) throw error;
       return (data as unknown as InstagramVideo[]) || [];
     },
@@ -385,10 +385,10 @@ function InstagramVideosSection() {
         display_order: editingVideo?.display_order || (videos?.length || 0),
       };
       if (editingVideo) {
-        const { error } = await supabase.from('instagram_videos' as any).update(videoData).eq('id', editingVideo.id);
+        const { error } = await supabase.from('instagram_videos').update(videoData).eq('id', editingVideo.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('instagram_videos' as any).insert(videoData);
+        const { error } = await supabase.from('instagram_videos').insert(videoData);
         if (error) throw error;
       }
     },
@@ -403,7 +403,7 @@ function InstagramVideosSection() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('instagram_videos' as any).delete().eq('id', id);
+      const { error } = await supabase.from('instagram_videos').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

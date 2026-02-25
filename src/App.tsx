@@ -20,8 +20,7 @@ import NotFound from "./pages/NotFound";
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 
 function ProductDetailKeyed() {
-  const { slug } = useParams();
-  return <ProductDetail key={slug ?? ""} />;
+  return <ProductDetail />;
 }
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const SizePage = lazy(() => import("./pages/SizePage"));
@@ -71,15 +70,12 @@ const PricingSettings = lazy(() => import("./pages/admin/PricingSettings"));
 const HelpEditor = lazy(() => import("./pages/admin/HelpEditor"));
 const SocialLinks = lazy(() => import("./pages/admin/SocialLinks"));
 const PagesAdmin = lazy(() => import("./pages/admin/PagesAdmin"));
-const SystemLogs = lazy(() => import("./pages/admin/SystemLogs"));
-const SystemHealth = lazy(() => import("./pages/admin/SystemHealth"));
+const SystemAndLogs = lazy(() => import("./pages/admin/SystemAndLogs"));
 const ThemeEditor = lazy(() => import("./pages/admin/ThemeEditor"));
 const AppmaxCallback = lazy(() => import("./pages/admin/AppmaxCallback"));
-const Optimization = lazy(() => import("./pages/admin/Optimization"));
 const Notifications = lazy(() => import("./pages/admin/Notifications"));
 const Reviews = lazy(() => import("./pages/admin/Reviews"));
 const Team = lazy(() => import("./pages/admin/Team"));
-const AuditLog = lazy(() => import("./pages/admin/AuditLog"));
 const CheckoutSettings = lazy(() => import("./pages/admin/CheckoutSettings"));
 const CheckoutStart = lazy(() => import("./pages/CheckoutStart"));
 const CheckoutReturn = lazy(() => import("./pages/CheckoutReturn"));
@@ -125,7 +121,17 @@ const App = () => {
   useEffect(() => { captureAttribution(); }, []);
   const Provider = persister ? PersistQueryClientProvider : QueryClientProvider;
   const providerProps = persister
-    ? { client: queryClient, persistOptions: { persister, maxAge: 1000 * 60 * 60 * 24 } }
+    ? {
+        client: queryClient,
+        persistOptions: {
+          persister,
+          maxAge: 1000 * 60 * 60 * 24,
+          dehydrateOptions: {
+            shouldDehydrateQuery: (query: { queryKey: unknown[] }) =>
+              query.queryKey[0] !== 'store-settings-public', // não persistir: logo/identidade devem vir sempre frescos do servidor
+          },
+        },
+      }
     : { client: queryClient };
   return (
   <Provider {...providerProps}>
@@ -201,15 +207,12 @@ const App = () => {
                 <Route path="ajuda" element={<HelpEditor />} />
                 <Route path="redes-sociais" element={<SocialLinks />} />
                 <Route path="paginas" element={<PagesAdmin />} />
-                <Route path="logs" element={<SystemLogs />} />
+                <Route path="sistema" element={<SystemAndLogs />} />
                 <Route path="tema" element={<ThemeEditor />} />
-              <Route path="saude" element={<SystemHealth />} />
-              <Route path="otimizacao" element={<Optimization />} />
-              <Route path="notificacoes" element={<Notifications />} />
+                <Route path="notificacoes" element={<Notifications />} />
               <Route path="avaliacoes" element={<Reviews />} />
-              <Route path="equipe" element={<Team />} />
-              <Route path="logs/auditoria" element={<AuditLog />} />
-              <Route path="checkout-transparente" element={<CheckoutSettings />} />
+                <Route path="equipe" element={<Team />} />
+                <Route path="checkout-transparente" element={<CheckoutSettings />} />
               </Route>
               <Route path="/admin/integrations/appmax/callback" element={<AppmaxCallback />} />
               

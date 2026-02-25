@@ -196,9 +196,10 @@ Deno.serve(async (req) => {
         card_token,
       } = payload;
 
-      // ── Server-side coupon validation ──
+      // ── Server-side coupon: load and basic checks first; full validation after we have lineItems ──
       let validatedDiscount = 0;
       let validatedCouponId: string | null = null;
+      let couponRow: Record<string, unknown> | null = null;
 
       if (coupon_code) {
         const { data: coupon, error: couponError } = await supabase
@@ -211,28 +212,15 @@ Deno.serve(async (req) => {
         if (couponError || !coupon) return errorResponse("Cupom inválido ou inativo", 400);
         if (coupon.expiry_date && new Date(coupon.expiry_date) < new Date()) return errorResponse("Cupom expirado", 400);
         if (coupon.max_uses && (coupon.uses_count || 0) >= coupon.max_uses) return errorResponse("Cupom esgotado", 400);
-
-        const expectedSubtotal = products.reduce((sum: number, p: any) => sum + p.price * (p.quantity || 1), 0);
-        if (coupon.min_purchase_amount && expectedSubtotal < coupon.min_purchase_amount) {
-          return errorResponse(`Valor mínimo para este cupom: R$ ${coupon.min_purchase_amount}`, 400);
-        }
-
-        validatedDiscount = coupon.discount_type === "percentage"
-          ? (expectedSubtotal * coupon.discount_value) / 100
-          : coupon.discount_value;
-        validatedDiscount = Math.min(expectedSubtotal, Math.max(0, validatedDiscount));
-
-        if (Math.abs(validatedDiscount - discount_amount) > 0.1) {
-          return errorResponse("Valor do desconto divergente. Recarregue a página.", 400);
-        }
-        validatedCouponId = coupon.id;
+        couponRow = coupon as Record<string, unknown>;
       }
 
-      // ── BUG #3: Server-side price validation ──
+      // ── BUG #3: Server-side price validation + build lineItems for coupon ──
       let serverSubtotal = 0;
       let serverSubtotalFull = 0;
       let serverSubtotalSale = 0;
       const priceErrors: string[] = [];
+      const lineItems: { product_id: string; category_id: string | null; lineTotal: number }[] = [];
 
       for (const product of products) {
         if (!product.variant_id) continue;
@@ -241,7 +229,7 @@ Deno.serve(async (req) => {
           .from("product_variants")
           .select(`
             id, price_modifier, sale_price, base_price,
-            products!inner(id, base_price, sale_price, is_active)
+            products!inner(id, category_id, base_price, sale_price, is_active)
           `)
           .eq("id", product.variant_id)
           .single();
@@ -251,7 +239,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const productData = variantData.products as any;
+        const productData = variantData.products as { id: string; category_id: string | null; base_price: number; sale_price: number | null; is_active: boolean };
         if (!productData?.is_active) {
           priceErrors.push(`Produto "${product.name}" não está mais disponível`);
           continue;
@@ -269,6 +257,11 @@ Deno.serve(async (req) => {
 
         const lineTotal = realUnitPrice * (product.quantity || 1);
         serverSubtotal += lineTotal;
+        lineItems.push({
+          product_id: productData.id,
+          category_id: productData.category_id ?? null,
+          lineTotal,
+        });
 
         const isSale =
           (variantData.sale_price != null && variantData.base_price != null && Number(variantData.sale_price) < Number(variantData.base_price)) ||
@@ -279,6 +272,70 @@ Deno.serve(async (req) => {
 
       if (priceErrors.length > 0) {
         return errorResponse(priceErrors.join("; "), 400);
+      }
+
+      // ── Full coupon validation (category/product/location + discount amount) ──
+      if (couponRow && coupon_code) {
+        const coupon = couponRow as {
+          id: string;
+          min_purchase_amount?: number | null;
+          discount_type: string;
+          discount_value: number;
+          applicable_category_id?: string | null;
+          applicable_product_ids?: string[] | null;
+          applicable_states?: string[] | null;
+          applicable_zip_prefixes?: string[] | null;
+        };
+
+        if (coupon.min_purchase_amount && serverSubtotal < coupon.min_purchase_amount) {
+          return errorResponse(`Valor mínimo para este cupom: R$ ${coupon.min_purchase_amount}`, 400);
+        }
+
+        const productIds = coupon.applicable_product_ids?.filter(Boolean) ?? [];
+        const categoryId = coupon.applicable_category_id ?? null;
+
+        let applicableSubtotal = 0;
+        if (productIds.length > 0) {
+          const set = new Set(productIds);
+          for (const item of lineItems) {
+            if (set.has(item.product_id)) applicableSubtotal += item.lineTotal;
+          }
+        } else if (categoryId) {
+          for (const item of lineItems) {
+            if (item.category_id === categoryId) applicableSubtotal += item.lineTotal;
+          }
+        } else {
+          applicableSubtotal = serverSubtotal;
+        }
+
+        if (applicableSubtotal <= 0) {
+          return errorResponse("Este cupom não se aplica aos produtos do pedido", 400);
+        }
+
+        const states = coupon.applicable_states?.filter(Boolean) ?? [];
+        const zipPrefixes = coupon.applicable_zip_prefixes?.filter(Boolean) ?? [];
+        if (states.length > 0) {
+          const stateNorm = (shipping_state || "").trim().toUpperCase().slice(0, 2);
+          if (!stateNorm || !states.some((s: string) => s.trim().toUpperCase().slice(0, 2) === stateNorm)) {
+            return errorResponse("Este cupom não é válido para o estado informado", 400);
+          }
+        }
+        if (zipPrefixes.length > 0) {
+          const zipDigits = (shipping_zip || "").replace(/\D/g, "").slice(0, 5);
+          if (!zipDigits || !zipPrefixes.some((p: string) => (p || "").replace(/\D/g, "").slice(0, 5) === zipDigits)) {
+            return errorResponse("Este cupom não é válido para o CEP informado", 400);
+          }
+        }
+
+        validatedDiscount = coupon.discount_type === "percentage"
+          ? (applicableSubtotal * coupon.discount_value) / 100
+          : coupon.discount_value;
+        validatedDiscount = Math.min(applicableSubtotal, Math.max(0, validatedDiscount));
+
+        if (Math.abs(validatedDiscount - discount_amount) > 0.1) {
+          return errorResponse("Valor do desconto divergente. Recarregue a página.", 400);
+        }
+        validatedCouponId = coupon.id;
       }
 
       const { data: orderRow } = await supabase

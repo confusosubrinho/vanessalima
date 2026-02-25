@@ -14,7 +14,7 @@ export function ProductChangeLog({ productId }: ProductChangeLogProps) {
     queryKey: ['product-change-log', productId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('product_change_log' as any)
+        .from('product_change_log')
         .select('*')
         .eq('product_id', productId)
         .order('changed_at', { ascending: false })

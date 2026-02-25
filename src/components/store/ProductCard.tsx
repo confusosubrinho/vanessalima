@@ -1,5 +1,5 @@
-import { useRef, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Product } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
 import { ShoppingBag, Heart, Star, Eye } from 'lucide-react';
@@ -12,6 +12,7 @@ import { getPixPriceForDisplay, getPixDiscountAmount, shouldApplyPixDiscount, ge
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { resolveImageUrl } from '@/lib/imageUrl';
+import { useHorizontalScrollAxisLock } from '@/hooks/useHorizontalScrollAxisLock';
 
 interface ProductCardProps {
   product: Product;
@@ -23,7 +24,8 @@ function useShowVariantsOnGrid() {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const sizeScrollRef = useRef<HTMLDivElement>(null);
+  const sizeScrollRef = useHorizontalScrollAxisLock();
+  const navigatedRef = useRef(false);
   const [variantModalOpen, setVariantModalOpen] = useState(false);
   const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
   const { toast } = useToast();
@@ -81,39 +83,6 @@ export function ProductCard({ product }: ProductCardProps) {
       return a.size.localeCompare(b.size);
     }) || [];
 
-  useEffect(() => {
-    const el = sizeScrollRef.current;
-    if (!el) return;
-    let isDown = false, startX = 0, sl = 0;
-    const onDown = (e: TouchEvent | MouseEvent) => {
-      isDown = true;
-      const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
-      startX = pageX - el.offsetLeft;
-      sl = el.scrollLeft;
-      if (!('touches' in e)) { e.preventDefault(); e.stopPropagation(); }
-    };
-    const onUp = () => { isDown = false; };
-    const onMove = (e: TouchEvent | MouseEvent) => {
-      if (!isDown) return;
-      const pageX = 'touches' in e ? e.touches[0].pageX : e.pageX;
-      if (!('touches' in e)) e.preventDefault();
-      el.scrollLeft = sl - (pageX - el.offsetLeft - startX) * 1.5;
-    };
-    el.addEventListener('mousedown', onDown);
-    el.addEventListener('touchstart', onDown, { passive: true });
-    document.addEventListener('mouseup', onUp);
-    document.addEventListener('touchend', onUp);
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('touchmove', onMove, { passive: true });
-    return () => {
-      el.removeEventListener('mousedown', onDown);
-      el.removeEventListener('touchstart', onDown);
-      document.removeEventListener('mouseup', onUp);
-      document.removeEventListener('touchend', onUp);
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('touchmove', onMove);
-    };
-  }, []);
   const handleBuyClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -131,11 +100,36 @@ export function ProductCard({ product }: ProductCardProps) {
     toggleFavorite(product.id);
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    if (navigatedRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    navigatedRef.current = true;
+    navigate(productUrl);
+  };
+
+  /** No desktop o "click" às vezes não dispara (ex.: após hover, ou elementos que capturam o evento).
+   * Tratando pointerdown em fase de captura garante navegação ao pressionar o botão primário. */
+  const handleCardPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'mouse') return;
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    navigatedRef.current = true;
+    navigate(productUrl);
+  };
+
+  const productUrl = `/produto/${product.slug}`;
+
   return (
     <>
-      <Link
-        to={`/produto/${product.slug}`}
-        className={`group card-product card-lift block rounded-lg overflow-hidden shadow-sm hover:shadow-md bg-background border border-border/40 ${isOutOfStock ? 'opacity-65' : ''}`}
+      <a
+        href={productUrl}
+        onClick={handleCardClick}
+        onPointerDownCapture={handleCardPointerDown}
+        className={`group card-product card-lift block rounded-lg overflow-hidden shadow-sm hover:shadow-md bg-background border border-border/40 cursor-pointer ${isOutOfStock ? 'opacity-65' : ''}`}
         id={`product-card-${product.slug}`}
       >
         <div className="relative aspect-square overflow-hidden bg-muted">
@@ -174,6 +168,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
           {/* Favorite button */}
           <button
+            type="button"
             onClick={handleFavoriteClick}
             className="absolute top-2 right-2 bg-background/80 p-1.5 rounded-full hover:bg-background transition-colors shadow-sm"
           >
@@ -183,6 +178,7 @@ export function ProductCard({ product }: ProductCardProps) {
           {/* Buy button overlay */}
           {hasVariants && (
             <button
+              type="button"
               id={`btn-buy-${product.slug}`}
               onClick={handleBuyClick}
               className="absolute bottom-2 right-2 bg-primary text-primary-foreground p-2.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-primary/90 shadow-lg btn-press"
@@ -263,7 +259,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </div>
           )}
         </div>
-      </Link>
+      </a>
 
       <VariantSelectorModal
         product={product}

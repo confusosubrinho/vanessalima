@@ -100,6 +100,11 @@ export interface Banner {
    uses_count: number;
    expiry_date: string | null;
    is_active: boolean;
+   type?: 'standard' | 'free_shipping' | 'first_purchase' | null;
+   applicable_category_id?: string | null;
+   applicable_product_ids?: string[] | null;
+   applicable_states?: string[] | null;
+   applicable_zip_prefixes?: string[] | null;
    created_at: string;
    updated_at: string;
  }
@@ -158,6 +163,7 @@ export interface Banner {
     id: string;
     store_name: string;
     logo_url: string | null;
+    header_logo_url?: string | null;
     contact_email: string | null;
     contact_phone: string | null;
     contact_whatsapp: string | null;

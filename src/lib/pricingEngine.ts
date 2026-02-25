@@ -72,7 +72,7 @@ export async function getActivePricingConfig(): Promise<PricingConfig> {
   }
 
   const { data, error } = await supabase
-    .from('payment_pricing_config' as any)
+    .from('payment_pricing_config')
     .select('*')
     .eq('is_active', true)
     .limit(1)

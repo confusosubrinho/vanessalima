@@ -17,6 +17,7 @@ import { HelpHint } from '@/components/HelpHint';
 import { CouponInput } from '@/components/store/CouponInput';
 import logo from '@/assets/logo.png';
 import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
+import { isCouponValidForLocation } from '@/lib/couponDiscount';
 
 type Step = 'identification' | 'shipping' | 'payment';
 
@@ -53,7 +54,7 @@ function luhnCheck(num: string): boolean {
 
 export default function Checkout() {
   const navigate = useNavigate();
-  const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon } = useCart();
+  const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon, removeCoupon } = useCart();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState<Step>('identification');
   const [isLoading, setIsLoading] = useState(false);
@@ -124,6 +125,26 @@ export default function Checkout() {
       // Silent fail
     }
   }, []);
+
+  // Revalidate coupon when CEP/state change: remove if coupon is restricted to other locations
+  useEffect(() => {
+    if (!appliedCoupon) return;
+    const hasLocationRestriction =
+      (appliedCoupon.applicable_states?.length ?? 0) > 0 ||
+      (appliedCoupon.applicable_zip_prefixes?.length ?? 0) > 0;
+    if (!hasLocationRestriction) return;
+    const state = formData.state?.trim() || '';
+    const zip = formData.cep?.replace(/\D/g, '') || '';
+    if (!state && !zip) return;
+    if (!isCouponValidForLocation(appliedCoupon, state, zip)) {
+      removeCoupon();
+      toast({
+        title: 'Cupom removido',
+        description: 'Este cupom não é válido para o endereço de entrega informado.',
+        variant: 'destructive',
+      });
+    }
+  }, [formData.cep, formData.state, appliedCoupon, removeCoupon, toast]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
@@ -380,6 +401,7 @@ export default function Checkout() {
         quantity: item.quantity,
         price: getCartItemUnitPrice(item),
         variant_id: item.variant.id,
+        product_id: item.product.id,
       }));
 
       const paymentPayload: Record<string, unknown> = {

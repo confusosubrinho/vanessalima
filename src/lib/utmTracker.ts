@@ -106,7 +106,7 @@ export async function trackSession(): Promise<void> {
 
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    await supabase.from('traffic_sessions' as any).insert({
+    await supabase.from('traffic_sessions').insert({
       session_id: sessionId,
       user_id: session?.user?.id || null,
       utm_source: utm.utm_source,
@@ -138,7 +138,7 @@ export async function saveAbandonedCart(
 
   try {
     // Upsert by session_id
-    await supabase.from('abandoned_carts' as any).upsert(
+    await supabase.from('abandoned_carts').upsert(
       {
         session_id: sessionId,
         email,

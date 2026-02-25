@@ -2,18 +2,19 @@
  import { Tag, Loader2, X, Check } from 'lucide-react';
  import { Button } from '@/components/ui/button';
  import { Input } from '@/components/ui/input';
- import { useCart } from '@/contexts/CartContext';
- import { useToast } from '@/hooks/use-toast';
- import { useHaptics } from '@/hooks/useHaptics';
- import { supabase } from '@/integrations/supabase/client';
- import { Coupon } from '@/types/database';
+import { useCart } from '@/contexts/CartContext';
+import { useToast } from '@/hooks/use-toast';
+import { useHaptics } from '@/hooks/useHaptics';
+import { supabase } from '@/integrations/supabase/client';
+import { Coupon } from '@/types/database';
+import { hasEligibleItems } from '@/lib/couponDiscount';
  
  interface CouponInputProps {
    compact?: boolean;
  }
  
  export function CouponInput({ compact = false }: CouponInputProps) {
-    const { appliedCoupon, applyCoupon, removeCoupon, subtotal } = useCart();
+    const { appliedCoupon, applyCoupon, removeCoupon, subtotal, items } = useCart();
     const { toast } = useToast();
     const haptics = useHaptics();
     const [code, setCode] = useState('');
@@ -79,6 +80,19 @@
          toast({
            title: 'Valor mínimo não atingido',
            description: `Este cupom requer compras acima de ${formatPrice(coupon.min_purchase_amount)}.`,
+           variant: 'destructive',
+         });
+         return;
+       }
+
+       // Check category/product restriction: cart must have at least one eligible item
+       if (!hasEligibleItems(coupon, items)) {
+         setShakeError(true);
+         haptics.error();
+         setTimeout(() => setShakeError(false), 500);
+         toast({
+           title: 'Cupom não aplicável',
+           description: 'Este cupom não se aplica aos produtos do seu carrinho.',
            variant: 'destructive',
          });
          return;

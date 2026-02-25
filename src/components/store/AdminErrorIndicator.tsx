@@ -31,7 +31,7 @@ export function AdminErrorIndicator() {
     queryKey: ['admin-errors-indicator'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('error_logs' as any)
+        .from('error_logs')
         .select('*')
         .eq('is_resolved', false)
         .order('created_at', { ascending: false })
@@ -91,7 +91,7 @@ export function AdminErrorIndicator() {
             ))}
           </div>
           <div className="px-3 py-2 border-t">
-            <a href="/admin/configuracoes" className="text-xs text-primary hover:underline font-medium">
+            <a href="/admin/sistema?tab=errors" className="text-xs text-primary hover:underline font-medium">
               Ver todos os logs →
             </a>
           </div>

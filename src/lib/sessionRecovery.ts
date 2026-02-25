@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { logAuthError } from './errorLogger';
+import { appLogger } from './appLogger';
 
 let isRecovering = false;
 
@@ -9,13 +10,12 @@ let isRecovering = false;
  * so requests fall back to the anon key (which has public read access).
  */
 export function initSessionRecovery() {
-  supabase.auth.onAuthStateChange(async (event, session) => {
+  supabase.auth.onAuthStateChange(async (event) => {
     if (event === 'TOKEN_REFRESHED') {
-      console.info('[Auth] Token refreshed successfully');
+      appLogger.info('Auth: token refreshed successfully');
     }
-
     if (event === 'SIGNED_OUT') {
-      console.info('[Auth] User signed out');
+      appLogger.info('Auth: user signed out');
     }
   });
 
@@ -27,7 +27,7 @@ export function initSessionRecovery() {
       const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) {
-        console.warn('[Auth] Session error, attempting recovery:', error.message);
+        appLogger.warn('Auth: session error, attempting recovery:', error.message);
         logAuthError('Session check failed', { error: error.message });
         await recoverSession();
       }
@@ -40,21 +40,21 @@ export function initSessionRecovery() {
           const timeLeft = expiresAt - now;
           
           if (timeLeft < 60 && timeLeft > 0) {
-            console.info('[Auth] Token expiring soon, refreshing...');
+            appLogger.info('Auth: token expiring soon, refreshing...');
             const { error: refreshError } = await supabase.auth.refreshSession();
             if (refreshError) {
               logAuthError('Token refresh failed', { error: refreshError.message });
               await recoverSession();
             }
           } else if (timeLeft <= 0) {
-            console.warn('[Auth] Token already expired, recovering...');
+            appLogger.warn('Auth: token already expired, recovering...');
             logAuthError('Token expired', { expiresAt, now });
             await recoverSession();
           }
         }
       }
     } catch (e) {
-      console.warn('[Auth] Session health check error:', e);
+      appLogger.warn('Auth: session health check error', e);
     }
   }, 30000); // Check every 30s
 }
@@ -64,18 +64,15 @@ async function recoverSession() {
   isRecovering = true;
 
   try {
-    // Try to refresh
     const { data, error } = await supabase.auth.refreshSession();
     
     if (error || !data.session) {
-      // Can't refresh - sign out so we use anon key
-      console.warn('[Auth] Cannot refresh session, signing out to use anonymous access');
+      appLogger.warn('Auth: cannot refresh session, signing out to use anonymous access');
       await supabase.auth.signOut();
     } else {
-      console.info('[Auth] Session recovered successfully');
+      appLogger.info('Auth: session recovered successfully');
     }
-  } catch (e) {
-    // Force sign out
+  } catch {
     await supabase.auth.signOut();
   } finally {
     isRecovering = false;

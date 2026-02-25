@@ -118,6 +118,15 @@ function applyThemeToDOM(theme: SiteTheme) {
   if (theme.border_radius && radiusMap[theme.border_radius]) {
     root.style.setProperty('--radius', radiusMap[theme.border_radius]);
   }
+
+  // Barra de status no mobile: usa a cor primária do tema
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.appendChild(meta);
+  }
+  meta.content = theme.primary_color;
 }
 
 export function useSiteTheme() {

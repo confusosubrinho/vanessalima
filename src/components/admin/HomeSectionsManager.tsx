@@ -98,7 +98,7 @@ export function HomeSectionsManager() {
   const reorderMutation = useMutation({
     mutationFn: async (reordered: HomeSection[]) => {
       const updates = reordered.map((s, i) =>
-        supabase.from('home_sections' as any).update({ display_order: i }).eq('id', s.id)
+        supabase.from('home_sections').update({ display_order: i }).eq('id', s.id)
       );
       await Promise.all(updates);
     },
@@ -133,10 +133,10 @@ export function HomeSectionsManager() {
         display_order: editing?.display_order ?? (sections?.length || 0),
       };
       if (editing) {
-        const { error } = await supabase.from('home_sections' as any).update(sectionData).eq('id', editing.id);
+        const { error } = await supabase.from('home_sections').update(sectionData).eq('id', editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('home_sections' as any).insert(sectionData);
+        const { error } = await supabase.from('home_sections').insert(sectionData);
         if (error) throw error;
       }
     },
@@ -151,7 +151,7 @@ export function HomeSectionsManager() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('home_sections' as any).delete().eq('id', id);
+      const { error } = await supabase.from('home_sections').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

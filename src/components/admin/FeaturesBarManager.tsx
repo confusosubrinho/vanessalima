@@ -32,7 +32,7 @@ export function FeaturesBarManager() {
   const { data: items, isLoading } = useQuery({
     queryKey: ['admin-features-bar'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('features_bar' as any).select('*').order('display_order');
+      const { data, error } = await supabase.from('features_bar').select('*').order('display_order');
       if (error) throw error;
       return (data as unknown as FeatureItem[]) || [];
     },
@@ -74,10 +74,10 @@ export function FeaturesBarManager() {
         display_order: editing?.display_order ?? (items?.length || 0),
       };
       if (editing) {
-        const { error } = await supabase.from('features_bar' as any).update(payload).eq('id', editing.id);
+        const { error } = await supabase.from('features_bar').update(payload).eq('id', editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('features_bar' as any).insert(payload);
+        const { error } = await supabase.from('features_bar').insert(payload);
         if (error) throw error;
       }
     },
@@ -93,7 +93,7 @@ export function FeaturesBarManager() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('features_bar' as any).delete().eq('id', id);
+      const { error } = await supabase.from('features_bar').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -106,7 +106,7 @@ export function FeaturesBarManager() {
   const reorderMutation = useMutation({
     mutationFn: async (reordered: FeatureItem[]) => {
       await Promise.all(reordered.map((item, i) =>
-        supabase.from('features_bar' as any).update({ display_order: i }).eq('id', item.id)
+        supabase.from('features_bar').update({ display_order: i }).eq('id', item.id)
       ));
     },
     onSuccess: () => {

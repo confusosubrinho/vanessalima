@@ -17,7 +17,7 @@ export function HighlightBanners() {
     queryKey: ['highlight-banners'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('highlight_banners' as any)
+        .from('highlight_banners')
         .select('*')
         .eq('is_active', true)
         .order('display_order', { ascending: true })

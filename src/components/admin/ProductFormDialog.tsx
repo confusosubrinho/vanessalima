@@ -143,7 +143,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
   const { data: storeSettings } = useQuery({
     queryKey: ['pricing-config'],
     queryFn: async () => {
-      const { data } = await supabase.from('payment_pricing_config' as any).select('*').eq('is_active', true).limit(1).maybeSingle();
+      const { data } = await supabase.from('payment_pricing_config').select('*').eq('is_active', true).limit(1).maybeSingle();
       if (!data) return null;
       return {
         pix_discount: Number((data as any).pix_discount) || 5,
@@ -238,7 +238,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
       }
       if (editingProduct.id) {
         supabase
-          .from('product_characteristics' as any)
+          .from('product_characteristics')
           .select('*')
           .eq('product_id', editingProduct.id)
           .order('display_order')
@@ -360,7 +360,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
         }
 
         if (productId) {
-          await supabase.from('product_characteristics' as any).delete().eq('product_id', productId);
+          await supabase.from('product_characteristics').delete().eq('product_id', productId);
           if (characteristics.length > 0) {
             const charInserts = characteristics
               .filter(c => c.name && c.value)
@@ -371,7 +371,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
                 display_order: i,
               }));
             if (charInserts.length > 0) {
-              await supabase.from('product_characteristics' as any).insert(charInserts);
+              await supabase.from('product_characteristics').insert(charInserts);
             }
 
           await supabase.from('buy_together_products').delete().eq('product_id', productId);

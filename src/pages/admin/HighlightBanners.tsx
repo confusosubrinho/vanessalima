@@ -33,7 +33,7 @@ export default function HighlightBannersAdmin() {
   const { data: banners, isLoading } = useQuery({
     queryKey: ['admin-highlight-banners'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('highlight_banners' as any).select('*').order('display_order', { ascending: true });
+      const { data, error } = await supabase.from('highlight_banners').select('*').order('display_order', { ascending: true });
       if (error) throw error;
       return data as unknown as HighlightBanner[];
     },
@@ -41,7 +41,7 @@ export default function HighlightBannersAdmin() {
 
   const reorderMutation = useMutation({
     mutationFn: async (reordered: HighlightBanner[]) => {
-      const updates = reordered.map((b, i) => supabase.from('highlight_banners' as any).update({ display_order: i }).eq('id', b.id));
+      const updates = reordered.map((b, i) => supabase.from('highlight_banners').update({ display_order: i }).eq('id', b.id));
       await Promise.all(updates);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-highlight-banners'] }),
@@ -69,10 +69,10 @@ export default function HighlightBannersAdmin() {
       }
       const bannerData = { ...data, image_url: imageUrl };
       if (editingBanner) {
-        const { error } = await supabase.from('highlight_banners' as any).update(bannerData).eq('id', editingBanner.id);
+        const { error } = await supabase.from('highlight_banners').update(bannerData).eq('id', editingBanner.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('highlight_banners' as any).insert([bannerData]);
+        const { error } = await supabase.from('highlight_banners').insert([bannerData]);
         if (error) throw error;
       }
     },
@@ -86,7 +86,7 @@ export default function HighlightBannersAdmin() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('highlight_banners' as any).delete().eq('id', id);
+      const { error } = await supabase.from('highlight_banners').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {

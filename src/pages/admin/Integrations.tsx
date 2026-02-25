@@ -1382,7 +1382,7 @@ function BlingMonitoringPanel() {
     queryKey: ['bling-webhook-logs'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('bling_webhook_logs' as any)
+        .from('bling_webhook_logs')
         .select('*')
         .order('received_at', { ascending: false })
         .limit(50);
@@ -1396,7 +1396,7 @@ function BlingMonitoringPanel() {
     queryKey: ['bling-sync-runs'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('bling_sync_runs' as any)
+        .from('bling_sync_runs')
         .select('*')
         .order('started_at', { ascending: false })
         .limit(20);

@@ -58,7 +58,7 @@ export default function TrafficDashboard() {
       const adminIds = (adminRoles || []).map(r => r.user_id);
 
       let query = supabase
-        .from('traffic_sessions' as any)
+        .from('traffic_sessions')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(500);

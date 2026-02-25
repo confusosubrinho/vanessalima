@@ -43,7 +43,7 @@ export default function Notifications() {
     queryKey: ['admin-notifications-all', typeFilter, statusFilter, page],
     queryFn: async () => {
       let q = supabase
-        .from('admin_notifications' as any)
+        .from('admin_notifications')
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
@@ -61,10 +61,10 @@ export default function Notifications() {
   const bulkMutation = useMutation({
     mutationFn: async ({ ids, action }: { ids: string[]; action: 'read' | 'unread' | 'delete' }) => {
       if (action === 'delete') {
-        const { error } = await supabase.from('admin_notifications' as any).delete().in('id', ids);
+        const { error } = await supabase.from('admin_notifications').delete().in('id', ids);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('admin_notifications' as any).update({ is_read: action === 'read' }).in('id', ids);
+        const { error } = await supabase.from('admin_notifications').update({ is_read: action === 'read' }).in('id', ids);
         if (error) throw error;
       }
     },

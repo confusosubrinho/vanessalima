@@ -144,7 +144,15 @@ Deno.serve(async (req) => {
     });
 
     if (!result.ok) {
-      // Log authorize failure to handshake_logs
+      // Appmax pode retornar { errors: { message: "..." } } ou { message: "..." }
+      const apiMsg =
+        typeof result.data?.errors?.message === "string"
+          ? result.data.errors.message
+          : typeof result.data?.errors?.message === "object"
+            ? JSON.stringify(result.data.errors.message)
+            : result.data?.message;
+      const errMessage = apiMsg || JSON.stringify(result.data) || "Falha ao autorizar";
+
       await logHandshake(supabase, {
         environment: env,
         stage: "authorize",
@@ -152,11 +160,11 @@ Deno.serve(async (req) => {
         request_id: requestId,
         ok: false,
         http_status: result.status,
-        message: `Falha em /app/authorize: ${result.data?.message || JSON.stringify(result.data)}`,
+        message: `Falha em /app/authorize: ${errMessage}`,
         payload: {
           bootstrap: isBootstrap,
           api_status: result.status,
-          api_response_message: result.data?.message || null,
+          api_response_message: errMessage,
         },
         headers: safeHeaders,
       });
@@ -166,9 +174,7 @@ Deno.serve(async (req) => {
         response: result.data,
         bootstrap: isBootstrap,
       });
-      throw new Error(
-        result.data?.message || JSON.stringify(result.data) || "Falha ao autorizar"
-      );
+      throw new Error(errMessage);
     }
 
     // Extract token/hash

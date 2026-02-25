@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useLocation, Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck, Bell, Star, RefreshCw } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StoreLayout } from '@/components/store/StoreLayout';
@@ -33,9 +33,15 @@ import { Helmet } from 'react-helmet-async';
 
 export default function ProductDetail() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
-  const { slug } = useParams<{ slug: string }>();
-  const { data: product, isLoading, isError, refetch } = useProduct(slug || '');
+  const { slug: slugParam } = useParams<{ slug: string }>();
+  // Slug sempre da URL (pathname) para evitar params desatualizados na navegação client-side
+  const slugFromUrl = useMemo(() => {
+    const m = location.pathname.match(/^\/produto\/([^/?#]+)/);
+    return m ? decodeURIComponent(m[1]) : (slugParam ?? '');
+  }, [location.pathname, slugParam]);
+  const { data: product, isLoading, isError, refetch } = useProduct(slugFromUrl);
   const { addItem, setIsCartOpen } = useCart();
   const { toast } = useToast();
   const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
@@ -82,7 +88,7 @@ export default function ProductDetail() {
   // Auto-select first available variant when product loads
   useEffect(() => {
     if (!product) return;
-    const variants = product.variants?.filter((v: any) => v.is_active && v.stock_quantity > 0) || [];
+    const variants = product.variants?.filter((v: any) => v.is_active && (v.stock_quantity ?? 0) > 0) || [];
     if (variants.length === 0) return;
     const first = variants[0];
     if (first.color) {
@@ -92,6 +98,16 @@ export default function ProductDetail() {
     setQuantity(1);
     setSelectedImage(0);
   }, [product?.id]);
+
+  // Ao mudar de produto (slug da URL), resetar estado da UI para não mostrar dados do produto anterior
+  useEffect(() => {
+    setSelectedSize(null);
+    setSelectedColor(null);
+    setQuantity(1);
+    setSelectedImage(0);
+    setActiveTab('description');
+    setVariantWarning('');
+  }, [slugFromUrl]);
 
   // Sticky bar: show after scrolling past the add-to-cart button
   useEffect(() => {
@@ -111,7 +127,7 @@ export default function ProductDetail() {
     queryKey: ['buy-together', product?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('buy_together_products' as any)
+        .from('buy_together_products')
         .select('*, related_product:products!buy_together_products_related_product_id_fkey(*, images:product_images(*), variants:product_variants(*))')
         .eq('product_id', product!.id)
         .eq('is_active', true)
@@ -125,10 +141,46 @@ export default function ProductDetail() {
 
   // Auto-refetch uma vez ao entrar na página em erro (mitiga cache/transiente ao navegar da home ou grid)
   useEffect(() => {
-    if (!slug || !isError) return;
+    if (!slugFromUrl || !isError) return;
     const t = setTimeout(() => refetch(), 600);
     return () => clearTimeout(t);
-  }, [slug, isError, refetch]);
+  }, [slugFromUrl, isError, refetch]);
+
+  // Quando o produto carregado não bate com a URL (cache/race), força refetch
+  useEffect(() => {
+    if (product && slugFromUrl && product.slug !== slugFromUrl) {
+      refetch();
+    }
+  }, [product, slugFromUrl, refetch]);
+
+  // Trocar imagem principal ao selecionar variante com imagem vinculada (sempre chamado para respeitar Rules of Hooks)
+  useEffect(() => {
+    if (!product?.id) return;
+    const imgs = Array.isArray(product.images) ? product.images : [];
+    const vars = product.variants?.filter((v: any) => v.is_active) || [];
+    const selVariant = selectedSize
+      ? (selectedColor
+          ? vars.find((v: any) => v.size === selectedSize && v.color === selectedColor)
+          : vars.find((v: any) => v.size === selectedSize))
+      : null;
+    if (!selVariant?.id || !imgs.length) return;
+    const idx = imgs.findIndex((img: any) => img.product_variant_id === selVariant.id);
+    if (idx >= 0) setSelectedImage(idx);
+  }, [product?.id, product?.images, product?.variants, selectedSize, selectedColor]);
+
+  // 1) Rota sem slug (não deveria acontecer, mas evita estado quebrado)
+  if (!slugFromUrl) {
+    return (
+      <StoreLayout>
+        <div className="container-custom py-16 text-center">
+          <h1 className="text-2xl font-bold mb-4">Produto não encontrado</h1>
+          <Button asChild>
+            <Link to="/">Voltar para a loja</Link>
+          </Button>
+        </div>
+      </StoreLayout>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -169,15 +221,29 @@ export default function ProductDetail() {
     );
   }
 
-  const images = product.images || [];
+  // 2) Evita mostrar produto errado por cache/race: só renderiza conteúdo se o produto bate com a URL
+  const productSlug = product?.slug ?? '';
+  if (productSlug !== slugFromUrl) {
+    return (
+      <StoreLayout>
+        <ProductDetailSkeleton />
+      </StoreLayout>
+    );
+  }
+
+  // Dados defensivos para evitar throw com respostas inesperadas da API
+  const safeDescription = typeof product.description === 'string' ? product.description : (product.description ? String(product.description) : '');
+  const safeSeoDescription = typeof product.seo_description === 'string' ? product.seo_description : (product.seo_description ? String(product.seo_description) : '');
+  const category = product.category && typeof product.category === 'object' && !Array.isArray(product.category) ? product.category : null;
+  const images = Array.isArray(product.images) ? product.images : [];
   const hasDiscount = product.sale_price != null && product.base_price != null && Number(product.sale_price) < Number(product.base_price);
   const discountPercentage = hasDiscount
     ? Math.round((1 - Number(product.sale_price) / Number(product.base_price)) * 100)
     : 0;
   const variants = product.variants?.filter(v => v.is_active) || [];
   
-  // Valid variants: active AND in stock
-  const validVariants = variants.filter(v => v.stock_quantity > 0);
+  // Valid variants: active AND in stock (proteção para stock_quantity undefined)
+  const validVariants = variants.filter(v => (v.stock_quantity ?? 0) > 0);
   
   // Low stock threshold
   const LOW_STOCK_THRESHOLD = 3;
@@ -243,13 +309,6 @@ export default function ProductDetail() {
   const installmentOptions = pricingConfig ? getInstallmentOptions(currentPrice, pricingConfig, hasProductSale) : [];
   const installmentDisplay = pricingConfig ? getInstallmentDisplay(currentPrice, pricingConfig, hasProductSale) : null;
   const isInStock = selectedVariant ? selectedVariant.stock_quantity > 0 : false;
-
-  // When user selects a variant that has a linked image, switch main image to that variant's image
-  useEffect(() => {
-    if (!selectedVariant?.id || !images.length) return;
-    const variantImageIndex = images.findIndex((img: any) => img.product_variant_id === selectedVariant.id);
-    if (variantImageIndex >= 0) setSelectedImage(variantImageIndex);
-  }, [selectedVariant?.id, images]);
 
   const handleColorSelect = (colorName: string) => {
     setSelectedColor(colorName);
@@ -374,11 +433,11 @@ export default function ProductDetail() {
       >
         <TabsContent value="description" className="mt-4">
           <div className="prose prose-sm max-w-none text-muted-foreground">
-            {product.description ? (
-              /<[a-z][\s\S]*>/i.test(product.description) ? (
-                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(product.description) }} />
+            {safeDescription ? (
+              /<[a-z][\s\S]*>/i.test(safeDescription) ? (
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(safeDescription) }} />
               ) : (
-                <p className="whitespace-pre-line">{product.description}</p>
+                <p className="whitespace-pre-line">{safeDescription}</p>
               )
             ) : (
               <p>Nenhuma descrição disponível.</p>
@@ -479,7 +538,7 @@ export default function ProductDetail() {
     "@context": "https://schema.org",
     "@type": "Product",
     "name": product.name,
-    "description": product.description || '',
+    "description": safeDescription || '',
     "image": images.map(img => resolveImageUrl(img.url)),
     "brand": { "@type": "Brand", "name": product.brand || storeName },
     "sku": product.sku || undefined,
@@ -504,8 +563,8 @@ export default function ProductDetail() {
     "@type": "BreadcrumbList",
     "itemListElement": [
       { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vanessalima.lovable.app/" },
-      ...(product.category ? [{ "@type": "ListItem", "position": 2, "name": product.category.name, "item": `https://vanessalima.lovable.app/categoria/${product.category.slug}` }] : []),
-      { "@type": "ListItem", "position": product.category ? 3 : 2, "name": product.name },
+      ...(category ? [{ "@type": "ListItem", "position": 2, "name": category.name, "item": `https://vanessalima.lovable.app/categoria/${category.slug}` }] : []),
+      { "@type": "ListItem", "position": category ? 3 : 2, "name": product.name },
     ],
   };
 
@@ -513,7 +572,7 @@ export default function ProductDetail() {
     <StoreLayout>
       <Helmet>
         <title>{(product.seo_title || product.name)} | {storeName}</title>
-        <meta name="description" content={product.seo_description || product.description?.replace(/<[^>]*>/g, '').slice(0, 160) || ''} />
+        <meta name="description" content={safeSeoDescription || safeDescription.replace(/<[^>]*>/g, '').slice(0, 160) || ''} />
       </Helmet>
       {/* SEO: JSON-LD */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
@@ -527,7 +586,7 @@ export default function ProductDetail() {
           el.setAttribute('content', content);
         };
         setMeta('og:title', product.seo_title || product.name);
-        setMeta('og:description', product.seo_description || product.description?.slice(0, 160) || '');
+        setMeta('og:description', safeSeoDescription || safeDescription.slice(0, 160) || '');
         setMeta('og:image', ogImage);
         setMeta('og:url', productUrl);
         setMeta('og:type', 'product');
@@ -548,10 +607,10 @@ export default function ProductDetail() {
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
             <Link to="/" className="hover:text-primary">Home</Link>
             <ChevronRight className="h-4 w-4" />
-            {product.category && (
+            {category && (
               <>
-                <Link to={`/categoria/${product.category.slug}`} className="hover:text-primary">
-                  {product.category.name}
+                <Link to={`/categoria/${category.slug}`} className="hover:text-primary">
+                  {category.name}
                 </Link>
                 <ChevronRight className="h-4 w-4" />
               </>
@@ -831,7 +890,7 @@ export default function ProductDetail() {
 
             {storeSettings?.contact_whatsapp && (
               <a
-                href={`https://wa.me/${(storeSettings.contact_whatsapp as string).replace(/\D/g, '')}?text=${encodeURIComponent(`Olá, gostei deste produto: ${product.name}`)}`}
+                href={`https://wa.me/${String(storeSettings.contact_whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(`Olá, gostei deste produto: ${product.name}`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-1.5 py-2 px-4 border border-[#25D366] text-[#25D366] rounded-full hover:bg-[#25D366]/10 transition-colors font-medium text-sm"

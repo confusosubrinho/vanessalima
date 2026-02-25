@@ -28,7 +28,7 @@ export function AnnouncementBar() {
     queryKey: ['announcement-bar'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('announcement_bar' as any)
+        .from('announcement_bar')
         .select('*')
         .limit(1)
         .maybeSingle();

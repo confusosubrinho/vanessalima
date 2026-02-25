@@ -124,12 +124,21 @@ export function useProduct(slug: string) {
          .eq('slug', slug)
          .single();
        
-       if (error) throw error;
-       return data as Product;
+       // Produto não encontrado (0 linhas) → retornar null em vez de lançar (evita tela de erro ao navegar)
+       if (error) {
+         const isNotFound = error.code === 'PGRST116' || (error.message && error.message.includes('JSON'));
+         if (isNotFound) return null;
+         throw error;
+       }
+       return data as Product | null;
      },
      enabled: !!slug,
-     refetchOnMount: 'always', // evita tela de erro por cache antigo ao navegar de outro produto
-     retry: 2,
+     refetchOnMount: 'always', // evita cache antigo ao navegar de outro produto
+     retry: (failureCount, error: any) => {
+       const isNotFound = error?.code === 'PGRST116' || (error?.message && String(error.message).includes('JSON'));
+       if (isNotFound) return false;
+       return failureCount < 2;
+     },
      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 3000),
    });
  }
@@ -203,10 +212,11 @@ export function useProduct(slug: string) {
         const { data, error } = await supabase
           .from('store_settings')
           .select('*')
-          .single();
-        
+          .limit(1)
+          .maybeSingle();
+
         if (error) throw error;
-        return data as StoreSettings;
+        return data as StoreSettings | null;
       },
     });
   }
