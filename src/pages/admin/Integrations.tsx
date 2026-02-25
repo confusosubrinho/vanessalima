@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useStoreSettings } from '@/hooks/useProducts';
-import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi, Eye, EyeOff, Save, Copy, Stethoscope, ClipboardCopy } from 'lucide-react';
+import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, PackagePlus, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi, Eye, EyeOff, Save, Copy, Stethoscope, ClipboardCopy } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -1682,9 +1682,10 @@ function BlingPanel() {
     setSyncing(action);
     setSyncResult(null);
     try {
+      const isNewOnly = extraBody?.new_only === true;
       if (action === 'sync_products') {
-        // Batch sync: process in chunks of 5 to avoid edge function timeout
-        const BATCH_SIZE = 5;
+        // Batch sync: process in chunks. "Só produtos novos" usa lote maior (mais rápido, só importa)
+        const BATCH_SIZE = isNewOnly ? 15 : 5;
         let offset = 0;
         let hasMore = true;
         let totalImported = 0;
@@ -1697,7 +1698,7 @@ function BlingPanel() {
         const allLogs: any[] = [];
 
         while (hasMore) {
-          toast({ title: `Sincronizando...`, description: `Processando lote a partir do item ${offset}...` });
+          toast({ title: isNewOnly ? 'Buscando produtos novos...' : 'Sincronizando...', description: isNewOnly ? `Processando lote ${offset + 1}...` : `Processando lote a partir do item ${offset}...` });
           const { data, error } = await supabase.functions.invoke('bling-sync', {
             body: { action: 'sync_products', limit: BATCH_SIZE, offset, ...extraBody },
           });
@@ -1728,7 +1729,7 @@ function BlingPanel() {
           log: allLogs,
         };
         setSyncResult(finalResult);
-        toast({ title: `${label} concluída!`, description: `${totalImported} importados, ${totalUpdated} atualizados, ${totalVariants} variantes, ${totalErrors} erros` });
+        toast({ title: `${label} concluída!`, description: isNewOnly ? `${totalImported} novos importados, ${totalVariants} variantes` : `${totalImported} importados, ${totalUpdated} atualizados, ${totalVariants} variantes, ${totalErrors} erros` });
       } else {
         const { data, error } = await supabase.functions.invoke('bling-sync', {
           body: { action, ...extraBody },
@@ -1861,7 +1862,7 @@ function BlingPanel() {
           {/* Sync Actions */}
           <div className="space-y-4">
             <h4 className="font-medium text-sm">🔄 Ações de Sincronização</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <Button
                 variant="default"
                 onClick={() => handleSync('first_import', 'Importação inicial (primeira vez)')}
@@ -1889,6 +1890,20 @@ function BlingPanel() {
                 )}
                 <span className="text-xs font-medium">Importar Todos</span>
                 <span className="text-[10px] text-muted-foreground">Atualiza existentes</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleSync('sync_products', 'Só produtos novos', { new_only: true })}
+                disabled={!!syncing}
+                className="h-auto py-3 flex flex-col items-center gap-1"
+              >
+                {syncing === 'sync_products' ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <PackagePlus className="h-5 w-5" />
+                )}
+                <span className="text-xs font-medium">Só produtos novos</span>
+                <span className="text-[10px] text-muted-foreground">Ignora existentes, mais rápido</span>
               </Button>
               <Button
                 variant="outline"

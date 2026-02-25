@@ -518,7 +518,7 @@ async function upsertParentWithVariants(
 }
 
 // ─── Main Sync Products ───
-async function syncProducts(supabase: any, token: string, config: BlingSyncConfig, batchLimit: number = 0, batchOffset: number = 0, isFirstImport: boolean = false) {
+async function syncProducts(supabase: any, token: string, config: BlingSyncConfig, batchLimit: number = 0, batchOffset: number = 0, isFirstImport: boolean = false, newOnly: boolean = false) {
   const headers = blingHeaders(token);
   const syncLog: SyncLogEntry[] = [];
   let totalImported = 0, totalUpdated = 0, totalVariants = 0, totalSkipped = 0, totalErrors = 0, totalLinkedBySku = 0;
@@ -621,7 +621,12 @@ async function syncProducts(supabase: any, token: string, config: BlingSyncConfi
     if (!aExists && bExists) return -1; if (aExists && !bExists) return 1; return 0;
   });
 
-  let processableGroups = sortedGroups;
+  // Modo "só produtos novos": processar apenas grupos que ainda não existem no site
+  const groupsToProcess = newOnly
+    ? sortedGroups.filter(([parentBlingId]) => !existingBlingIds.has(parentBlingId))
+    : sortedGroups;
+
+  let processableGroups = groupsToProcess;
   if (batchOffset > 0) processableGroups = processableGroups.slice(batchOffset);
   if (batchLimit > 0) processableGroups = processableGroups.slice(0, batchLimit);
 
@@ -719,17 +724,19 @@ async function syncProducts(supabase: any, token: string, config: BlingSyncConfi
     }
   }
 
-  // PHASE 4: Clean up variations imported as standalone
-  const { data: blingProducts } = await supabase.from("products").select("id, bling_product_id, name").not("bling_product_id", "is", null);
+  // PHASE 4: Clean up variations imported as standalone (skip when new_only — we didn't reclassify)
   let cleaned = 0;
-  if (blingProducts?.length) {
-    for (const prod of blingProducts) {
-      if (variationBlingIds.has(prod.bling_product_id)) {
-        await supabase.from("product_images").delete().eq("product_id", prod.id);
-        await supabase.from("product_variants").delete().eq("product_id", prod.id);
-        await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
-        await supabase.from("products").delete().eq("id", prod.id);
-        cleaned++;
+  if (!newOnly) {
+    const { data: blingProducts } = await supabase.from("products").select("id, bling_product_id, name").not("bling_product_id", "is", null);
+    if (blingProducts?.length) {
+      for (const prod of blingProducts) {
+        if (variationBlingIds.has(prod.bling_product_id)) {
+          await supabase.from("product_images").delete().eq("product_id", prod.id);
+          await supabase.from("product_variants").delete().eq("product_id", prod.id);
+          await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
+          await supabase.from("products").delete().eq("id", prod.id);
+          cleaned++;
+        }
       }
     }
   }
@@ -749,9 +756,10 @@ async function syncProducts(supabase: any, token: string, config: BlingSyncConfi
     imported: totalImported, updated: totalUpdated, variants: totalVariants, skipped: totalSkipped,
     errors: totalErrors, cleaned, linked_by_sku: totalLinkedBySku,
     totalBlingListItems: allListingItems.length, totalGroups: sortedGroups.length,
+    totalNewOnly: newOnly ? groupsToProcess.length : undefined,
     totalProcessed: processedParentIds.size,
-    batchOffset, batchLimit: batchLimit || sortedGroups.length,
-    hasMore: batchLimit > 0 && (batchOffset + batchLimit) < sortedGroups.length,
+    batchOffset, batchLimit: batchLimit || groupsToProcess.length,
+    hasMore: batchLimit > 0 && (batchOffset + batchLimit) < groupsToProcess.length,
     nextOffset: batchLimit > 0 ? batchOffset + batchLimit : 0,
     log: syncLog,
   };
@@ -881,7 +889,7 @@ serve(async (req) => {
       }
 
       case "sync_products":
-        result = await syncProducts(supabase, token, config, payload.limit || 0, payload.offset || 0, false);
+        result = await syncProducts(supabase, token, config, payload.limit || 0, payload.offset || 0, false, !!payload.new_only);
         break;
 
       case "first_import":
