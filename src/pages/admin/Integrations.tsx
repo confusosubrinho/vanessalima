@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 
@@ -1648,6 +1649,7 @@ function BlingPanel() {
 
   const [syncing, setSyncing] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const [syncProgress, setSyncProgress] = useState<{ batchIndex: number; totalBatches: number | null; imported: number; updated: number; variants: number } | null>(null);
   const [syncLogFilter, setSyncLogFilter] = useState<string>('all');
   const [expandedLogRow, setExpandedLogRow] = useState<number | null>(null);
   const [blingStores, setBlingStores] = useState<{id: string; name: string; type: string}[]>([]);
@@ -1681,6 +1683,7 @@ function BlingPanel() {
   const handleSync = async (action: string, label: string, extraBody?: Record<string, any>) => {
     setSyncing(action);
     setSyncResult(null);
+    setSyncProgress(null);
     try {
       const isNewOnly = extraBody?.new_only === true;
       if (action === 'sync_products') {
@@ -1696,9 +1699,17 @@ function BlingPanel() {
         let totalCleaned = 0;
         let totalGroups = 0;
         const allLogs: any[] = [];
+        let batchIndex = 0;
 
         while (hasMore) {
-          toast({ title: isNewOnly ? 'Buscando produtos novos...' : 'Sincronizando...', description: isNewOnly ? `Processando lote ${offset + 1}...` : `Processando lote a partir do item ${offset}...` });
+          setSyncProgress(prev => ({
+            batchIndex: batchIndex + 1,
+            totalBatches: prev?.totalBatches ?? null,
+            imported: totalImported,
+            updated: totalUpdated,
+            variants: totalVariants,
+          }));
+          toast({ title: isNewOnly ? 'Buscando produtos novos...' : 'Sincronizando...', description: isNewOnly ? `Processando lote ${batchIndex + 1}...` : `Processando lote a partir do item ${offset}...` });
           const { data, error } = await supabase.functions.invoke('bling-sync', {
             body: { action: 'sync_products', limit: BATCH_SIZE, offset, ...extraBody },
           });
@@ -1714,8 +1725,19 @@ function BlingPanel() {
           totalGroups = data.totalGroups || totalGroups;
           if (data.log) allLogs.push(...data.log);
 
+          const totalItems = data.totalNewOnly ?? data.totalGroups ?? 0;
+          const estimatedBatches = totalItems > 0 ? Math.ceil(totalItems / BATCH_SIZE) : null;
+          setSyncProgress(prev => ({
+            batchIndex: batchIndex + 1,
+            totalBatches: prev?.totalBatches ?? estimatedBatches,
+            imported: totalImported,
+            updated: totalUpdated,
+            variants: totalVariants,
+          }));
+
           hasMore = data.hasMore === true;
           offset = data.nextOffset || (offset + BATCH_SIZE);
+          batchIndex++;
         }
 
         const finalResult = {
@@ -1729,6 +1751,7 @@ function BlingPanel() {
           log: allLogs,
         };
         setSyncResult(finalResult);
+        setSyncProgress(null);
         toast({ title: `${label} concluída!`, description: isNewOnly ? `${totalImported} novos importados, ${totalVariants} variantes` : `${totalImported} importados, ${totalUpdated} atualizados, ${totalVariants} variantes, ${totalErrors} erros` });
       } else {
         const { data, error } = await supabase.functions.invoke('bling-sync', {
@@ -1745,6 +1768,7 @@ function BlingPanel() {
       toast({ title: 'Erro na sincronização', description: err.message, variant: 'destructive' });
     } finally {
       setSyncing(null);
+      setSyncProgress(null);
     }
   };
 
@@ -1934,6 +1958,31 @@ function BlingPanel() {
                 <span className="text-[10px] text-muted-foreground">Apenas ativos com erro</span>
               </Button>
             </div>
+            {syncing === 'sync_products' && syncProgress && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm mb-2">
+                    <span className="font-medium flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                      {syncProgress.totalBatches != null
+                        ? `Lote ${syncProgress.batchIndex} de ${syncProgress.totalBatches}`
+                        : `Processando lote ${syncProgress.batchIndex}...`}
+                    </span>
+                    <span className="text-muted-foreground tabular-nums text-xs sm:text-sm">
+                      Importados: <strong>{syncProgress.imported}</strong>
+                      {' · '}Atualizados: <strong>{syncProgress.updated}</strong>
+                      {' · '}Variações: <strong>{syncProgress.variants}</strong>
+                    </span>
+                  </div>
+                  <Progress
+                    value={syncProgress.totalBatches != null && syncProgress.totalBatches > 0
+                      ? Math.min(100, (syncProgress.batchIndex / syncProgress.totalBatches) * 100)
+                      : 0}
+                    className="h-2"
+                  />
+                </CardContent>
+              </Card>
+            )}
             {syncResult && (
               <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-3">
                 <p className="font-medium">Resultado da Sincronização:</p>
