@@ -10,7 +10,8 @@ const url = process.env.VITE_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 describe('decrement_stock concurrency', () => {
-  let supabase: ReturnType<typeof createClient>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let supabase: any;
   let variantId: string;
   const PARALLEL = 5;
 
@@ -63,7 +64,7 @@ describe('decrement_stock concurrency', () => {
       )
     );
 
-    const parsed = results.map((r) => {
+    const parsed = results.map((r: { data: unknown }) => {
       const data = r.data as { success?: boolean } | null;
       if (typeof data === 'string') {
         try {

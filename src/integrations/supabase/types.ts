@@ -86,7 +86,6 @@ export type Database = {
       admin_audit_log: {
         Row: {
           action: string
-          correlation_id: string | null
           created_at: string | null
           id: string
           ip_address: string | null
@@ -101,7 +100,6 @@ export type Database = {
         }
         Insert: {
           action: string
-          correlation_id?: string | null
           created_at?: string | null
           id?: string
           ip_address?: string | null
@@ -116,7 +114,6 @@ export type Database = {
         }
         Update: {
           action?: string
-          correlation_id?: string | null
           created_at?: string | null
           id?: string
           ip_address?: string | null
@@ -1852,7 +1849,6 @@ export type Database = {
           gateway: string | null
           id: string
           idempotency_key: string | null
-          cart_id: string | null
           installments: number | null
           landing_page: string | null
           last_webhook_event: string | null
@@ -1896,7 +1892,6 @@ export type Database = {
           gateway?: string | null
           id?: string
           idempotency_key?: string | null
-          cart_id?: string | null
           installments?: number | null
           landing_page?: string | null
           last_webhook_event?: string | null
@@ -1940,7 +1935,6 @@ export type Database = {
           gateway?: string | null
           id?: string
           idempotency_key?: string | null
-          cart_id?: string | null
           installments?: number | null
           landing_page?: string | null
           last_webhook_event?: string | null
@@ -3266,8 +3260,6 @@ export type Database = {
     Functions: {
       check_login_rate_limit: { Args: { p_email: string }; Returns: boolean }
       cleanup_orphan_orders: { Args: never; Returns: undefined }
-      commerce_health: { Args: never; Returns: Json }
-      commerce_health_lists: { Args: never; Returns: Json }
       decrement_stock: {
         Args: { p_quantity: number; p_variant_id: string }
         Returns: Json

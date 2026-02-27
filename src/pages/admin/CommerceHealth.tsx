@@ -24,9 +24,9 @@ export default function CommerceHealth() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['commerce-health'],
     queryFn: async () => {
-      const { data: d, error: e } = await supabase.rpc('commerce_health');
+      const { data: d, error: e } = await supabase.rpc('commerce_health' as any);
       if (e) throw e;
-      return d as {
+      return d as unknown as {
         ok: boolean;
         error?: string;
         checks?: {
@@ -45,9 +45,9 @@ export default function CommerceHealth() {
   const { data: lists, isLoading: listsLoading, refetch: refetchLists } = useQuery({
     queryKey: ['commerce-health-lists'],
     queryFn: async () => {
-      const { data: d, error: e } = await supabase.rpc('commerce_health_lists');
+      const { data: d, error: e } = await supabase.rpc('commerce_health_lists' as any);
       if (e) throw e;
-      return d as {
+      return d as unknown as {
         ok: boolean;
         paid_without_payment_order_ids?: string[];
         duplicate_payment_order_ids?: string[];

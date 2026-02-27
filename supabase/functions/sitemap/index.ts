@@ -80,6 +80,6 @@ Deno.serve(async (req) => {
       },
     });
   } catch (err) {
-    return new Response(`Error: ${err.message}`, { status: 500, headers: corsHeaders });
+    return new Response(`Error: ${err instanceof Error ? err.message : String(err)}`, { status: 500, headers: corsHeaders });
   }
 });

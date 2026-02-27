@@ -96,7 +96,7 @@ function getEncKey(): Uint8Array {
 
 async function importKey(): Promise<CryptoKey> {
   const rawKey = getEncKey();
-  return crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, [
+  return crypto.subtle.importKey("raw", rawKey.buffer as ArrayBuffer, "AES-GCM", false, [
     "encrypt",
     "decrypt",
   ]);

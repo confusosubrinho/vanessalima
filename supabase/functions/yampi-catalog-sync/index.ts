@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
         // Images are handled separately via yampi-sync-images function
 
         // ─── Category from Yampi mapping ───
-        const category = product.categories as Record<string, unknown> | null;
+        const category = product.categories as unknown as Record<string, unknown> | null;
         const yampiCategoryId = category?.yampi_category_id as number | null;
 
         // ─── Determine variation groups needed ───
