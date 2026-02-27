@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { loadStripe, type Stripe as StripeType, type StripeElementsOptions } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Elements, CardNumberElement, CardExpiryElement, CardCvcElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Loader2, Lock } from 'lucide-react';
 
 let stripePromise: Promise<StripeType | null> | null = null;
 
@@ -24,7 +25,21 @@ interface StripePaymentFormProps {
   setIsLoading: (v: boolean) => void;
 }
 
-function CheckoutForm({ onSuccess, onError, total, isLoading, setIsLoading }: {
+const elementStyle = {
+  style: {
+    base: {
+      fontSize: '16px',
+      color: '#1a1a1a',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      '::placeholder': { color: '#9ca3af' },
+      padding: '12px',
+    },
+    invalid: { color: '#ef4444' },
+  },
+};
+
+function CheckoutForm({ clientSecret, onSuccess, onError, total, isLoading, setIsLoading }: {
+  clientSecret: string;
   onSuccess: () => void;
   onError: (message: string) => void;
   total: number;
@@ -39,18 +54,28 @@ function CheckoutForm({ onSuccess, onError, total, isLoading, setIsLoading }: {
     setIsLoading(true);
 
     try {
-      const { error } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: `${window.location.origin}/checkout/obrigado`,
-        },
-        redirect: 'if_required',
-      });
+      const cardNumber = elements.getElement(CardNumberElement);
+      if (!cardNumber) {
+        onError('Erro ao carregar formulário do cartão');
+        setIsLoading(false);
+        return;
+      }
+
+      const { error, paymentIntent } = await stripe.confirmCardPayment(
+        clientSecret,
+        {
+          payment_method: {
+            card: cardNumber,
+          },
+        }
+      );
 
       if (error) {
         onError(error.message || 'Erro no pagamento');
-      } else {
+      } else if (paymentIntent?.status === 'succeeded') {
         onSuccess();
+      } else {
+        onError('Pagamento não confirmado. Tente novamente.');
       }
     } catch (err: any) {
       onError(err?.message || 'Erro inesperado');
@@ -64,11 +89,34 @@ function CheckoutForm({ onSuccess, onError, total, isLoading, setIsLoading }: {
 
   return (
     <div className="space-y-4">
-      <PaymentElement
-        options={{
-          layout: 'tabs',
-        }}
-      />
+      <div className="space-y-3">
+        <div>
+          <Label className="text-sm font-medium mb-1.5 block">Número do cartão</Label>
+          <div className="border rounded-md px-3 py-2.5 bg-background focus-within:ring-2 focus-within:ring-ring focus-within:border-primary transition-colors">
+            <CardNumberElement options={elementStyle} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-sm font-medium mb-1.5 block">Validade</Label>
+            <div className="border rounded-md px-3 py-2.5 bg-background focus-within:ring-2 focus-within:ring-ring focus-within:border-primary transition-colors">
+              <CardExpiryElement options={elementStyle} />
+            </div>
+          </div>
+          <div>
+            <Label className="text-sm font-medium mb-1.5 block">CVV</Label>
+            <div className="border rounded-md px-3 py-2.5 bg-background focus-within:ring-2 focus-within:ring-ring focus-within:border-primary transition-colors">
+              <CardCvcElement options={elementStyle} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Lock className="h-3 w-3" />
+        <span>Pagamento seguro processado por Stripe</span>
+      </div>
+
       <Button
         onClick={handleSubmit}
         className="w-full"
@@ -109,6 +157,7 @@ export function StripePaymentForm({
   return (
     <Elements stripe={getStripe(publishableKey)} options={options}>
       <CheckoutForm
+        clientSecret={clientSecret}
         onSuccess={onSuccess}
         onError={onError}
         total={total}
