@@ -68,3 +68,9 @@ verify_jwt = false
 
 [functions.yampi-sync-variation-values]
 verify_jwt = false
+
+[functions.stripe-create-intent]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false

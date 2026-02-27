@@ -18,6 +18,7 @@ import { CouponInput } from '@/components/store/CouponInput';
 import logo from '@/assets/logo.png';
 import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
 import { isCouponValidForLocation } from '@/lib/couponDiscount';
+import { StripePaymentForm, useStripeConfig } from '@/components/store/StripePaymentForm';
 
 type Step = 'identification' | 'shipping' | 'payment';
 
@@ -58,13 +59,19 @@ export default function Checkout() {
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState<Step>('identification');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false); // BUG #9
+  const [isSubmitted, setIsSubmitted] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [cpfError, setCpfError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [selectedInstallments, setSelectedInstallments] = useState(1);
   const [customerIp, setCustomerIp] = useState('0.0.0.0');
-  const idempotencyKeyRef = useRef<string>(crypto.randomUUID()); // BUG #9
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
+
+  // Stripe state
+  const { config: stripeConfig } = useStripeConfig();
+  const isStripeActive = stripeConfig?.is_active && !!stripeConfig?.publishable_key;
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  const [stripeOrderId, setStripeOrderId] = useState<string | null>(null);
 
   // IMPROVEMENT #5: Payment error state
   const [paymentError, setPaymentError] = useState<{
@@ -272,39 +279,18 @@ export default function Checkout() {
   }));
 
   const handleSubmit = async () => {
-    if (isLoading || isSubmitted) return; // BUG #9: double guard
+    if (isLoading || isSubmitted) return;
 
-    // IMPROVEMENT #4: Enhanced card validation
-    if (formData.paymentMethod === 'card') {
+    // Card validation (only for Appmax flow, Stripe handles its own)
+    if (!isStripeActive && formData.paymentMethod === 'card') {
       const cardDigits = formData.cardNumber.replace(/\s/g, '');
-
-      if (cardDigits.length < 15) {
-        toast({ title: 'Número de cartão inválido', variant: 'destructive' });
-        return;
-      }
-
-      if (!luhnCheck(cardDigits)) {
-        toast({ title: 'Número de cartão inválido', description: 'Verifique os dados digitados.', variant: 'destructive' });
-        return;
-      }
-
+      if (cardDigits.length < 15) { toast({ title: 'Número de cartão inválido', variant: 'destructive' }); return; }
+      if (!luhnCheck(cardDigits)) { toast({ title: 'Número de cartão inválido', description: 'Verifique os dados digitados.', variant: 'destructive' }); return; }
       const [expMonth, expYear] = formData.cardExpiry.split('/');
-      const now = new Date();
       const expDate = new Date(2000 + parseInt(expYear || '0'), parseInt(expMonth || '0') - 1);
-      if (expDate < now) {
-        toast({ title: 'Cartão expirado', description: 'Verifique a data de validade.', variant: 'destructive' });
-        return;
-      }
-
-      if (!formData.cardHolder || formData.cardHolder.trim().length < 3) {
-        toast({ title: 'Nome do titular inválido', variant: 'destructive' });
-        return;
-      }
-
-      if (formData.cardCvv.length < 3) {
-        toast({ title: 'CVV inválido', variant: 'destructive' });
-        return;
-      }
+      if (expDate < new Date()) { toast({ title: 'Cartão expirado', variant: 'destructive' }); return; }
+      if (!formData.cardHolder || formData.cardHolder.trim().length < 3) { toast({ title: 'Nome do titular inválido', variant: 'destructive' }); return; }
+      if (formData.cardCvv.length < 3) { toast({ title: 'CVV inválido', variant: 'destructive' }); return; }
     }
 
     setIsLoading(true);
@@ -315,7 +301,6 @@ export default function Checkout() {
       const userId = session?.session?.user?.id || null;
       const idempotencyKey = idempotencyKeyRef.current;
 
-      // BUG #9: Check for existing order with this idempotency key
       const { data: existingOrder } = await supabase
         .from('orders')
         .select('id, order_number')
@@ -331,10 +316,8 @@ export default function Checkout() {
         return;
       }
 
-      // BUG #6: Generate guest access token
       const guestToken = userId ? null : crypto.randomUUID();
 
-      // Determine final total using pricing engine
       let orderTotal: number;
       if (formData.paymentMethod === 'pix') {
         orderTotal = finalTotal;
@@ -345,7 +328,7 @@ export default function Checkout() {
         orderTotal = finalTotal;
       }
 
-      // 1. Create order — BUG #7: dedicated PII columns, BUG #9: idempotency_key, BUG #6: access_token
+      // 1. Create order
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -389,7 +372,45 @@ export default function Checkout() {
       const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
       if (itemsError) throw itemsError;
 
-      // 3. Call Appmax payment
+      // ─── STRIPE FLOW ───
+      if (isStripeActive) {
+        const productsForStripe = items.map(item => ({
+          sku: item.product.sku || item.product.id,
+          name: item.product.name,
+          quantity: item.quantity,
+          price: getCartItemUnitPrice(item),
+          variant_id: item.variant.id,
+          product_id: item.product.id,
+        }));
+
+        const { data: intentResult, error: intentError } = await supabase.functions.invoke('stripe-create-intent', {
+          body: {
+            action: 'create_payment_intent',
+            order_id: order.id,
+            amount: orderTotal,
+            payment_method: formData.paymentMethod === 'card' ? 'card' : 'pix',
+            customer_email: formData.email,
+            customer_name: formData.name,
+            products: productsForStripe,
+            coupon_code: appliedCoupon?.code || null,
+            discount_amount: discount,
+            installments: selectedInstallments,
+            order_access_token: guestToken,
+          },
+        });
+
+        if (intentError || intentResult?.error) {
+          throw new Error(intentResult?.error || intentError?.message || 'Erro ao criar pagamento Stripe');
+        }
+
+        // Show Stripe Elements
+        setStripeClientSecret(intentResult.client_secret);
+        setStripeOrderId(order.id);
+        setIsLoading(false);
+        return; // Don't navigate yet — user completes payment in Elements
+      }
+
+      // ─── APPMAX FLOW (existing) ───
       const appmaxPaymentMethod = formData.paymentMethod === 'card' ? 'credit-card' : formData.paymentMethod;
       const expiryParts = formData.cardExpiry.split('/');
       const expiryMonth = expiryParts[0] || '';
@@ -457,27 +478,21 @@ export default function Checkout() {
       );
 
       if (pmtError) {
-        await supabase.from('orders').update({
-          notes: `ERRO PAGAMENTO: ${pmtError.message}`,
-        }).eq('id', order.id);
+        await supabase.from('orders').update({ notes: `ERRO PAGAMENTO: ${pmtError.message}` }).eq('id', order.id);
         throw new Error(pmtError.message || 'Erro ao processar pagamento');
       }
 
       if (paymentResult?.error) {
-        await supabase.from('orders').update({
-          notes: `ERRO APPMAX: ${paymentResult.error}`,
-        }).eq('id', order.id);
+        await supabase.from('orders').update({ notes: `ERRO APPMAX: ${paymentResult.error}` }).eq('id', order.id);
         throw new Error(paymentResult.error);
       }
 
-      // BUG #7: Only store Appmax reference in notes (no PII)
       if (paymentResult?.appmax_order_id || paymentResult?.pay_reference) {
         await supabase.from('orders').update({
           notes: `Appmax Order: ${paymentResult.appmax_order_id || 'N/A'} | Ref: ${paymentResult.pay_reference || 'N/A'}`,
         }).eq('id', order.id);
       }
 
-      // Bling sync (non-blocking)
       supabase.functions.invoke('bling-sync', {
         body: { action: 'order_to_nfe', order_id: order.id },
       }).catch(() => {});
@@ -485,7 +500,6 @@ export default function Checkout() {
       setIsSubmitted(true);
       clearCart();
 
-      // BUG #4: Navigate with orderId in URL + full state including PIX expiration
       navigate(`/pedido-confirmado/${order.id}`, {
         state: {
           orderId: order.id,
@@ -503,7 +517,6 @@ export default function Checkout() {
       console.error('Checkout error:', err);
       const msg = err?.message || 'Erro desconhecido';
 
-      // IMPROVEMENT #5: Rich payment error
       let suggestion = 'Tente novamente ou use outro método de pagamento.';
       if (msg.includes('recusado') || msg.includes('denied') || msg.includes('declined')) {
         suggestion = 'Seu banco recusou o cartão. Verifique o limite disponível ou tente outro cartão.';
@@ -511,8 +524,6 @@ export default function Checkout() {
         suggestion = 'Um item do seu carrinho ficou sem estoque durante o pagamento. Atualize o carrinho.';
       } else if (msg.includes('token') || msg.includes('cartão')) {
         suggestion = 'Verifique os dados do cartão e tente novamente.';
-      } else if (msg.includes('CPF') || msg.includes('documento')) {
-        suggestion = 'Verifique se o CPF informado é válido.';
       } else if (msg.includes('divergente') || msg.includes('Recarregue')) {
         suggestion = 'Os preços podem ter sido atualizados. Recarregue a página e tente novamente.';
       }
@@ -522,6 +533,23 @@ export default function Checkout() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Stripe success handler
+  const handleStripeSuccess = () => {
+    setIsSubmitted(true);
+    clearCart();
+    if (stripeOrderId) {
+      navigate(`/pedido-confirmado/${stripeOrderId}`, {
+        state: { orderId: stripeOrderId, paymentMethod: formData.paymentMethod },
+        replace: true,
+      });
+    }
+  };
+
+  const handleStripeError = (message: string) => {
+    setPaymentError({ message, suggestion: 'Verifique os dados e tente novamente.' });
+    toast({ title: 'Pagamento não realizado', description: message, variant: 'destructive' });
   };
 
   // Pre-fill CEP from cart
@@ -837,108 +865,84 @@ export default function Checkout() {
                     </div>
                   </RadioGroup>
 
-                  {/* Card fields with installment selector */}
-                  {formData.paymentMethod === 'card' && (
+                  {/* Stripe Elements flow */}
+                  {stripeClientSecret && isStripeActive && stripeConfig?.publishable_key ? (
                     <div className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
                       <h3 className="font-medium flex items-center gap-2">
                         <CreditCard className="h-4 w-4" />
-                        Dados do Cartão
+                        Pagamento via Stripe
                       </h3>
-                      <div>
-                        <Label htmlFor="cardNumber">Número do cartão *</Label>
-                        <Input
-                          id="cardNumber"
-                          name="cardNumber"
-                          value={formData.cardNumber}
-                          onChange={handleMaskedChange}
-                          placeholder="0000 0000 0000 0000"
-                          maxLength={19}
-                          autoComplete="cc-number"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="cardHolder">Nome impresso no cartão *</Label>
-                        <Input
-                          id="cardHolder"
-                          name="cardHolder"
-                          value={formData.cardHolder}
-                          onChange={handleMaskedChange}
-                          placeholder="NOME COMO ESTÁ NO CARTÃO"
-                          autoComplete="cc-name"
-                          className="uppercase"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="cardExpiry">Validade *</Label>
-                          <Input
-                            id="cardExpiry"
-                            name="cardExpiry"
-                            value={formData.cardExpiry}
-                            onChange={handleMaskedChange}
-                            placeholder="MM/AA"
-                            maxLength={5}
-                            autoComplete="cc-exp"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="cardCvv">CVV *</Label>
-                          <Input
-                            id="cardCvv"
-                            name="cardCvv"
-                            type="password"
-                            value={formData.cardCvv}
-                            onChange={handleMaskedChange}
-                            placeholder="000"
-                            maxLength={4}
-                            autoComplete="cc-csc"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Installment selector */}
-                      <div>
-                        <Label>Parcelas</Label>
-                        <Select
-                          value={String(selectedInstallments)}
-                          onValueChange={(val) => setSelectedInstallments(Number(val))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {installmentOptions.map(opt => (
-                              <SelectItem key={opt.value} value={String(opt.value)}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <StripePaymentForm
+                        clientSecret={stripeClientSecret}
+                        publishableKey={stripeConfig.publishable_key}
+                        onSuccess={handleStripeSuccess}
+                        onError={handleStripeError}
+                        total={finalTotal}
+                        isLoading={isLoading}
+                        setIsLoading={setIsLoading}
+                      />
                     </div>
-                  )}
+                  ) : (
+                    <>
+                      {/* Card fields (Appmax flow) */}
+                      {formData.paymentMethod === 'card' && !isStripeActive && (
+                        <div className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
+                          <h3 className="font-medium flex items-center gap-2">
+                            <CreditCard className="h-4 w-4" />
+                            Dados do Cartão
+                          </h3>
+                          <div>
+                            <Label htmlFor="cardNumber">Número do cartão *</Label>
+                            <Input id="cardNumber" name="cardNumber" value={formData.cardNumber} onChange={handleMaskedChange} placeholder="0000 0000 0000 0000" maxLength={19} autoComplete="cc-number" />
+                          </div>
+                          <div>
+                            <Label htmlFor="cardHolder">Nome impresso no cartão *</Label>
+                            <Input id="cardHolder" name="cardHolder" value={formData.cardHolder} onChange={handleMaskedChange} placeholder="NOME COMO ESTÁ NO CARTÃO" autoComplete="cc-name" className="uppercase" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="cardExpiry">Validade *</Label>
+                              <Input id="cardExpiry" name="cardExpiry" value={formData.cardExpiry} onChange={handleMaskedChange} placeholder="MM/AA" maxLength={5} autoComplete="cc-exp" />
+                            </div>
+                            <div>
+                              <Label htmlFor="cardCvv">CVV *</Label>
+                              <Input id="cardCvv" name="cardCvv" type="password" value={formData.cardCvv} onChange={handleMaskedChange} placeholder="000" maxLength={4} autoComplete="cc-csc" />
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Parcelas</Label>
+                            <Select value={String(selectedInstallments)} onValueChange={(val) => setSelectedInstallments(Number(val))}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {installmentOptions.map(opt => (
+                                  <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      )}
 
-                  <Button
-                    onClick={handleSubmit}
-                    className="w-full"
-                    size="lg"
-                    disabled={isLoading || isSubmitted}
-                    id="btn-checkout-finalize"
-                  >
-                    {isSubmitted && !isLoading ? (
-                      'Pedido Enviado ✓'
-                    ) : isLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processando pagamento...
-                      </>
-                    ) : (
-                      `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree
-                        ? (installmentOptions.find(o => o.value === selectedInstallments)?.total || finalTotal)
-                        : finalTotal
-                      )}`
-                    )}
-                  </Button>
+                      <Button
+                        onClick={handleSubmit}
+                        className="w-full"
+                        size="lg"
+                        disabled={isLoading || isSubmitted}
+                        id="btn-checkout-finalize"
+                      >
+                        {isSubmitted && !isLoading ? (
+                          'Pedido Enviado ✓'
+                        ) : isLoading ? (
+                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processando pagamento...</>
+                        ) : (
+                          `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree
+                            ? (installmentOptions.find(o => o.value === selectedInstallments)?.total || finalTotal)
+                            : finalTotal
+                          )}`
+                        )}
+                      </Button>
+                    </>
+                  )
 
                   {/* IMPROVEMENT #5: Payment error details */}
                   {paymentError && (

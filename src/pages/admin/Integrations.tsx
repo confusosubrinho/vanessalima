@@ -2201,6 +2201,170 @@ const simpleIntegrations: SimpleIntegration[] = [
   },
 ];
 
+// ─── Stripe Gateway Panel ───
+
+function StripeGatewayPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [publishableKey, setPublishableKey] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+
+  const { data: provider, isLoading } = useQuery({
+    queryKey: ['stripe-provider'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('integrations_checkout_providers')
+        .select('*')
+        .eq('provider', 'stripe')
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  useEffect(() => {
+    if (provider) {
+      const config = (provider.config || {}) as Record<string, string>;
+      setPublishableKey(config.publishable_key || '');
+    }
+  }, [provider]);
+
+  const handleSave = async () => {
+    if (!publishableKey.startsWith('pk_')) {
+      toast({ title: 'Chave inválida', description: 'A Publishable Key deve começar com pk_', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        provider: 'stripe',
+        display_name: 'Stripe',
+        is_active: true,
+        config: { publishable_key: publishableKey },
+        updated_at: new Date().toISOString(),
+      };
+      if (provider?.id) {
+        const { error } = await supabase
+          .from('integrations_checkout_providers')
+          .update(payload)
+          .eq('id', provider.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('integrations_checkout_providers')
+          .insert(payload);
+        if (error) throw error;
+      }
+      queryClient.invalidateQueries({ queryKey: ['stripe-provider'] });
+      toast({ title: 'Stripe configurado!' });
+    } catch (err: any) {
+      toast({ title: 'Erro ao salvar', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async () => {
+    if (!provider?.id) return;
+    try {
+      await supabase
+        .from('integrations_checkout_providers')
+        .update({ is_active: !provider.is_active })
+        .eq('id', provider.id);
+      queryClient.invalidateQueries({ queryKey: ['stripe-provider'] });
+      toast({ title: provider.is_active ? 'Stripe desativado' : 'Stripe ativado' });
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleSetAsDefault = async () => {
+    try {
+      // Set checkout provider to stripe
+      const { data: checkoutConfig } = await supabase
+        .from('integrations_checkout')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      if (checkoutConfig?.id) {
+        await supabase.from('integrations_checkout').update({
+          provider: 'stripe',
+          enabled: true,
+        }).eq('id', checkoutConfig.id);
+      } else {
+        await supabase.from('integrations_checkout').insert({
+          provider: 'stripe',
+          enabled: true,
+        });
+      }
+      toast({ title: 'Stripe definido como provedor padrão de pagamento!' });
+    } catch (err: any) {
+      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  if (isLoading) return <div className="text-sm text-muted-foreground">Carregando...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Badge variant={provider?.is_active ? 'default' : 'secondary'} className="text-xs">
+            {provider?.is_active ? 'Ativo' : 'Inativo'}
+          </Badge>
+        </div>
+        {provider?.id && (
+          <Switch checked={provider.is_active} onCheckedChange={handleToggleActive} />
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Publishable Key (pk_...)</Label>
+          <div className="relative">
+            <Input
+              type={showKey ? 'text' : 'password'}
+              value={publishableKey}
+              onChange={e => setPublishableKey(e.target.value)}
+              placeholder="pk_live_... ou pk_test_..."
+              className="text-xs h-8 pr-8 font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(!showKey)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Encontre no <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="underline">Stripe Dashboard → API Keys</a>. A Secret Key é configurada separadamente nos segredos do backend.
+          </p>
+        </div>
+
+        <div className="bg-muted/60 border rounded-md p-2.5 text-xs text-muted-foreground space-y-1">
+          <p><strong>Webhook URL:</strong> Configure no Stripe Dashboard:</p>
+          <code className="block bg-muted px-2 py-1 rounded font-mono text-[10px] break-all">
+            https://{import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/stripe-webhook
+          </code>
+          <p className="text-[10px]">Eventos: <code>payment_intent.succeeded</code>, <code>payment_intent.payment_failed</code></p>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Button onClick={handleSave} disabled={saving} size="sm" className="flex-1">
+          {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Salvando...</> : <><Save className="h-4 w-4 mr-2" />Salvar</>}
+        </Button>
+        <Button onClick={handleSetAsDefault} variant="outline" size="sm">
+          Definir como padrão
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function Integrations() {
   const { toast } = useToast();
   const [configuring, setConfiguring] = useState<string | null>(null);
@@ -2259,25 +2423,47 @@ export default function Integrations() {
 
             {/* Appmax Gateway (special expanded card) */}
             {category.id === 'payment' && (
-              <Card className="md:col-span-2 lg:col-span-3">
-                <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedPanel(expandedPanel === 'appmax' ? null : 'appmax')}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary/10 rounded-lg text-primary"><CreditCard className="h-6 w-6" /></div>
-                      <div>
-                        <CardTitle className="text-base">Gateway Appmax</CardTitle>
-                        <CardDescription className="text-xs">Pagamentos com cartão de crédito, Pix, boleto e configurações de parcelamento</CardDescription>
+              <>
+                <Card className="md:col-span-2 lg:col-span-3">
+                  <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedPanel(expandedPanel === 'appmax' ? null : 'appmax')}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-lg text-primary"><CreditCard className="h-6 w-6" /></div>
+                        <div>
+                          <CardTitle className="text-base">Gateway Appmax</CardTitle>
+                          <CardDescription className="text-xs">Pagamentos com cartão de crédito, Pix, boleto e configurações de parcelamento</CardDescription>
+                        </div>
                       </div>
+                      {expandedPanel === 'appmax' ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
                     </div>
-                    {expandedPanel === 'appmax' ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
-                  </div>
-                </CardHeader>
-                {expandedPanel === 'appmax' && (
-                  <CardContent>
-                    <AppmaxGatewayPanel />
-                  </CardContent>
-                )}
-              </Card>
+                  </CardHeader>
+                  {expandedPanel === 'appmax' && (
+                    <CardContent>
+                      <AppmaxGatewayPanel />
+                    </CardContent>
+                  )}
+                </Card>
+
+                <Card className="md:col-span-2 lg:col-span-3">
+                  <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedPanel(expandedPanel === 'stripe' ? null : 'stripe')}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-[hsl(250,90%,55%)]/10 rounded-lg text-[hsl(250,90%,55%)]"><CreditCard className="h-6 w-6" /></div>
+                        <div>
+                          <CardTitle className="text-base">Stripe</CardTitle>
+                          <CardDescription className="text-xs">Pagamentos com cartão de crédito e PIX via Stripe Elements</CardDescription>
+                        </div>
+                      </div>
+                      {expandedPanel === 'stripe' ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                    </div>
+                  </CardHeader>
+                  {expandedPanel === 'stripe' && (
+                    <CardContent>
+                      <StripeGatewayPanel />
+                    </CardContent>
+                  )}
+                </Card>
+              </>
             )}
 
             {/* Melhor Envio (special expanded card) */}
