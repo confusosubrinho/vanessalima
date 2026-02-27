@@ -901,32 +901,17 @@ export default function Checkout() {
                     </div>
                   </RadioGroup>
 
-                  {/* Stripe Elements flow */}
-                  {stripeClientSecret && isStripeActive && stripeConfig?.publishable_key ? (
+                  {/* Installment selector (shown for card before Stripe Elements appear) */}
+                  {formData.paymentMethod === 'card' && !stripeClientSecret && (
                     <div className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
                       <h3 className="font-medium flex items-center gap-2">
                         <CreditCard className="h-4 w-4" />
-                        Pagamento via Stripe
+                        {isStripeActive ? 'Escolha o parcelamento' : 'Dados do Cartão'}
                       </h3>
-                      <StripePaymentForm
-                        clientSecret={stripeClientSecret}
-                        publishableKey={stripeConfig.publishable_key}
-                        onSuccess={handleStripeSuccess}
-                        onError={handleStripeError}
-                        total={finalTotal}
-                        isLoading={isLoading}
-                        setIsLoading={setIsLoading}
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      {/* Card fields (Appmax flow) */}
-                      {formData.paymentMethod === 'card' && !isStripeActive && (
-                        <div className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
-                          <h3 className="font-medium flex items-center gap-2">
-                            <CreditCard className="h-4 w-4" />
-                            Dados do Cartão
-                          </h3>
+
+                      {/* Appmax-only card fields */}
+                      {!isStripeActive && (
+                        <>
                           <div>
                             <Label htmlFor="cardNumber">Número do cartão *</Label>
                             <Input id="cardNumber" name="cardNumber" value={formData.cardNumber} onChange={handleMaskedChange} placeholder="0000 0000 0000 0000" maxLength={19} autoComplete="cc-number" />
@@ -945,39 +930,65 @@ export default function Checkout() {
                               <Input id="cardCvv" name="cardCvv" type="password" value={formData.cardCvv} onChange={handleMaskedChange} placeholder="000" maxLength={4} autoComplete="cc-csc" />
                             </div>
                           </div>
-                          <div>
-                            <Label>Parcelas</Label>
-                            <Select value={String(selectedInstallments)} onValueChange={(val) => setSelectedInstallments(Number(val))}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {installmentOptions.map(opt => (
-                                  <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
+                        </>
                       )}
 
-                      <Button
-                        onClick={handleSubmit}
-                        className="w-full"
-                        size="lg"
-                        disabled={isLoading || isSubmitted}
-                        id="btn-checkout-finalize"
-                      >
-                        {isSubmitted && !isLoading ? (
-                          'Pedido Enviado ✓'
-                        ) : isLoading ? (
-                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processando pagamento...</>
-                        ) : (
-                          `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree
-                            ? (installmentOptions.find(o => o.value === selectedInstallments)?.total || finalTotal)
-                            : finalTotal
-                          )}`
-                        )}
-                      </Button>
-                    </>
+                      <div>
+                        <Label>Parcelas</Label>
+                        <Select value={String(selectedInstallments)} onValueChange={(val) => setSelectedInstallments(Number(val))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {installmentOptions.map(opt => (
+                              <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {isStripeActive && (
+                        <p className="text-xs text-muted-foreground">
+                          Os dados do cartão serão solicitados na próxima etapa via ambiente seguro Stripe.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Stripe Elements flow (after PaymentIntent created) */}
+                  {stripeClientSecret && isStripeActive && stripeConfig?.publishable_key ? (
+                    <div className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
+                      <h3 className="font-medium flex items-center gap-2">
+                        <CreditCard className="h-4 w-4" />
+                        Dados do pagamento
+                      </h3>
+                      <StripePaymentForm
+                        clientSecret={stripeClientSecret}
+                        publishableKey={stripeConfig.publishable_key}
+                        onSuccess={handleStripeSuccess}
+                        onError={handleStripeError}
+                        total={finalTotal}
+                        isLoading={isLoading}
+                        setIsLoading={setIsLoading}
+                      />
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={handleSubmit}
+                      className="w-full"
+                      size="lg"
+                      disabled={isLoading || isSubmitted}
+                      id="btn-checkout-finalize"
+                    >
+                      {isSubmitted && !isLoading ? (
+                        'Pedido Enviado ✓'
+                      ) : isLoading ? (
+                        <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processando pagamento...</>
+                      ) : (
+                        `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree
+                          ? (installmentOptions.find(o => o.value === selectedInstallments)?.total || finalTotal)
+                          : finalTotal
+                        )}`
+                      )}
+                    </Button>
                   )}
 
                   {/* IMPROVEMENT #5: Payment error details */}
