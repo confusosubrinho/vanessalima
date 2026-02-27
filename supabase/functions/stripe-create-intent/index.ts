@@ -229,6 +229,7 @@ Deno.serve(async (req) => {
       }
 
       // ── Determine payment method types ──
+      // Only use "pix" if the method was requested; card is always safe
       const paymentMethodTypes: string[] = isPixMethod ? ["pix"] : ["card"];
 
       // Amount in centavos (BRL)
@@ -261,7 +262,20 @@ Deno.serve(async (req) => {
       const descriptor = storeName.toUpperCase().replace(/[^A-Z0-9 ]/g, "").slice(0, 22).trim() || "LOJA";
       intentParams.statement_descriptor = descriptor.slice(0, 22);
 
-      const paymentIntent = await stripe.paymentIntents.create(intentParams);
+      let paymentIntent;
+      try {
+        paymentIntent = await stripe.paymentIntents.create(intentParams);
+      } catch (stripeErr: any) {
+        // If PIX is not enabled in the Stripe account, return a clear message
+        if (isPixMethod && stripeErr.message?.includes("pix")) {
+          // Rollback stock
+          for (const dec of stockDecrements) {
+            await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
+          }
+          return jsonRes({ error: "O método PIX não está ativado na sua conta Stripe. Use cartão de crédito ou ative o PIX no painel Stripe." }, 400);
+        }
+        throw stripeErr;
+      }
 
       // ── Update order with Stripe info ──
       await supabase.from("orders").update({
