@@ -66,6 +66,7 @@ export default function Checkout() {
   const [selectedInstallments, setSelectedInstallments] = useState(1);
   const [customerIp, setCustomerIp] = useState('0.0.0.0');
   const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
+  const submitInProgressRef = useRef(false);
 
   // Stripe state
   const { config: stripeConfig } = useStripeConfig();
@@ -279,7 +280,7 @@ export default function Checkout() {
   }));
 
   const handleSubmit = async () => {
-    if (isLoading || isSubmitted) return;
+    if (isLoading || isSubmitted || submitInProgressRef.current) return;
 
     // Card validation (only for Appmax flow, Stripe handles its own)
     if (!isStripeActive && formData.paymentMethod === 'card') {
@@ -293,8 +294,11 @@ export default function Checkout() {
       if (formData.cardCvv.length < 3) { toast({ title: 'CVV inválido', variant: 'destructive' }); return; }
     }
 
+    submitInProgressRef.current = true;
     setIsLoading(true);
     setPaymentError(null);
+    const debounceMs = 1000;
+    const debounceTimer = setTimeout(() => { submitInProgressRef.current = false; }, debounceMs);
 
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -531,6 +535,8 @@ export default function Checkout() {
       setPaymentError({ message: msg, suggestion });
       toast({ title: 'Pagamento não realizado', description: msg, variant: 'destructive' });
     } finally {
+      clearTimeout(debounceTimer);
+      submitInProgressRef.current = false;
       setIsLoading(false);
     }
   };

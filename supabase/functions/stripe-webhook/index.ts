@@ -52,6 +52,8 @@ Deno.serve(async (req) => {
   }
 
   console.log(`✅ Stripe event received: ${event.type} (${event.id})`);
+  const correlationId = req.headers.get("x-correlation-id") || `stripe-${event.id}`;
+  console.log(`[${correlationId}] Processing ${event.type}`);
 
   // ── IDEMPOTENCY CHECK ─────────────────────────────────────────────
   const { error: idempError } = await supabase
@@ -154,18 +156,27 @@ Deno.serve(async (req) => {
             await supabase.from("orders").update({ stripe_charge_id: latestCharge }).eq("id", orderId);
           }
 
-          // Insert payment record
-          await supabase.from("payments").insert({
-            order_id: orderId,
-            provider: "stripe",
-            gateway: "stripe",
-            amount: pi.amount / 100,
-            status: "approved",
-            payment_method: pi.payment_method_types?.[0] || "card",
-            transaction_id: piId,
-            installments: Number(pi.metadata?.installments) || 1,
-            raw: pi as unknown as Record<string, unknown>,
-          });
+          // Insert payment record (idempotent: skip if already exists for this PI)
+          const { data: existingPayment } = await supabase
+            .from("payments")
+            .select("id")
+            .eq("provider", "stripe")
+            .eq("transaction_id", piId)
+            .maybeSingle();
+
+          if (!existingPayment) {
+            await supabase.from("payments").insert({
+              order_id: orderId,
+              provider: "stripe",
+              gateway: "stripe",
+              amount: pi.amount / 100,
+              status: "approved",
+              payment_method: pi.payment_method_types?.[0] || "card",
+              transaction_id: piId,
+              installments: Number(pi.metadata?.installments) || 1,
+              raw: pi as unknown as Record<string, unknown>,
+            });
+          }
 
           // Update customer stats
           const { data: order } = await supabase

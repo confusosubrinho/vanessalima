@@ -218,6 +218,9 @@ export default function OrderConfirmation() {
   const pixEmv = confirmState.pixEmv;
   const pixExpirationDate = confirmState.pixExpirationDate;
 
+  const orderIdToFetch = confirmState.orderId || urlOrderId;
+  const orderNotFound = !isLoading && orderIdToFetch && !orderData;
+
   const pixCountdown = usePixCountdown(pixExpirationDate);
 
   const currentStatusInfo = statusLabels[orderStatus] || statusLabels.pending;
@@ -256,6 +259,24 @@ export default function OrderConfirmation() {
 
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="bg-background rounded-xl shadow-sm p-8 md:p-12 max-w-lg w-full text-center space-y-6">
+          {orderNotFound ? (
+            <>
+              <Package className="h-16 w-16 mx-auto text-muted-foreground" />
+              <h1 className="text-xl font-bold">Pedido não encontrado ou acesso expirado</h1>
+              <p className="text-muted-foreground text-sm">
+                O link pode ter expirado ou você não tem permissão para ver este pedido. Use a página de rastreio com seu email e número do pedido.
+              </p>
+              <div className="flex flex-col gap-3 pt-2">
+                <Button asChild size="lg">
+                  <Link to="/rastreio">Rastrear pedido</Link>
+                </Button>
+                <Button asChild variant="outline" size="lg" id="btn-order-continue-shopping">
+                  <Link to="/">Voltar à loja</Link>
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
           <div className="flex justify-center">
             {orderStatus === 'pending' ? (
               <Clock className="h-16 w-16 text-yellow-500" />
@@ -362,6 +383,8 @@ export default function OrderConfirmation() {
               <Link to="/rastreio">Rastrear Pedido</Link>
             </Button>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

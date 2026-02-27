@@ -1,3 +1,7 @@
+/**
+ * E2E: Clique no card de produto e categorias.
+ * Requer seed:qa antes (npm run seed:qa). Sem skips.
+ */
 import { test, expect } from '@playwright/test';
 
 test.describe('Clique no card de produto', () => {
@@ -6,17 +10,10 @@ test.describe('Clique no card de produto', () => {
     await page.waitForLoadState('networkidle');
 
     const firstCard = page.locator('[id^="product-card-"]').first();
-    const hasCards = await firstCard.count() > 0;
-    if (!hasCards) {
-      test.skip(true, 'Página Mais vendidos sem produtos em destaque');
-      return;
-    }
-
-    await expect(firstCard).toBeVisible({ timeout: 5000 });
+    await expect(firstCard).toBeVisible({ timeout: 15000 });
 
     const cardId = await firstCard.getAttribute('id');
     const slug = cardId?.replace('product-card-', '') ?? '';
-
     await firstCard.click();
 
     await expect(page).toHaveURL(new RegExp(`/produto/${slug}`), { timeout: 10000 });
@@ -31,14 +28,13 @@ test.describe('Clique no card de produto', () => {
 
     const cardId = await firstCard.getAttribute('id');
     const slug = cardId?.replace('product-card-', '') ?? '';
-
     await firstCard.click();
 
     await expect(page).toHaveURL(new RegExp(`/produto/${slug}`), { timeout: 10000 });
   });
 
   test('na home: clique no card do grid abre a página do produto', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/mais-vendidos');
     await page.waitForLoadState('networkidle');
 
     const card = page.locator('[id^="product-card-"]').first();
@@ -46,7 +42,6 @@ test.describe('Clique no card de produto', () => {
 
     const cardId = await card.getAttribute('id');
     const slug = cardId?.replace('product-card-', '') ?? '';
-
     await card.click();
 
     await expect(page).toHaveURL(new RegExp(`/produto/${slug}`), { timeout: 10000 });
