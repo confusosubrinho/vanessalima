@@ -942,7 +942,7 @@ export default function Checkout() {
                         )}
                       </Button>
                     </>
-                  )
+                  )}
 
                   {/* IMPROVEMENT #5: Payment error details */}
                   {paymentError && (
