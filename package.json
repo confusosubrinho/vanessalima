@@ -8,11 +8,18 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "qa:ultimate": "npm run lint && npm run typecheck && npm run test && npm run test:e2e",
+    "qa:backend": "npm run typecheck && npm run test",
+    "qa:admin": "npm run typecheck && npm run test && npx playwright test e2e/admin-smoke.spec.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "seed:qa": "node scripts/seed-qa.mjs"
+    "seed:qa": "node scripts/seed-qa.mjs",
+    "reservations:cleanup": "node scripts/reservations-cleanup.mjs",
+    "reconcile:stale": "node scripts/reconcile-stale.mjs",
+    "load:checkout": "node scripts/load/checkout-sim.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

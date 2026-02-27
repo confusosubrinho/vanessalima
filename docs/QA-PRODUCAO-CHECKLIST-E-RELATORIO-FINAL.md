@@ -44,6 +44,16 @@
 
 ## Como rodar os testes
 
+### Backend (typecheck + testes Vitest)
+
+Para executar **tudo que está pendente e necessário na parte de backend** (sem lint nem E2E):
+
+```bash
+npm run qa:backend
+```
+
+Detalhes, testes que tocam Supabase e pendências manuais: **docs/QA-BACKEND-PENDENTES-E-COMANDO.md**.
+
 ### Testes unitários / integração (Vitest)
 ```bash
 npm run test
@@ -130,3 +140,57 @@ Roteiro executável manualmente; E2E cobre pedido-confirmado ID inválido e (qua
 **GO/NO-GO:** **GO** — Testes Vitest e E2E passando (E2E requer seed:qa ou env para globalSetup). Migration e verificação do índice devem ser feitas manualmente no Supabase. Após aplicar as migrations (payments UNIQUE + constraints QA) e confirmar o índice, produção está aprovada.
 
 **PR QA Hardening:** Branch com todos os itens 1–9 implementados; ver descrição do PR e `docs/QA-PRODUCAO-CHECKLIST-E-RELATORIO-FINAL.md` (seção QA Hardening Final) para evidências.
+
+---
+
+## QA ULTIMATE GO (branch qa-ultimate-go)
+
+Objetivo: e-commerce 100% blindado para produção (SaaS enterprise). Implementação + testes + evidências.
+
+### Comando único de validação
+
+```bash
+npm run qa:ultimate
+```
+
+Executa em sequência (falha na primeira falha): `lint` → `typecheck` → `test` → `test:e2e`.  
+**Pré-requisito E2E:** `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` definidos (globalSetup roda `seed:qa`; sem env, Playwright falha com mensagem clara).
+
+### Tarefas P0 (bloqueiam GO)
+
+| ID | Descrição | Status | Evidência / Arquivos |
+|----|-----------|--------|----------------------|
+| P0-1 | Regra duas abas / 1 checkout ativo por carrinho | OK | Migration `20260227200000_orders_cart_id_unique_active.sql`; Checkout idempotency_key + 23505; E2E duas abas; `src/test/checkout-two-tabs-concurrency.test.ts` |
+| P0-2 | TTL reserva + limpeza | OK | Edge Function `release-expired-reservations`; `npm run reservations:cleanup`; `src/test/release-expired-reservations.test.ts` |
+| P0-3 | Assinatura webhooks | OK | Stripe/Appmax/reconcile validados; `src/test/webhook-security.test.ts` |
+| P0-4 | Antifraude preço | OK | stripe-create-intent recalcula; divergência → 400 + error_logs |
+| P0-5 | Healthcheck Commerce | OK | RPC `commerce_health()`; página `/admin/commerce-health`; listas + botões P1-3 |
+
+### Tarefas P1
+
+| ID | Descrição | Status | Evidência |
+|----|-----------|--------|-----------|
+| P1-1 | Reconciliação stale | OK | `npm run reconcile:stale`; `scripts/reconcile-stale.mjs` |
+| P1-2 | Load test | OK | `npm run load:checkout`; `scripts/load/checkout-sim.mjs` |
+| P1-3 | Backoffice anti-desastre | OK | Commerce Health: listas (commerce_health_lists) + botões (admin-commerce-action) |
+
+### Comandos e exit codes
+
+| Comando | Exit esperado |
+|---------|----------------|
+| npm run lint | 0 (projeto pode ter erros pré-existentes; para GO crítico use typecheck + test + test:e2e) |
+| npm run typecheck | 0 |
+| npm run test | 0 |
+| npm run qa:backend | 0 (typecheck + test) |
+| npm run test:e2e | 0 (env definido) |
+| npm run qa:ultimate | 0 (lint + typecheck + test + test:e2e) |
+
+### Queries DB
+
+- Índice payments: `SELECT indexname FROM pg_indexes WHERE tablename = 'payments' AND indexname LIKE '%provider%transaction%';`
+- Health: `SELECT * FROM commerce_health();` (admin).
+
+### Veredicto
+
+**GO** se: todos P0 OK + 0 skipped E2E + healthcheck OK + `npm run qa:ultimate` exit 0.  
+**NO-GO** se: P0 em aberto ou E2E skipped ou healthcheck falha. Status: implementações concluídas; aplicar migrations e rodar qa:ultimate com env para evidência final.
