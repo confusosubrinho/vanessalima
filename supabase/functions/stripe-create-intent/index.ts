@@ -334,6 +334,56 @@ Deno.serve(async (req) => {
       return jsonRes(res);
     }
 
+    // ─── Action: create_checkout_session (external Stripe Checkout) ───
+    if (action === "create_checkout_session") {
+      const { order_id, amount, customer_email, customer_name, products, success_url, cancel_url, order_access_token } = body;
+
+      if (!order_id || !amount || !success_url) {
+        return jsonRes({ error: "order_id, amount e success_url são obrigatórios" }, 400);
+      }
+
+      const lineItems = (products || []).map((p: any) => ({
+        price_data: {
+          currency: "brl",
+          product_data: { name: p.name },
+          unit_amount: Math.round(p.price * 100),
+        },
+        quantity: p.quantity,
+      }));
+
+      if (lineItems.length === 0) {
+        lineItems.push({
+          price_data: {
+            currency: "brl",
+            product_data: { name: "Pedido" },
+            unit_amount: Math.round(amount * 100),
+          },
+          quantity: 1,
+        });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        customer_email: customer_email || undefined,
+        line_items: lineItems,
+        success_url,
+        cancel_url: cancel_url || success_url,
+        metadata: { order_id, order_access_token: order_access_token || "" },
+        payment_intent_data: {
+          metadata: { order_id, order_access_token: order_access_token || "" },
+        },
+      });
+
+      await supabase.from("orders").update({
+        provider: "stripe",
+        gateway: "stripe",
+        transaction_id: session.payment_intent as string,
+        payment_method: "card",
+      }).eq("id", order_id);
+
+      return jsonRes({ checkout_url: session.url, session_id: session.id });
+    }
+
     return jsonRes({ error: "Ação inválida" }, 400);
   } catch (error: any) {
     console.error("Stripe error:", error.message);

@@ -194,16 +194,29 @@ export function StripePaymentForm({
 
 // Hook to check if Stripe is the active provider
 export function useStripeConfig() {
-  const [config, setConfig] = useState<{ publishable_key: string | null; is_active: boolean } | null>(null);
+  const [config, setConfig] = useState<{ publishable_key: string | null; is_active: boolean; checkout_mode?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await supabase.functions.invoke('stripe-create-intent', {
-          body: { action: 'get_config' },
-        });
-        setConfig(data);
+        // Get provider config from DB directly for checkout_mode
+        const { data: providerData } = await supabase
+          .from('integrations_checkout_providers')
+          .select('is_active, config')
+          .eq('provider', 'stripe')
+          .maybeSingle();
+        
+        if (providerData) {
+          const cfg = (providerData.config as Record<string, unknown>) || {};
+          setConfig({
+            publishable_key: (cfg.publishable_key as string) || null,
+            is_active: providerData.is_active,
+            checkout_mode: (cfg.checkout_mode as string) || 'embedded',
+          });
+        } else {
+          setConfig(null);
+        }
       } catch {
         setConfig(null);
       } finally {
