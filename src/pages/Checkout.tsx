@@ -458,6 +458,36 @@ export default function Checkout() {
           product_id: item.product.id,
         }));
 
+        // External Stripe Checkout (redirect to Stripe hosted page)
+        if (stripeConfig?.checkout_mode === 'external') {
+          const { data: sessionResult, error: sessionError } = await supabase.functions.invoke('stripe-create-intent', {
+            body: {
+              action: 'create_checkout_session',
+              order_id: order.id,
+              amount: orderTotal,
+              customer_email: formData.email,
+              customer_name: formData.name,
+              products: productsForStripe,
+              coupon_code: appliedCoupon?.code || null,
+              discount_amount: discount,
+              order_access_token: guestToken,
+              success_url: `${window.location.origin}/pedido-confirmado/${order.id}?token=${guestToken}`,
+              cancel_url: `${window.location.origin}/carrinho`,
+            },
+          });
+
+          if (sessionError || sessionResult?.error) {
+            throw new Error(sessionResult?.error || sessionError?.message || 'Erro ao criar sessão Stripe');
+          }
+
+          if (sessionResult?.checkout_url) {
+            window.location.href = sessionResult.checkout_url;
+            return;
+          }
+          throw new Error('URL de checkout não retornada');
+        }
+
+        // Embedded Stripe Checkout (PaymentIntent + Elements on page)
         const { data: intentResult, error: intentError } = await supabase.functions.invoke('stripe-create-intent', {
           body: {
             action: 'create_payment_intent',
@@ -479,7 +509,6 @@ export default function Checkout() {
         }
 
         if (formData.paymentMethod === 'pix' && intentResult.pix_qr_url) {
-          // PIX: show QR/code on checkout page, no redirect
           setStripePixData({
             pixQrUrl: intentResult.pix_qr_url,
             pixEmv: intentResult.pix_emv ?? null,
@@ -496,7 +525,7 @@ export default function Checkout() {
         setStripeClientSecret(intentResult.client_secret);
         setStripeOrderId(order.id);
         setIsLoading(false);
-        return; // Don't navigate yet — user completes payment in Elements
+        return;
       }
 
       // ─── APPMAX FLOW (existing) ───
