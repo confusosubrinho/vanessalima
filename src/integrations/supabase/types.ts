@@ -1839,6 +1839,7 @@ export type Database = {
           access_token: string | null
           appmax_customer_id: string | null
           appmax_order_id: string | null
+          cart_id: string | null
           coupon_code: string | null
           created_at: string
           customer_cpf: string | null
@@ -1882,6 +1883,7 @@ export type Database = {
           access_token?: string | null
           appmax_customer_id?: string | null
           appmax_order_id?: string | null
+          cart_id?: string | null
           coupon_code?: string | null
           created_at?: string
           customer_cpf?: string | null
@@ -1925,6 +1927,7 @@ export type Database = {
           access_token?: string | null
           appmax_customer_id?: string | null
           appmax_order_id?: string | null
+          cart_id?: string | null
           coupon_code?: string | null
           created_at?: string
           customer_cpf?: string | null
@@ -3258,8 +3261,11 @@ export type Database = {
       }
     }
     Functions: {
+      cancel_order_return_stock: { Args: { p_order_id: string }; Returns: Json }
       check_login_rate_limit: { Args: { p_email: string }; Returns: boolean }
       cleanup_orphan_orders: { Args: never; Returns: undefined }
+      commerce_health: { Args: never; Returns: Json }
+      commerce_health_lists: { Args: never; Returns: Json }
       decrement_stock: {
         Args: { p_quantity: number; p_variant_id: string }
         Returns: Json
