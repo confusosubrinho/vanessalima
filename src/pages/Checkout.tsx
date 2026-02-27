@@ -964,167 +964,130 @@ export default function Checkout() {
               {/* Step 3: Payment */}
               {currentStep === 'payment' && (
                 <div className="space-y-6 animate-fade-in">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold">Pagamento</h2>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    Pagamento
                     <HelpHint helpKey="store.checkout" />
-                  </div>
+                  </h2>
 
-                  {/* Coupon in payment step */}
+                  {/* Coupon */}
                   <CouponInput />
 
+                  {/* Payment method selector */}
                   <RadioGroup
                     value={formData.paymentMethod}
                     onValueChange={(value) => {
                       setFormData(prev => ({ ...prev, paymentMethod: value }));
                       setSelectedInstallments(1);
                       setPaymentError(null);
+                      setStripeClientSecret(null);
+                      setStripePixData(null);
                     }}
-                    className="space-y-4"
+                    className="grid grid-cols-2 gap-3"
                   >
-                    <div className={`p-4 border rounded-lg cursor-pointer transition-colors ${formData.paymentMethod === 'pix' ? 'border-primary bg-primary/5' : 'hover:border-primary'}`}>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-3">
-                          <RadioGroupItem value="pix" id="payment-pix" />
-                          <Label htmlFor="payment-pix" className="cursor-pointer flex-1">
-                            <span className="font-medium">PIX</span>
-                            <p className="text-sm text-muted-foreground">Pagamento instantâneo com {pc.pix_discount}% de desconto</p>
-                          </Label>
-                          <span className="font-bold text-primary">{formatPrice(finalTotal)}</span>
-                        </div>
-                        {pixDiscountAmount > 0 && (
-                          <div className="pl-7 text-sm text-muted-foreground">
-                            <span className="line-through">{formatPrice(total)}</span>
-                            <span className="block text-xs">{pc.pix_discount}% off no PIX</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className={`p-4 border rounded-lg cursor-pointer transition-colors ${formData.paymentMethod === 'card' ? 'border-primary bg-primary/5' : 'hover:border-primary'}`}>
-                      <div className="flex items-center gap-3">
-                        <RadioGroupItem value="card" id="payment-card" />
-                        <Label htmlFor="payment-card" className="cursor-pointer flex-1">
-                          <span className="font-medium">Cartão de Crédito</span>
-                          <p className="text-sm text-muted-foreground">
-                            Em até {effectiveInterestFree}x sem juros
-                            {pc.max_installments > effectiveInterestFree && ` ou até ${pc.max_installments}x`}
-                          </p>
-                        </Label>
-                        <span className="font-medium">{formatPrice(total)}</span>
-                      </div>
-                    </div>
+                    {/* PIX option */}
+                    <label
+                      htmlFor="payment-pix"
+                      className={`relative flex flex-col items-center gap-2 p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                        formData.paymentMethod === 'pix'
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'border-muted hover:border-primary/40'
+                      }`}
+                    >
+                      <RadioGroupItem value="pix" id="payment-pix" className="sr-only" />
+                      <div className="text-2xl">💳</div>
+                      <span className="font-semibold text-sm">PIX</span>
+                      <span className="text-xs text-primary font-medium">
+                        {pc.pix_discount}% de desconto
+                      </span>
+                      <span className="text-base font-bold text-primary">
+                        {formatPrice(finalTotal)}
+                      </span>
+                      {pixDiscountAmount > 0 && (
+                        <span className="text-xs text-muted-foreground line-through">
+                          {formatPrice(total)}
+                        </span>
+                      )}
+                    </label>
+
+                    {/* Card option */}
+                    <label
+                      htmlFor="payment-card"
+                      className={`relative flex flex-col items-center gap-2 p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                        formData.paymentMethod === 'card'
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'border-muted hover:border-primary/40'
+                      }`}
+                    >
+                      <RadioGroupItem value="card" id="payment-card" className="sr-only" />
+                      <div className="text-2xl">💳</div>
+                      <span className="font-semibold text-sm">Cartão de Crédito</span>
+                      <span className="text-xs text-muted-foreground">
+                        até {effectiveInterestFree}x sem juros
+                      </span>
+                      <span className="text-base font-bold">{formatPrice(total)}</span>
+                    </label>
                   </RadioGroup>
 
-                  {/* Installment selector (shown for card before Stripe Elements appear) */}
-                  {formData.paymentMethod === 'card' && !stripeClientSecret && (
-                    <div className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
-                      <h3 className="font-medium flex items-center gap-2">
-                        <CreditCard className="h-4 w-4" />
-                        {isStripeActive ? 'Escolha o parcelamento' : 'Dados do Cartão'}
-                      </h3>
-
-                      {/* Appmax-only card fields */}
-                      {!isStripeActive && (
-                        <>
-                          <div>
-                            <Label htmlFor="cardNumber">Número do cartão *</Label>
-                            <Input id="cardNumber" name="cardNumber" value={formData.cardNumber} onChange={handleMaskedChange} placeholder="0000 0000 0000 0000" maxLength={19} autoComplete="cc-number" />
-                          </div>
-                          <div>
-                            <Label htmlFor="cardHolder">Nome impresso no cartão *</Label>
-                            <Input id="cardHolder" name="cardHolder" value={formData.cardHolder} onChange={handleMaskedChange} placeholder="NOME COMO ESTÁ NO CARTÃO" autoComplete="cc-name" className="uppercase" />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label htmlFor="cardExpiry">Validade *</Label>
-                              <Input id="cardExpiry" name="cardExpiry" value={formData.cardExpiry} onChange={handleMaskedChange} placeholder="MM/AA" maxLength={5} autoComplete="cc-exp" />
-                            </div>
-                            <div>
-                              <Label htmlFor="cardCvv">CVV *</Label>
-                              <Input id="cardCvv" name="cardCvv" type="password" value={formData.cardCvv} onChange={handleMaskedChange} placeholder="000" maxLength={4} autoComplete="cc-csc" />
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      <div>
-                        <Label>Parcelas</Label>
-                        <Select value={String(selectedInstallments)} onValueChange={(val) => setSelectedInstallments(Number(val))}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {installmentOptions.map(opt => (
-                              <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                  {/* ─── PIX QR/Code Section ─── */}
+                  {stripePixData && (
+                    <div id="checkout-pix-waiting" className="rounded-xl border-2 border-primary/30 bg-primary/5 p-6 space-y-4 animate-fade-in">
+                      <div className="text-center space-y-1">
+                        <h3 className="font-bold text-lg">Aguardando pagamento PIX</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Escaneie o QR Code ou copie o código para pagar
+                        </p>
                       </div>
 
-                      {isStripeActive && (
-                        <p className="text-xs text-muted-foreground">
-                          Os dados do cartão serão solicitados na próxima etapa via ambiente seguro Stripe.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* PIX on checkout: QR + code on same page, no redirect */}
-                  {stripePixData && (
-                    <div id="checkout-pix-waiting" className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
-                      <h3 className="font-medium flex items-center gap-2">
-                        <CreditCard className="h-4 w-4" />
-                        Aguardando pagamento PIX
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Escaneie o QR Code ou copie o código PIX para pagar. Não feche esta página.
-                      </p>
                       {stripePixData.pixQrUrl && !pixExpiryCountdown.isExpired && (
-                        <>
-                          <img
-                            src={stripePixData.pixQrUrl}
-                            alt="QR Code PIX"
-                            className="mx-auto w-48 h-48"
-                            id="checkout-pix-qr"
-                          />
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="bg-background p-3 rounded-lg shadow-sm">
+                            <img
+                              src={stripePixData.pixQrUrl}
+                              alt="QR Code PIX"
+                              className="w-44 h-44"
+                              id="checkout-pix-qr"
+                            />
+                          </div>
                           {pixExpiryCountdown.display && (
-                            <p className="text-center text-sm font-mono font-medium text-muted-foreground">
+                            <p className="text-sm font-mono font-medium text-muted-foreground">
                               ⏱ Expira em {pixExpiryCountdown.display}
                             </p>
                           )}
                           {stripePixData.pixEmv && (
-                            <div className="space-y-2">
-                              <p className="text-xs text-muted-foreground break-all bg-muted/50 p-2 rounded text-left font-mono">
+                            <div className="w-full space-y-2">
+                              <p className="text-xs text-muted-foreground break-all bg-muted/50 p-2.5 rounded-lg font-mono leading-relaxed">
                                 {stripePixData.pixEmv}
                               </p>
                               <Button
                                 type="button"
                                 variant="outline"
-                                size="sm"
+                                className="w-full gap-2"
                                 onClick={() => {
                                   if (stripePixData.pixEmv) {
                                     navigator.clipboard.writeText(stripePixData.pixEmv);
                                     toast({ title: 'Código PIX copiado!' });
                                   }
                                 }}
-                                className="gap-2"
                                 id="btn-checkout-pix-copy"
                               >
-                                <Copy className="h-3 w-3" />
+                                <Copy className="h-4 w-4" />
                                 Copiar código PIX
                               </Button>
                             </div>
                           )}
-                        </>
+                        </div>
                       )}
+
                       {pixExpiryCountdown.isExpired && (
-                        <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-center">
+                        <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-center space-y-2">
                           <p className="font-medium text-destructive">QR Code PIX expirado</p>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            O código expirou. Volte ao passo de pagamento e escolha PIX novamente para gerar um novo código.
+                          <p className="text-sm text-muted-foreground">
+                            Gere um novo código para continuar.
                           </p>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="mt-3"
                             onClick={() => {
                               setStripePixData(null);
                               setStripeOrderId(null);
@@ -1134,34 +1097,72 @@ export default function Checkout() {
                           </Button>
                         </div>
                       )}
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+
+                      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Aguardando confirmação do pagamento...
                       </div>
                     </div>
                   )}
 
-                  {/* Stripe Elements flow (after PaymentIntent created) */}
-                  {!stripePixData && stripeClientSecret && isStripeActive && stripeConfig?.publishable_key ? (
-                    <div className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
-                      <h3 className="font-medium flex items-center gap-2">
-                        <CreditCard className="h-4 w-4" />
-                        Dados do pagamento
-                      </h3>
-                      <StripePaymentForm
-                        clientSecret={stripeClientSecret}
-                        publishableKey={stripeConfig.publishable_key}
-                        onSuccess={handleStripeSuccess}
-                        onError={handleStripeError}
-                        total={finalTotal}
-                        isLoading={isLoading}
-                        setIsLoading={setIsLoading}
-                      />
+                  {/* ─── Card: Installments + Stripe Elements (unified) ─── */}
+                  {formData.paymentMethod === 'card' && !stripePixData && (
+                    <div className="rounded-xl border bg-background p-5 space-y-4 animate-fade-in">
+                      {/* Installment selector */}
+                      <div>
+                        <Label className="text-sm font-medium mb-1.5 block">Parcelas</Label>
+                        <Select value={String(selectedInstallments)} onValueChange={(val) => setSelectedInstallments(Number(val))}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {installmentOptions.map(opt => (
+                              <SelectItem key={opt.value} value={String(opt.value)}>{opt.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Stripe card fields (shown inline, no second phase) */}
+                      {stripeClientSecret && isStripeActive && stripeConfig?.publishable_key ? (
+                        <StripePaymentForm
+                          clientSecret={stripeClientSecret}
+                          publishableKey={stripeConfig.publishable_key}
+                          onSuccess={handleStripeSuccess}
+                          onError={handleStripeError}
+                          total={displayTotal}
+                          isLoading={isLoading}
+                          setIsLoading={setIsLoading}
+                        />
+                      ) : !isStripeActive ? (
+                        /* Appmax card fields */
+                        <div className="space-y-3">
+                          <div>
+                            <Label htmlFor="cardNumber">Número do cartão *</Label>
+                            <Input id="cardNumber" name="cardNumber" value={formData.cardNumber} onChange={handleMaskedChange} placeholder="0000 0000 0000 0000" maxLength={19} autoComplete="cc-number" />
+                          </div>
+                          <div>
+                            <Label htmlFor="cardHolder">Nome impresso no cartão *</Label>
+                            <Input id="cardHolder" name="cardHolder" value={formData.cardHolder} onChange={handleMaskedChange} placeholder="NOME COMO ESTÁ NO CARTÃO" autoComplete="cc-name" className="uppercase" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label htmlFor="cardExpiry">Validade *</Label>
+                              <Input id="cardExpiry" name="cardExpiry" value={formData.cardExpiry} onChange={handleMaskedChange} placeholder="MM/AA" maxLength={5} autoComplete="cc-exp" />
+                            </div>
+                            <div>
+                              <Label htmlFor="cardCvv">CVV *</Label>
+                              <Input id="cardCvv" name="cardCvv" type="password" value={formData.cardCvv} onChange={handleMaskedChange} placeholder="000" maxLength={4} autoComplete="cc-csc" />
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : !stripePixData ? (
+                  )}
+
+                  {/* Submit button (only when not showing Stripe Elements or PIX waiting) */}
+                  {!stripePixData && !(stripeClientSecret && isStripeActive) && (
                     <Button
                       onClick={handleSubmit}
-                      className="w-full"
+                      className="w-full text-base"
                       size="lg"
                       disabled={isLoading || isSubmitted}
                       id="btn-checkout-finalize"
@@ -1174,11 +1175,11 @@ export default function Checkout() {
                         `Finalizar Pedido — ${formatPrice(displayTotal)}`
                       )}
                     </Button>
-                  ) : null}
+                  )}
 
-                  {/* IMPROVEMENT #5: Payment error details */}
+                  {/* Payment error */}
                   {paymentError && (
-                    <div id="checkout-payment-error" className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg space-y-2">
+                    <div id="checkout-payment-error" className="p-4 bg-destructive/10 border border-destructive/30 rounded-xl space-y-2 animate-fade-in">
                       <p className="font-medium text-destructive text-sm">❌ {paymentError.message}</p>
                       <p className="text-sm text-muted-foreground">{paymentError.suggestion}</p>
                       <div className="flex gap-2 pt-1">
