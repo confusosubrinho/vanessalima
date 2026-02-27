@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
 
   // --- SOMENTE AMBIENTE DE TESTE: excluir pedido, restaurar estoque, registrar em order_events ---
   if (action === "delete_order_test") {
-    const orderId = body?.order_id as string | undefined;
+    const orderId = (body as Record<string, unknown>)?.order_id as string | undefined;
     if (!orderId) {
       return new Response(JSON.stringify({ error: "order_id obrigatório" }), {
         status: 400,
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
         deleted_at: new Date().toISOString(),
         reason: "modo teste",
       },
-    }).catch(() => {});
+    }).then(() => {}).catch(() => {});
     return new Response(
       JSON.stringify({ ok: true, action: "delete_order_test", order_number: order.order_number }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

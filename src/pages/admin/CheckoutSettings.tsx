@@ -26,12 +26,12 @@ function StripeCheckoutToggle({
   queryClient,
   toast,
 }: {
-  providers: { id: string; provider: string; display_name: string; is_active: boolean; config: Record<string, unknown> }[] | undefined;
+  providers: { id: string; provider: string; display_name: string; is_active: boolean; config: unknown }[] | undefined;
   queryClient: ReturnType<typeof useQueryClient>;
   toast: ReturnType<typeof useToast>["toast"];
 }) {
   const stripeProvider = providers?.find((p) => p.provider === "stripe");
-  const stripeConfig = (stripeProvider?.config || {}) as Record<string, unknown>;
+  const stripeConfig = (stripeProvider?.config as Record<string, unknown>) || {};
   const [showStripeKey, setShowStripeKey] = useState(false);
   const [stripeKeyForm, setStripeKeyForm] = useState((stripeConfig.publishable_key as string) || "");
   const [savingStripe, setSavingStripe] = useState(false);
