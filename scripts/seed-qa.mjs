@@ -1,7 +1,9 @@
 /**
- * Seed QA: garante 1 categoria, 1 produto ativo com 1 variante (estoque >= 10) para E2E.
+ * Seed QA: garante 1 categoria, 1 produto ativo com 1 variante (estoque >= 10) e 1 usuário admin para E2E.
  * Uso: SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/seed-qa.mjs
  * Ou: npm run seed:qa (carrega .env se existir)
+ *
+ * Admin E2E: credenciais padrão qa-admin@example.com / qa-admin-e2e-secure (ou E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD).
  */
 import { createClient } from '@supabase/supabase-js';
 
@@ -17,8 +19,53 @@ const supabase = createClient(url, key);
 
 const CATEGORY_SLUG = 'qa-e2e-cat';
 const PRODUCT_SLUG = 'qa-prod-e2e';
+const E2E_ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'qa-admin@example.com';
+const E2E_ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'qa-admin-e2e-secure';
+
+async function ensureAdminUser() {
+  const { data: existing } = await supabase.from('user_roles').select('user_id').eq('role', 'admin').limit(1).maybeSingle();
+  if (existing?.user_id) {
+    const { data: usr } = await supabase.auth.admin.getUserById(existing.user_id);
+    if (usr?.user?.email === E2E_ADMIN_EMAIL) {
+      console.log('Admin E2E já existe:', E2E_ADMIN_EMAIL);
+      return;
+    }
+  }
+
+  const { data: authData, error: createError } = await supabase.auth.admin.createUser({
+    email: E2E_ADMIN_EMAIL,
+    password: E2E_ADMIN_PASSWORD,
+    email_confirm: true,
+  });
+
+  if (createError) {
+    if (createError.message?.includes('already been registered') || createError.message?.includes('already registered')) {
+      const { data: list } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const user = list?.users?.find((u) => u.email === E2E_ADMIN_EMAIL);
+      if (user) {
+        const { error: roleErr } = await supabase.from('user_roles').upsert(
+          { user_id: user.id, role: 'admin' },
+          { onConflict: 'user_id,role' }
+        );
+        if (roleErr) console.error('Erro ao inserir user_roles admin:', roleErr.message);
+        else console.log('Admin E2E: user_roles inserido para', E2E_ADMIN_EMAIL);
+        return;
+      }
+    }
+    console.error('Erro ao criar admin E2E:', createError.message);
+    return;
+  }
+
+  if (authData?.user?.id) {
+    const { error: roleErr } = await supabase.from('user_roles').insert({ user_id: authData.user.id, role: 'admin' });
+    if (roleErr) console.error('Erro ao inserir user_roles admin:', roleErr.message);
+    else console.log('Admin E2E criado:', E2E_ADMIN_EMAIL);
+  }
+}
 
 async function run() {
+  await ensureAdminUser();
+
   let categoryId = (await supabase.from('categories').select('id').eq('slug', CATEGORY_SLUG).maybeSingle()).data?.id;
   if (!categoryId) {
     const { data: inserted, error } = await supabase.from('categories').insert({

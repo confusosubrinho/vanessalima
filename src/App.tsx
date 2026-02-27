@@ -77,6 +77,7 @@ const Notifications = lazy(() => import("./pages/admin/Notifications"));
 const Reviews = lazy(() => import("./pages/admin/Reviews"));
 const Team = lazy(() => import("./pages/admin/Team"));
 const CheckoutSettings = lazy(() => import("./pages/admin/CheckoutSettings"));
+const CommerceHealth = lazy(() => import("./pages/admin/CommerceHealth"));
 const CheckoutStart = lazy(() => import("./pages/CheckoutStart"));
 const CheckoutReturn = lazy(() => import("./pages/CheckoutReturn"));
 
@@ -213,6 +214,7 @@ const App = () => {
               <Route path="avaliacoes" element={<Reviews />} />
                 <Route path="equipe" element={<Team />} />
                 <Route path="checkout-transparente" element={<CheckoutSettings />} />
+                <Route path="commerce-health" element={<CommerceHealth />} />
               </Route>
               <Route path="/admin/integrations/appmax/callback" element={<AppmaxCallback />} />
               

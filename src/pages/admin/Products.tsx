@@ -94,7 +94,7 @@ export default function Products() {
   const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [syncingProductId, setSyncingProductId] = useState<string | null>(null);
 
-  const { data: products, isLoading } = useQuery({
+  const { data: products, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-products'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -683,7 +683,15 @@ export default function Products() {
       </p>
 
       {/* Product list */}
-      {isMobile ? (
+      {isError ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-4">
+          <p className="text-destructive">Erro ao carregar produtos. Verifique sua conexão.</p>
+          <Button variant="outline" onClick={() => refetch()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Tentar novamente
+          </Button>
+        </div>
+      ) : isMobile ? (
         <div className="space-y-2">
           {isLoading ? (
             <p className="text-center py-8 text-muted-foreground">Carregando...</p>

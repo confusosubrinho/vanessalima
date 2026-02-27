@@ -55,7 +55,7 @@ function luhnCheck(num: string): boolean {
 
 export default function Checkout() {
   const navigate = useNavigate();
-  const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon, removeCoupon } = useCart();
+  const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState<Step>('identification');
   const [isLoading, setIsLoading] = useState(false);
@@ -65,7 +65,7 @@ export default function Checkout() {
   const [emailError, setEmailError] = useState('');
   const [selectedInstallments, setSelectedInstallments] = useState(1);
   const [customerIp, setCustomerIp] = useState('0.0.0.0');
-  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
+  const idempotencyKeyRef = useRef<string>(cartId);
   const submitInProgressRef = useRef(false);
 
   // Stripe state
@@ -303,15 +303,22 @@ export default function Checkout() {
     try {
       const { data: session } = await supabase.auth.getSession();
       const userId = session?.session?.user?.id || null;
-      const idempotencyKey = idempotencyKeyRef.current;
+      const idempotencyKey = cartId;
 
       const { data: existingOrder } = await supabase
         .from('orders')
-        .select('id, order_number')
+        .select('id, order_number, status')
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
 
       if (existingOrder) {
+        if (['pending', 'processing'].includes(existingOrder.status)) {
+          toast({
+            title: 'Checkout já iniciado em outra aba',
+            description: 'Redirecionando para o pedido em andamento.',
+            variant: 'default',
+          });
+        }
         setIsSubmitted(true);
         navigate(`/pedido-confirmado/${existingOrder.id}`, {
           state: { orderId: existingOrder.id, orderNumber: existingOrder.order_number },
@@ -332,12 +339,13 @@ export default function Checkout() {
         orderTotal = finalTotal;
       }
 
-      // 1. Create order
+      // 1. Create order (cart_id enforces one active checkout per cart in DB)
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
           order_number: 'TEMP',
           user_id: userId,
+          cart_id: cartId,
           subtotal: subtotal,
           shipping_cost: shippingCost,
           discount_amount: discount,
@@ -359,7 +367,29 @@ export default function Checkout() {
         .select()
         .single();
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        if (orderError.code === '23505' && orderError.message?.includes('cart_id')) {
+          const { data: existingByCart } = await supabase
+            .from('orders')
+            .select('id, order_number')
+            .eq('cart_id', cartId)
+            .limit(1)
+            .maybeSingle();
+          if (existingByCart) {
+            toast({
+              title: 'Checkout já iniciado em outra aba',
+              description: 'Redirecionando para o pedido em andamento.',
+              variant: 'default',
+            });
+            navigate(`/pedido-confirmado/${existingByCart.id}`, {
+              state: { orderId: existingByCart.id, orderNumber: existingByCart.order_number },
+              replace: true,
+            });
+            return;
+          }
+        }
+        throw orderError;
+      }
 
       // 2. Insert order items
       const orderItems = items.map(item => ({

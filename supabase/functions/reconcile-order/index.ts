@@ -21,6 +21,14 @@ Deno.serve(async (req) => {
     });
   }
 
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized", message: "Use Authorization: Bearer <service_role_key> or admin token" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   const correlationId = req.headers.get("x-correlation-id") || crypto.randomUUID();
   console.log(`[${correlationId}] reconcile_order called`);
 

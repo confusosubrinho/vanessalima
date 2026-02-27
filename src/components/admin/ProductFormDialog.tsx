@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { z } from 'zod';
 import { ProductChangeLog } from './ProductChangeLog';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateNetProfit } from '@/lib/pricingEngine';
+import { logAudit, generateCorrelationId } from '@/lib/auditLogger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Check, Save, Wand2 } from 'lucide-react';
@@ -108,6 +110,40 @@ const initialFormData: ProductFormData = {
   seo_keywords: '',
 };
 
+/** Validação Zod para o formulário de produto (FASE 4). */
+const productFormSchema = z.object({
+  name: z.string().min(1, 'Nome do produto é obrigatório'),
+  slug: z.string().optional(),
+  description: z.string().optional(),
+  base_price: z.string().min(1, 'Preço base é obrigatório').refine(
+    (v) => !Number.isNaN(parseFloat(v)) && parseFloat(v) >= 0,
+    'Preço base deve ser um número maior ou igual a zero'
+  ),
+  sale_price: z.string().optional(),
+  cost: z.string().optional(),
+  category_id: z.string().optional(),
+  sku: z.string().optional(),
+  is_active: z.boolean(),
+  is_featured: z.boolean(),
+  is_new: z.boolean(),
+  weight: z.string().optional(),
+  width: z.string().optional(),
+  height: z.string().optional(),
+  depth: z.string().optional(),
+  gtin: z.string().optional(),
+  mpn: z.string().optional(),
+  brand: z.string().optional(),
+  condition: z.string().optional(),
+  google_product_category: z.string().optional(),
+  age_group: z.string().optional(),
+  gender: z.string().optional(),
+  material: z.string().optional(),
+  pattern: z.string().optional(),
+  seo_title: z.string().optional(),
+  seo_description: z.string().optional(),
+  seo_keywords: z.string().optional(),
+});
+
 const STEPS_BASE = [
   { key: 'basic', label: 'Básico' },
   { key: 'media', label: 'Mídia' },
@@ -131,6 +167,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
   const [buyTogetherSearch, setBuyTogetherSearch] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const [activeTab, setActiveTab] = useState('basic');
+  const submitLockRef = useRef(false);
 
   const { data: allProducts } = useQuery({
     queryKey: ['admin-all-products'],
@@ -271,6 +308,7 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
 
   const saveMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
+      const correlationId = generateCorrelationId();
       const productData = {
         name: data.name,
         slug: data.slug || data.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
@@ -389,6 +427,14 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
           }
         }
 
+      await logAudit({
+        action: editingProduct ? 'update' : 'create',
+        resourceType: 'product',
+        resourceId: String(productId),
+        resourceName: data.name,
+        correlationId,
+      });
+
       return productId;
     },
     onSuccess: () => {
@@ -399,10 +445,23 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
     onError: (error: any) => {
       toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
     },
+    onSettled: () => {
+      submitLockRef.current = false;
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    const parsed = productFormSchema.safeParse(formData);
+    if (!parsed.success) {
+      const first = parsed.error.flatten().fieldErrors;
+      const msg = first.name?.[0] ?? first.base_price?.[0] ?? parsed.error.message;
+      toast({ title: 'Verifique o formulário', description: msg, variant: 'destructive' });
+      submitLockRef.current = false;
+      return;
+    }
     saveMutation.mutate(formData);
   };
 

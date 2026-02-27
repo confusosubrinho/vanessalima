@@ -192,9 +192,8 @@ test.describe('Checkout e confirmação', () => {
 
     const ids = [orderId1, orderId2].filter(Boolean);
     const unique = [...new Set(ids)];
-    expect(unique.length).toBeLessThanOrEqual(2);
+    expect(unique.length).toBe(1);
     expect(unique.length).toBeGreaterThanOrEqual(1);
-
     await ctx2.close();
   });
 });

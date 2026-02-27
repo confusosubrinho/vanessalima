@@ -58,8 +58,24 @@ function safeSetItem(key: string, value: string): void {
   }
 }
 
+const CART_ID_KEY = 'cart_id';
+
+function getOrCreateCartId(): string {
+  try {
+    let id = localStorage.getItem(CART_ID_KEY);
+    if (!id || id.length < 10) {
+      id = crypto.randomUUID();
+      localStorage.setItem(CART_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
  interface CartContextType {
    items: CartItem[];
+   cartId: string;
    addItem: (product: Product, variant: ProductVariant, quantity?: number) => void;
    removeItem: (variantId: string) => void;
    updateQuantity: (variantId: string, quantity: number) => void;
@@ -83,6 +99,7 @@ function safeSetItem(key: string, value: string): void {
  
  export function CartProvider({ children }: { children: ReactNode }) {
    const [items, setItems] = useState<CartItem[]>(() => safeParseCart());
+   const [cartId] = useState<string>(() => getOrCreateCartId());
  
    const [isCartOpen, setIsCartOpen] = useState(false);
    const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(() => safeParseCoupon());
@@ -197,6 +214,7 @@ function safeSetItem(key: string, value: string): void {
    return (
      <CartContext.Provider value={{
        items,
+       cartId,
        addItem,
        removeItem,
        updateQuantity,

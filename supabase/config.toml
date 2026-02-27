@@ -77,3 +77,9 @@ verify_jwt = false
 
 [functions.reconcile-order]
 verify_jwt = false
+
+[functions.release-expired-reservations]
+verify_jwt = false
+
+[functions.admin-commerce-action]
+verify_jwt = false

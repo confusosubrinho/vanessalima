@@ -177,6 +177,12 @@ Deno.serve(async (req) => {
       // Tolerance check
       const tolerance = Math.max(0.10, serverTotal * 0.01);
       if (Math.abs(serverTotal - amount) > tolerance) {
+        await supabase.from("error_logs").insert({
+          error_type: "price_divergence",
+          error_message: "Valor do pedido divergente (create_payment_intent)",
+          error_context: { order_id, client_amount: amount, server_total: serverTotal },
+          severity: "warning",
+        });
         return jsonRes({ error: "Valor do pedido divergente. Recarregue a página." }, 400);
       }
 

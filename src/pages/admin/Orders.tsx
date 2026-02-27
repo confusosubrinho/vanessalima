@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { Order } from '@/types/database';
+import { logAudit, generateCorrelationId } from '@/lib/auditLogger';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -96,6 +97,7 @@ export default function Orders() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' }) => {
+      const correlationId = generateCorrelationId();
       if (status === 'cancelled') {
         const { data, error } = await supabase.rpc('cancel_order_return_stock' as any, { p_order_id: id });
         if (error) throw error;
@@ -103,6 +105,7 @@ export default function Orders() {
           const msg = (data as { message?: string }).message || 'Não foi possível cancelar o pedido.';
           throw new Error(msg);
         }
+        await logAudit({ action: 'update', resourceType: 'order', resourceId: id, resourceName: 'cancelled', newValues: { status: 'cancelled' }, correlationId });
         return;
       }
       const { error } = await supabase
@@ -110,6 +113,7 @@ export default function Orders() {
         .update({ status })
         .eq('id', id);
       if (error) throw error;
+      await logAudit({ action: 'update', resourceType: 'order', resourceId: id, resourceName: status, newValues: { status }, correlationId });
     },
     onSuccess: (_, { status }) => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
@@ -429,6 +433,7 @@ export default function Orders() {
                     onValueChange={(value) => {
                       updateStatusMutation.mutate({ id: order.id, status: value as any });
                     }}
+                    disabled={updateStatusMutation.isPending && updateStatusMutation.variables?.id === order.id}
                   >
                     <SelectTrigger className="w-[110px] h-7 text-[10px]" onClick={(e) => e.stopPropagation()}>
                       <SelectValue />
@@ -490,6 +495,7 @@ export default function Orders() {
                       <Select
                         value={order.status}
                         onValueChange={(value) => updateStatusMutation.mutate({ id: order.id, status: value as any })}
+                        disabled={updateStatusMutation.isPending && updateStatusMutation.variables?.id === order.id}
                       >
                         <SelectTrigger className="w-[140px]">
                           <Badge className={statusColors[order.status]}>

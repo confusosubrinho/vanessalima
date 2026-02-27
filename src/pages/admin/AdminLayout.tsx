@@ -19,6 +19,7 @@ import {
   Moon,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { 
@@ -47,6 +48,8 @@ import { useStoreSettings } from '@/hooks/useProducts';
 import { useAdminRole } from '@/hooks/useAdminRole';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { hasPermission } from '@/lib/permissions';
+
+import { AdminAuthProvider, useAdminAuthProviderValue, useAdminSessionExpired } from '@/contexts/AdminAuthContext';
 
 const SetupWizard = lazy(() => import('@/components/admin/SetupWizard').then(m => ({ default: m.SetupWizard })));
 import { NotificationBell } from '@/components/admin/NotificationBell';
@@ -116,6 +119,7 @@ const allMenuItems: MenuItem[] = [
       { title: 'Notificações', url: '/admin/notificacoes' },
       { title: 'Equipe & Acessos', url: '/admin/equipe', permission: 'team.read' },
       { title: 'Sistema & Logs', url: '/admin/sistema', permission: 'settings.read' },
+      { title: 'Commerce Health', url: '/admin/commerce-health', permission: 'settings.read' },
       { title: 'Código Externo', url: '/admin/configuracoes/codigo', permission: 'settings.read' },
       { title: 'Manual de Conversões', url: '/admin/configuracoes/conversoes', permission: 'settings.read' },
       { title: 'Central de Ajuda', url: '/admin/ajuda' },
@@ -162,6 +166,7 @@ function AdminSidebar() {
   const navigate = useNavigate();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
+  const onSessionExpired = useAdminSessionExpired();
   const [openGroups, setOpenGroups] = useState<string[]>([]);
   const { data: storeSettings } = useStoreSettings();
   const logoSrc = storeSettings?.header_logo_url || storeSettings?.logo_url || logoFallback;
@@ -185,9 +190,8 @@ function AdminSidebar() {
     );
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/admin/login');
+  const handleLogout = () => {
+    onSessionExpired();
   };
 
   const isActiveRoute = (url?: string) => {
@@ -309,9 +313,9 @@ function MobileMenuSheet() {
   const isActiveRoute = (url?: string) => url ? location.pathname === url : false;
   const isGroupActive = (children?: { url: string }[]) => children?.some(c => location.pathname === c.url) ?? false;
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/admin/login');
+  const onSessionExpired = useAdminSessionExpired();
+  const handleLogout = () => {
+    onSessionExpired();
   };
 
   return (
@@ -462,6 +466,7 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const onSessionExpired = useAdminAuthProviderValue();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const { isDark, toggle: toggleDark } = useDarkMode();
@@ -484,22 +489,26 @@ export default function AdminLayout() {
   useEffect(() => {
     checkAdmin();
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') onSessionExpired('Sessão encerrada em outro dispositivo ou aba.');
+    });
+
     let timeoutId: ReturnType<typeof setTimeout>;
     const resetTimer = () => {
       clearTimeout(timeoutId);
-      timeoutId = setTimeout(async () => {
-        await supabase.auth.signOut();
-        navigate('/admin/login');
+      timeoutId = setTimeout(() => {
+        onSessionExpired('Sessão expirada por inatividade.');
       }, ADMIN_SESSION_TIMEOUT_MS);
     };
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
     events.forEach(e => window.addEventListener(e, resetTimer));
     resetTimer();
     return () => {
+      subscription?.unsubscribe?.();
       clearTimeout(timeoutId);
       events.forEach(e => window.removeEventListener(e, resetTimer));
     };
-  }, []);
+  }, [onSessionExpired]);
 
   const checkAdmin = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -554,58 +563,62 @@ export default function AdminLayout() {
   // Mobile layout: top header + content + bottom tab bar
   if (isMobile) {
     return (
-      <div className={isDark ? 'dark' : ''}>
-        {wizardOverlay}
-        <GlobalSearch />
-        <div className="min-h-screen flex flex-col bg-background text-foreground">
-          <header className="sticky top-0 z-40 h-12 border-b bg-background flex items-center px-3 gap-2">
-            <MobileMenuSheet />
-            <h1 className="text-sm font-semibold flex-1 truncate">{getPageTitle(location.pathname)}</h1>
-            <DarkModeToggle isDark={isDark} toggle={toggleDark} />
-            <NotificationBell />
-            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
-              <Link to="/" target="_blank">
-                <Store className="h-3.5 w-3.5 mr-1" />
-                Loja
-              </Link>
-            </Button>
-          </header>
-          <main className="flex-1 p-3 pb-20 overflow-x-hidden">
-            <Outlet />
-          </main>
-          <MobileBottomBar />
+      <AdminAuthProvider onSessionExpired={onSessionExpired}>
+        <div className={isDark ? 'dark' : ''}>
+          {wizardOverlay}
+          <GlobalSearch />
+          <div className="min-h-screen flex flex-col bg-background text-foreground">
+            <header className="sticky top-0 z-40 h-12 border-b bg-background flex items-center px-3 gap-2">
+              <MobileMenuSheet />
+              <h1 className="text-sm font-semibold flex-1 truncate">{getPageTitle(location.pathname)}</h1>
+              <DarkModeToggle isDark={isDark} toggle={toggleDark} />
+              <NotificationBell />
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" asChild>
+                <Link to="/" target="_blank">
+                  <Store className="h-3.5 w-3.5 mr-1" />
+                  Loja
+                </Link>
+              </Button>
+            </header>
+            <main className="flex-1 p-3 pb-20 overflow-x-hidden">
+              <Outlet />
+            </main>
+            <MobileBottomBar />
+          </div>
         </div>
-      </div>
+      </AdminAuthProvider>
     );
   }
 
   // Desktop layout: sidebar + content
   return (
-    <div className={isDark ? 'dark' : ''}>
-      {wizardOverlay}
-      <GlobalSearch />
-      <SidebarProvider>
-        <div className="min-h-screen flex w-full bg-background text-foreground">
-          <AdminSidebar />
-          <div className="flex-1 flex flex-col">
-            <header className="h-14 border-b bg-background flex items-center px-4 gap-4">
-              <SidebarTrigger />
-              <SearchButton onClick={() => {
-                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
-              }} />
-              <div className="flex-1" />
-              <DarkModeToggle isDark={isDark} toggle={toggleDark} />
-              <NotificationBell />
-              <Button variant="outline" size="sm" asChild>
-                <Link to="/" target="_blank">Ver Loja</Link>
-              </Button>
-            </header>
-            <main className="flex-1 p-6 bg-background overflow-auto">
-              <Outlet />
-            </main>
+    <AdminAuthProvider onSessionExpired={onSessionExpired}>
+      <div className={isDark ? 'dark' : ''}>
+        {wizardOverlay}
+        <GlobalSearch />
+        <SidebarProvider>
+          <div className="min-h-screen flex w-full bg-background text-foreground">
+            <AdminSidebar />
+            <div className="flex-1 flex flex-col">
+              <header className="h-14 border-b bg-background flex items-center px-4 gap-4">
+                <SidebarTrigger />
+                <SearchButton onClick={() => {
+                  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+                }} />
+                <div className="flex-1" />
+                <DarkModeToggle isDark={isDark} toggle={toggleDark} />
+                <NotificationBell />
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/" target="_blank">Ver Loja</Link>
+                </Button>
+              </header>
+              <main className="flex-1 p-6 bg-background overflow-auto">
+                <Outlet />
+              </main>
+            </div>
           </div>
-        </div>
-      </SidebarProvider>
-    </div>
+        </SidebarProvider>
+      </div>
+    </AdminAuthProvider>
   );
 }
