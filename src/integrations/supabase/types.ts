@@ -1865,6 +1865,7 @@ export type Database = {
           shipping_state: string
           shipping_zip: string
           status: Database["public"]["Enums"]["order_status"]
+          stripe_charge_id: string | null
           subtotal: number
           total_amount: number
           tracking_code: string | null
@@ -1907,6 +1908,7 @@ export type Database = {
           shipping_state: string
           shipping_zip: string
           status?: Database["public"]["Enums"]["order_status"]
+          stripe_charge_id?: string | null
           subtotal: number
           total_amount: number
           tracking_code?: string | null
@@ -1949,6 +1951,7 @@ export type Database = {
           shipping_state?: string
           shipping_zip?: string
           status?: Database["public"]["Enums"]["order_status"]
+          stripe_charge_id?: string | null
           subtotal?: number
           total_amount?: number
           tracking_code?: string | null
@@ -2993,6 +2996,33 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_webhook_events: {
+        Row: {
+          created_at: string
+          event_id: string
+          event_type: string
+          id: string
+          payload: Json | null
+          processed: boolean
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          event_type: string
+          id?: string
+          payload?: Json | null
+          processed?: boolean
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          event_type?: string
+          id?: string
+          payload?: Json | null
+          processed?: boolean
+        }
+        Relationships: []
+      }
       traffic_sessions: {
         Row: {
           created_at: string
@@ -3260,6 +3290,10 @@ export type Database = {
         | "shipped"
         | "delivered"
         | "cancelled"
+        | "paid"
+        | "failed"
+        | "refunded"
+        | "disputed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3395,6 +3429,10 @@ export const Constants = {
         "shipped",
         "delivered",
         "cancelled",
+        "paid",
+        "failed",
+        "refunded",
+        "disputed",
       ],
     },
   },
