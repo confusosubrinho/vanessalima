@@ -369,8 +369,8 @@ export default function Checkout() {
 
       if (orderError) {
         if (orderError.code === '23505' && orderError.message?.includes('cart_id')) {
-          const { data: existingByCart } = await supabase
-            .from('orders')
+          const { data: existingByCart } = await (supabase
+            .from('orders') as any)
             .select('id, order_number')
             .eq('cart_id', cartId)
             .limit(1)

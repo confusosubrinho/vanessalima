@@ -239,7 +239,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const productData = variantData.products as { id: string; category_id: string | null; base_price: number; sale_price: number | null; is_active: boolean };
+        const productData = variantData.products as unknown as { id: string; category_id: string | null; base_price: number; sale_price: number | null; is_active: boolean };
         if (!productData?.is_active) {
           priceErrors.push(`Produto "${product.name}" não está mais disponível`);
           continue;
