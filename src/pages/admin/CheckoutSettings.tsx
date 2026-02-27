@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +19,185 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+// Stripe: toggle para usar checkout Stripe (cartão + PIX no site) ou checkout próprio (Appmax)
+function StripeCheckoutToggle({
+  providers,
+  queryClient,
+  toast,
+}: {
+  providers: { id: string; provider: string; display_name: string; is_active: boolean; config: Record<string, unknown> }[] | undefined;
+  queryClient: ReturnType<typeof useQueryClient>;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  const stripeProvider = providers?.find((p) => p.provider === "stripe");
+  const stripeConfig = (stripeProvider?.config || {}) as Record<string, unknown>;
+  const [showStripeKey, setShowStripeKey] = useState(false);
+  const [stripeKeyForm, setStripeKeyForm] = useState((stripeConfig.publishable_key as string) || "");
+  const [savingStripe, setSavingStripe] = useState(false);
+
+  useEffect(() => {
+    const key = (stripeConfig.publishable_key as string) || "";
+    if (key) setStripeKeyForm(key);
+  }, [stripeProvider?.id, stripeConfig.publishable_key]);
+
+  const updateStripeActive = useMutation({
+    mutationFn: async (isActive: boolean) => {
+      if (!stripeProvider?.id) throw new Error("Stripe não configurado");
+      const { error } = await supabase
+        .from("integrations_checkout_providers")
+        .update({ is_active: isActive })
+        .eq("id", stripeProvider.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, isActive) => {
+      queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
+      toast({
+        title: isActive ? "Checkout Stripe ativado" : "Checkout Stripe desativado",
+        description: isActive
+          ? "Cartão e PIX serão processados pela Stripe na página de checkout."
+          : "O checkout usará o gateway configurado (ex.: Appmax).",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao atualizar", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const saveStripeConfig = useMutation({
+    mutationFn: async () => {
+      const config = { ...stripeConfig, publishable_key: stripeKeyForm.trim() || null };
+      if (stripeProvider?.id) {
+        const { error } = await supabase
+          .from("integrations_checkout_providers")
+          .update({ config })
+          .eq("id", stripeProvider.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("integrations_checkout_providers").insert({
+          provider: "stripe",
+          display_name: "Stripe (checkout no site)",
+          is_active: false,
+          config,
+        });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
+      toast({ title: "Configuração Stripe salva!" });
+      setSavingStripe(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
+      setSavingStripe(false);
+    },
+  });
+
+  const handleStripeKeySave = () => {
+    setSavingStripe(true);
+    saveStripeConfig.mutate();
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              Stripe (checkout no seu site)
+            </CardTitle>
+            <CardDescription>
+              Cartão e PIX processados pela Stripe na própria página de checkout, sem redirecionamento. Desative para usar outro gateway (ex.: Appmax).
+            </CardDescription>
+          </div>
+          {stripeProvider && (
+            <Badge variant={stripeProvider.is_active ? "default" : "secondary"}>
+              {stripeProvider.is_active ? "Ativo" : "Inativo"}
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {stripeProvider ? (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Usar checkout Stripe</Label>
+                <p className="text-xs text-muted-foreground">
+                  Quando ativo: cartão e PIX na página de checkout (Stripe). Quando inativo: checkout do site com o gateway configurado (ex.: Appmax).
+                </p>
+              </div>
+              <Switch
+                checked={stripeProvider.is_active}
+                onCheckedChange={(checked) => updateStripeActive.mutate(checked)}
+                disabled={updateStripeActive.isPending}
+              />
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <Label className="text-xs">Chave pública (publishable key)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type={showStripeKey ? "text" : "password"}
+                  value={stripeKeyForm}
+                  onChange={(e) => setStripeKeyForm(e.target.value)}
+                  placeholder="pk_live_... ou pk_test_..."
+                  className="font-mono text-xs"
+                />
+                <Button variant="ghost" size="icon" onClick={() => setShowStripeKey(!showStripeKey)}>
+                  {showStripeKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+                <Button size="sm" onClick={handleStripeKeySave} disabled={savingStripe}>
+                  {savingStripe ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  <span className="ml-1">Salvar chave</span>
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Obtenha em{" "}
+                <a
+                  href="https://dashboard.stripe.com/apikeys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline"
+                >
+                  Stripe Dashboard → API Keys
+                </a>
+                . A chave secreta (sk_) deve estar nas variáveis de ambiente da Edge Function (STRIPE_SECRET_KEY).
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Nenhum provider Stripe configurado. Adicione a chave pública para poder ativar o checkout Stripe.
+            </p>
+            <div className="space-y-2">
+              <Label className="text-xs">Chave pública Stripe (publishable key)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type={showStripeKey ? "text" : "password"}
+                  value={stripeKeyForm}
+                  onChange={(e) => setStripeKeyForm(e.target.value)}
+                  placeholder="pk_live_... ou pk_test_..."
+                  className="font-mono text-xs flex-1"
+                />
+                <Button variant="ghost" size="icon" onClick={() => setShowStripeKey(!showStripeKey)}>
+                  {showStripeKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              <Button onClick={handleStripeKeySave} disabled={savingStripe || !stripeKeyForm.trim()}>
+                {savingStripe ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plug className="h-4 w-4 mr-2" />}
+                Adicionar Stripe
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function CheckoutSettings() {
   const { toast } = useToast();
@@ -448,6 +627,9 @@ export default function CheckoutSettings() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Stripe: ativar/desativar checkout Stripe (cartão + PIX no seu site) */}
+      <StripeCheckoutToggle providers={providers} queryClient={queryClient} toast={toast} />
 
       {/* Provider Card: Yampi */}
       <Card>

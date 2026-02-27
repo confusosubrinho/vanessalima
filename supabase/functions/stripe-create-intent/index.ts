@@ -156,6 +156,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
       const orderShippingCost = Number(orderRow?.shipping_cost ?? 0);
 
+      const serverBaseTotal = serverSubtotal - validatedDiscount + orderShippingCost;
       let serverTotal: number;
       const isPixMethod = payment_method === "pix";
 
@@ -171,7 +172,26 @@ Deno.serve(async (req) => {
           serverTotal = (serverSubtotal - validatedDiscount) * (1 - pixDiscountPct) + orderShippingCost;
         }
       } else {
-        serverTotal = serverSubtotal - validatedDiscount + orderShippingCost;
+        // Cartão: aplicar juros quando parcelas > sem juros
+        const effectiveInterestFree =
+          serverSubtotalSale > 0 && pricingConfig?.interest_free_installments_sale != null
+            ? Number(pricingConfig.interest_free_installments_sale)
+            : Number(pricingConfig?.interest_free_installments || 3);
+        const n = Math.max(1, Number(installments) || 1);
+
+        if (n > effectiveInterestFree) {
+          const monthlyRatePct =
+            pricingConfig?.interest_mode === "by_installment"
+              ? Number((pricingConfig?.monthly_rate_by_installment || {})[String(n)] ?? pricingConfig?.monthly_rate_fixed ?? 0)
+              : Number(pricingConfig?.monthly_rate_fixed || 0);
+          const monthlyRate = monthlyRatePct / 100;
+          const i = monthlyRate;
+          const rawInstallment = (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1) * serverBaseTotal;
+          const totalExact = rawInstallment * n;
+          serverTotal = Math.round(totalExact * 100) / 100;
+        } else {
+          serverTotal = serverBaseTotal;
+        }
       }
 
       // Tolerance check
@@ -287,11 +307,31 @@ Deno.serve(async (req) => {
         total_amount: authorizedAmount,
       }).eq("id", order_id);
 
-      return jsonRes({
+      const res: Record<string, unknown> = {
         client_secret: paymentIntent.client_secret,
         payment_intent_id: paymentIntent.id,
         amount: authorizedAmount,
-      });
+      };
+
+      // PIX: return QR and copy-paste for display on checkout (no redirect)
+      if (isPixMethod) {
+        let pixAction = paymentIntent.next_action?.type === "pix_display_qr_code"
+          ? (paymentIntent.next_action.pix_display_qr_code as { image_url_png?: string; image_url_svg?: string; expires_at?: number; data?: string } | undefined)
+          : undefined;
+        if (!pixAction) {
+          const retrieved = await stripe.paymentIntents.retrieve(paymentIntent.id);
+          if (retrieved.next_action?.type === "pix_display_qr_code") {
+            pixAction = retrieved.next_action.pix_display_qr_code as { image_url_png?: string; image_url_svg?: string; expires_at?: number; data?: string };
+          }
+        }
+        if (pixAction) {
+          res.pix_qr_url = pixAction.image_url_png ?? pixAction.image_url_svg ?? null;
+          res.pix_emv = pixAction.data ?? null;
+          res.pix_expires_at = pixAction.expires_at ?? null;
+        }
+      }
+
+      return jsonRes(res);
     }
 
     return jsonRes({ error: "Ação inválida" }, 400);

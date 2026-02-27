@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { loadStripe, type Stripe as StripeType, type StripeElementsOptions } from '@stripe/stripe-js';
 import { Elements, CardNumberElement, CardExpiryElement, CardCvcElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -48,6 +48,22 @@ function CheckoutForm({ clientSecret, onSuccess, onError, total, isLoading, setI
 }) {
   const stripe = useStripe();
   const elements = useElements();
+  const handledReturnRef = useRef(false);
+
+  // Retorno de 3DS: Stripe redireciona para return_url com #payment_intent_client_secret e redirect_status no fragment
+  useEffect(() => {
+    if (!stripe || !clientSecret || handledReturnRef.current) return;
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const piSecret = params.get('payment_intent_client_secret');
+    const status = params.get('redirect_status');
+    if (!piSecret || piSecret !== clientSecret) return;
+    handledReturnRef.current = true;
+    if (status === 'succeeded' || status === 'processing') {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      onSuccess();
+    }
+  }, [stripe, clientSecret, onSuccess]);
 
   const handleSubmit = async () => {
     if (!stripe || !elements || isLoading) return;
@@ -61,18 +77,25 @@ function CheckoutForm({ clientSecret, onSuccess, onError, total, isLoading, setI
         return;
       }
 
+      const returnUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}${window.location.pathname}${window.location.search || ''}`
+        : undefined;
+
       const { error, paymentIntent } = await stripe.confirmCardPayment(
         clientSecret,
         {
           payment_method: {
             card: cardNumber,
           },
+          return_url: returnUrl,
         }
       );
 
       if (error) {
         onError(error.message || 'Erro no pagamento');
       } else if (paymentIntent?.status === 'succeeded') {
+        onSuccess();
+      } else if (paymentIntent?.status === 'processing') {
         onSuccess();
       } else {
         onError('Pagamento não confirmado. Tente novamente.');
@@ -118,6 +141,7 @@ function CheckoutForm({ clientSecret, onSuccess, onError, total, isLoading, setI
       </div>
 
       <Button
+        id="btn-stripe-pay"
         onClick={handleSubmit}
         className="w-full"
         size="lg"

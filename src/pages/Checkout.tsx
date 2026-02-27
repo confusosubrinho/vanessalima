@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Check, ChevronRight, Truck, CreditCard, MapPin, ArrowLeft, Plus, Minus, Loader2 } from 'lucide-react';
+import { Check, ChevronRight, Truck, CreditCard, MapPin, ArrowLeft, Plus, Minus, Loader2, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/integrations/supabase/types';
 import { validateCPF, formatCPF, formatCEP, formatPhone, lookupCEP } from '@/lib/validators';
 import { ShippingCalculator } from '@/components/store/ShippingCalculator';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
@@ -35,6 +37,28 @@ function formatExpiry(value: string) {
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// PIX countdown: expiresAt = Unix seconds
+function usePixExpiryCountdown(expiresAt: number | null) {
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (expiresAt == null) return;
+    const tick = () => {
+      const remaining = Math.max(0, expiresAt - Math.floor(Date.now() / 1000));
+      setTimeLeft(remaining);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [expiresAt]);
+  if (timeLeft === null) return { display: null, isExpired: false };
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
+  return {
+    display: `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+    isExpired: timeLeft === 0,
+  };
 }
 
 // IMPROVEMENT #4: Luhn algorithm
@@ -73,6 +97,14 @@ export default function Checkout() {
   const isStripeActive = stripeConfig?.is_active && !!stripeConfig?.publishable_key;
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
   const [stripeOrderId, setStripeOrderId] = useState<string | null>(null);
+  /** PIX on checkout: QR + code displayed on same page, no redirect */
+  const [stripePixData, setStripePixData] = useState<{
+    pixQrUrl: string;
+    pixEmv: string | null;
+    pixExpiresAt: number;
+    orderNumber: string;
+    guestToken: string;
+  } | null>(null);
 
   // IMPROVEMENT #5: Payment error state
   const [paymentError, setPaymentError] = useState<{
@@ -165,6 +197,8 @@ export default function Checkout() {
   ];
 
   const currentStepIndex = steps.findIndex(s => s.id === currentStep);
+
+  const pixExpiryCountdown = usePixExpiryCountdown(stripePixData?.pixExpiresAt ?? null);
 
   const handleMaskedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -277,7 +311,14 @@ export default function Checkout() {
     value: opt.n,
     label: opt.label,
     total: opt.total,
+    hasInterest: opt.hasInterest,
   }));
+
+  // Total exibido no resumo e no botão: com juros quando cartão e parcelas > sem juros
+  const selectedOption = installmentOptions.find(o => o.value === selectedInstallments);
+  const hasInstallmentInterest = formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree && selectedOption?.hasInterest;
+  const displayTotal = hasInstallmentInterest && selectedOption ? selectedOption.total : finalTotal;
+  const installmentInterestAmount = hasInstallmentInterest && selectedOption ? selectedOption.total - total : 0;
 
   const handleSubmit = async () => {
     if (isLoading || isSubmitted || submitInProgressRef.current) return;
@@ -437,7 +478,21 @@ export default function Checkout() {
           throw new Error(intentResult?.error || intentError?.message || 'Erro ao criar pagamento Stripe');
         }
 
-        // Show Stripe Elements
+        if (formData.paymentMethod === 'pix' && intentResult.pix_qr_url) {
+          // PIX: show QR/code on checkout page, no redirect
+          setStripePixData({
+            pixQrUrl: intentResult.pix_qr_url,
+            pixEmv: intentResult.pix_emv ?? null,
+            pixExpiresAt: intentResult.pix_expires_at ?? Math.floor(Date.now() / 1000) + 30 * 60,
+            orderNumber: order.order_number,
+            guestToken,
+          });
+          setStripeOrderId(order.id);
+          setIsLoading(false);
+          return;
+        }
+
+        // Card: show Stripe Elements
         setStripeClientSecret(intentResult.client_secret);
         setStripeOrderId(order.id);
         setIsLoading(false);
@@ -594,6 +649,64 @@ export default function Checkout() {
       setFormData(prev => ({ ...prev, cep: shippingZip }));
     }
   }, [shippingZip]);
+
+  // PIX on checkout: poll or Realtime until payment confirmed, then redirect
+  useEffect(() => {
+    if (!stripePixData || !stripeOrderId) return;
+
+    const orderId = stripeOrderId;
+    const guestToken = stripePixData.guestToken;
+
+    const onStatusUpdate = (status: string) => {
+      if (status === 'processing' || status === 'succeeded') {
+        clearCart();
+        setStripePixData(null);
+        setStripeOrderId(null);
+        navigate(`/pedido-confirmado/${orderId}`, {
+          state: {
+            orderId,
+            orderNumber: stripePixData.orderNumber,
+            paymentMethod: 'pix',
+            customerEmail: formData.email,
+            guestToken: stripePixData.guestToken,
+          },
+          replace: true,
+        });
+      }
+    };
+
+    if (guestToken) {
+      const guestClient = createClient<Database>(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        { global: { headers: { 'x-order-token': guestToken } } }
+      );
+      const poll = async () => {
+        const { data } = await guestClient
+          .from('orders')
+          .select('status')
+          .eq('id', orderId)
+          .single();
+        if (data?.status) onStatusUpdate(data.status);
+      };
+      poll();
+      const interval = setInterval(poll, 5000);
+      return () => clearInterval(interval);
+    }
+
+    const channel = supabase
+      .channel(`checkout-pix-${orderId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
+        (payload) => {
+          const newStatus = payload.new?.status;
+          if (newStatus) onStatusUpdate(newStatus);
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [stripePixData, stripeOrderId, clearCart, navigate, formData.email]);
 
   if (items.length === 0 && !isSubmitted) {
     return (
@@ -953,8 +1066,83 @@ export default function Checkout() {
                     </div>
                   )}
 
+                  {/* PIX on checkout: QR + code on same page, no redirect */}
+                  {stripePixData && (
+                    <div id="checkout-pix-waiting" className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
+                      <h3 className="font-medium flex items-center gap-2">
+                        <CreditCard className="h-4 w-4" />
+                        Aguardando pagamento PIX
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Escaneie o QR Code ou copie o código PIX para pagar. Não feche esta página.
+                      </p>
+                      {stripePixData.pixQrUrl && !pixExpiryCountdown.isExpired && (
+                        <>
+                          <img
+                            src={stripePixData.pixQrUrl}
+                            alt="QR Code PIX"
+                            className="mx-auto w-48 h-48"
+                            id="checkout-pix-qr"
+                          />
+                          {pixExpiryCountdown.display && (
+                            <p className="text-center text-sm font-mono font-medium text-muted-foreground">
+                              ⏱ Expira em {pixExpiryCountdown.display}
+                            </p>
+                          )}
+                          {stripePixData.pixEmv && (
+                            <div className="space-y-2">
+                              <p className="text-xs text-muted-foreground break-all bg-muted/50 p-2 rounded text-left font-mono">
+                                {stripePixData.pixEmv}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (stripePixData.pixEmv) {
+                                    navigator.clipboard.writeText(stripePixData.pixEmv);
+                                    toast({ title: 'Código PIX copiado!' });
+                                  }
+                                }}
+                                className="gap-2"
+                                id="btn-checkout-pix-copy"
+                              >
+                                <Copy className="h-3 w-3" />
+                                Copiar código PIX
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {pixExpiryCountdown.isExpired && (
+                        <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-center">
+                          <p className="font-medium text-destructive">QR Code PIX expirado</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            O código expirou. Volte ao passo de pagamento e escolha PIX novamente para gerar um novo código.
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-3"
+                            onClick={() => {
+                              setStripePixData(null);
+                              setStripeOrderId(null);
+                            }}
+                          >
+                            Gerar novo PIX
+                          </Button>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Aguardando confirmação do pagamento...
+                      </div>
+                    </div>
+                  )}
+
                   {/* Stripe Elements flow (after PaymentIntent created) */}
-                  {stripeClientSecret && isStripeActive && stripeConfig?.publishable_key ? (
+                  {!stripePixData && stripeClientSecret && isStripeActive && stripeConfig?.publishable_key ? (
                     <div className="space-y-4 p-4 border rounded-lg bg-muted/30 animate-fade-in">
                       <h3 className="font-medium flex items-center gap-2">
                         <CreditCard className="h-4 w-4" />
@@ -970,7 +1158,7 @@ export default function Checkout() {
                         setIsLoading={setIsLoading}
                       />
                     </div>
-                  ) : (
+                  ) : !stripePixData ? (
                     <Button
                       onClick={handleSubmit}
                       className="w-full"
@@ -983,17 +1171,14 @@ export default function Checkout() {
                       ) : isLoading ? (
                         <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processando pagamento...</>
                       ) : (
-                        `Finalizar Pedido — ${formatPrice(formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree
-                          ? (installmentOptions.find(o => o.value === selectedInstallments)?.total || finalTotal)
-                          : finalTotal
-                        )}`
+                        `Finalizar Pedido — ${formatPrice(displayTotal)}`
                       )}
                     </Button>
-                  )}
+                  ) : null}
 
                   {/* IMPROVEMENT #5: Payment error details */}
                   {paymentError && (
-                    <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg space-y-2">
+                    <div id="checkout-payment-error" className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg space-y-2">
                       <p className="font-medium text-destructive text-sm">❌ {paymentError.message}</p>
                       <p className="text-sm text-muted-foreground">{paymentError.suggestion}</p>
                       <div className="flex gap-2 pt-1">
@@ -1096,13 +1281,20 @@ export default function Checkout() {
                 {formData.paymentMethod === 'pix' && pixDiscountAmount > 0 && (
                   <div className="flex justify-between text-sm text-primary">
                     <span>Desconto PIX ({pc.pix_discount}%)</span>
+                    <span>-{formatPrice(pixDiscountAmount)}</span>
+                  </div>
+                )}
+                {hasInstallmentInterest && installmentInterestAmount > 0 && (
+                  <div className="flex justify-between text-sm text-amber-600">
+                    <span>Juros (parcelamento)</span>
+                    <span>+{formatPrice(installmentInterestAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">
                   <span>Total</span>
-                  {/* IMPROVEMENT #3: Animate total change */}
-                  <span key={finalTotal.toFixed(2)} className="animate-fade-in">
-                    {formatPrice(finalTotal)}
+                  {/* Total com juros quando cartão parcelado; senão finalTotal (PIX/cartão 1x) */}
+                  <span key={displayTotal.toFixed(2)} className="animate-fade-in">
+                    {formatPrice(displayTotal)}
                   </span>
                 </div>
               </div>
