@@ -373,7 +373,19 @@ Deno.serve(async (req) => {
     return jsonOk({ ok: true, event, action: "ignored" });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";
-    console.error("yampi-webhook error:", msg);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("yampi-webhook error:", msg, stack);
+
+    // P3: Log failure body to app_logs for debugging
+    try {
+      await supabase.from("app_logs").insert({
+        level: "error",
+        scope: "yampi-webhook",
+        message: `Webhook processing failed: ${msg}`,
+        meta: { stack, url: req.url },
+      });
+    } catch (_) { /* best-effort */ }
+
     return jsonOk({ ok: false, error: msg });
   }
 });
