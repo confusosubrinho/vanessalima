@@ -129,7 +129,64 @@ Deno.serve(async (req) => {
     );
   }
 
-  return new Response(JSON.stringify({ error: "Ação inválida. Use action: release_reservations ou reconcile_stale" }), {
+  // --- SOMENTE AMBIENTE DE TESTE: excluir pedido, restaurar estoque, registrar em order_events ---
+  if (action === "delete_order_test") {
+    const orderId = body?.order_id as string | undefined;
+    if (!orderId) {
+      return new Response(JSON.stringify({ error: "order_id obrigatório" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, order_number, status")
+      .eq("id", orderId)
+      .single();
+    if (orderError || !order) {
+      return new Response(JSON.stringify({ error: "Pedido não encontrado." }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: items } = await supabase
+      .from("order_items")
+      .select("product_variant_id, quantity")
+      .eq("order_id", orderId);
+    for (const item of items || []) {
+      if (item.product_variant_id && item.quantity) {
+        await supabase.rpc("increment_stock", { p_variant_id: item.product_variant_id, p_quantity: item.quantity });
+      }
+    }
+    await supabase.from("payments").delete().eq("order_id", orderId);
+    await supabase.from("order_items").delete().eq("order_id", orderId);
+    const { error: deleteOrderError } = await supabase.from("orders").delete().eq("id", orderId);
+    if (deleteOrderError) {
+      return new Response(JSON.stringify({ error: deleteOrderError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const eventHash = `admin_delete_test_${orderId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    await supabase.from("order_events").insert({
+      order_id: null,
+      event_type: "admin_delete_test",
+      event_hash: eventHash,
+      payload: {
+        order_id: orderId,
+        order_number: order.order_number,
+        status_before: order.status,
+        deleted_at: new Date().toISOString(),
+        reason: "modo teste",
+      },
+    }).catch(() => {});
+    return new Response(
+      JSON.stringify({ ok: true, action: "delete_order_test", order_number: order.order_number }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  return new Response(JSON.stringify({ error: "Ação inválida. Use action: release_reservations, reconcile_stale ou delete_order_test" }), {
     status: 400,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

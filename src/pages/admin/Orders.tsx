@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal, ShoppingCart } from 'lucide-react';
+import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal, ShoppingCart, Trash2 } from 'lucide-react';
 import { HelpHint } from '@/components/HelpHint';
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -23,6 +23,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -67,6 +77,7 @@ export default function Orders() {
   const [maxValue, setMaxValue] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const isMobile = useIsMobile();
+  const [orderToDeleteTest, setOrderToDeleteTest] = useState<Order | null>(null);
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['admin-orders'],
@@ -121,6 +132,33 @@ export default function Orders() {
     },
     onError: (err: Error) => {
       toast({ title: err.message || 'Erro ao atualizar status', variant: 'destructive' });
+    },
+  });
+
+  const deleteOrderTestMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const { data, error } = await supabase.functions.invoke('admin-commerce-action', {
+        body: { action: 'delete_order_test', order_id: orderId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { ok: boolean; order_number: string };
+    },
+    onSuccess: (data, orderId) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      setOrderToDeleteTest(null);
+      setSelectedOrder(null);
+      logAudit({
+        action: 'delete',
+        resourceType: 'order',
+        resourceId: orderId,
+        resourceName: data?.order_number ?? orderId,
+        newValues: { reason: 'modo teste', stock_restored: true },
+      });
+      toast({ title: 'Pedido excluído (modo teste)', description: 'Estoque devolvido. Use apenas em ambiente de teste.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' });
     },
   });
 
@@ -621,10 +659,47 @@ export default function Orders() {
                   <p className="text-muted-foreground">{selectedOrder.notes}</p>
                 </div>
               )}
+              <div className="pt-4 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                  onClick={() => setOrderToDeleteTest(selectedOrder)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir pedido (modo teste)
+                </Button>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Restaura estoque e remove o pedido. Use apenas em ambiente de teste.
+                </p>
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!orderToDeleteTest} onOpenChange={() => !deleteOrderTestMutation.isPending && setOrderToDeleteTest(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir pedido (modo teste)</AlertDialogTitle>
+            <AlertDialogDescription>
+              O pedido <strong>{orderToDeleteTest?.order_number}</strong> será excluído permanentemente. O estoque dos itens será devolvido.
+              Esta ação é irreversível. Use apenas em ambiente de teste.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteOrderTestMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => orderToDeleteTest && deleteOrderTestMutation.mutate(orderToDeleteTest.id)}
+              disabled={deleteOrderTestMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteOrderTestMutation.isPending ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
