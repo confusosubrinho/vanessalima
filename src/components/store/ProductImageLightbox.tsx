@@ -172,7 +172,10 @@ export function ProductImageLightbox({
       </Button>
 
       {/* Zoom controls */}
-      <div className="absolute top-4 left-4 z-10 flex items-center gap-1 rounded-lg bg-white/10 p-1 pointer-events-auto">
+      <div
+        className="absolute top-4 left-4 z-10 flex items-center gap-1 rounded-lg bg-white/10 p-1 pointer-events-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <Button
           variant="ghost"
           size="icon"
@@ -244,7 +247,7 @@ export function ProductImageLightbox({
           {currentImage && (
             <div
               ref={imageWrapperRef}
-              className="pointer-events-auto w-full h-full flex items-center justify-center overflow-hidden"
+              className="pointer-events-auto max-w-full max-h-full flex items-center justify-center overflow-hidden"
               style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
               onWheel={handleWheel}
               onPointerDown={onPointerDown}
