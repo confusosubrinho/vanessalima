@@ -33,6 +33,10 @@ export function ProductImageLightbox({
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, translateX: 0, translateY: 0 });
+  const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
+  const imageWrapperRef = useRef<HTMLDivElement>(null);
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
 
   const currentImage = images[index];
   const hasMultiple = images.length > 1;
@@ -51,6 +55,41 @@ export function ProductImageLightbox({
 
   useEffect(() => {
     if (!open) return;
+    const el = imageWrapperRef.current;
+    if (!el) return;
+    const getDistance = (touches: TouchList) =>
+      Math.hypot(touches[1].clientX - touches[0].clientX, touches[1].clientY - touches[0].clientY);
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchStart.current = { distance: getDistance(e.touches), scale: scaleRef.current };
+        setIsDragging(false);
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchStart.current) {
+        e.preventDefault();
+        const distance = getDistance(e.touches);
+        const ratio = distance / pinchStart.current.distance;
+        const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinchStart.current.scale * ratio));
+        setScale(nextScale);
+        if (nextScale <= MIN_SCALE) setTranslate({ x: 0, y: 0 });
+      }
+    };
+    const clearPinch = () => { pinchStart.current = null; };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', clearPinch, { passive: true });
+    el.addEventListener('touchcancel', clearPinch, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', clearPinch);
+      el.removeEventListener('touchcancel', clearPinch);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowLeft' && hasMultiple) setIndex((i) => Math.max(0, i - 1));
@@ -62,10 +101,9 @@ export function ProductImageLightbox({
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        setScale((s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, e.deltaY > 0 ? s - SCALE_STEP : s + SCALE_STEP)));
-      }
+      e.preventDefault();
+      e.stopPropagation();
+      setScale((s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, e.deltaY > 0 ? s - SCALE_STEP : s + SCALE_STEP)));
     },
     []
   );
@@ -196,34 +234,38 @@ export function ProductImageLightbox({
         </>
       )}
 
-      {/* Image container - pointer-events-none so backdrop receives clicks; only image has pointer-events-auto */}
+      {/* Image container: area 100% viewport so image always fits (object-contain) */}
       <div
         className="absolute inset-0 flex items-center justify-center overflow-hidden p-4 pointer-events-none"
         onWheel={handleWheel}
       >
-        {currentImage && (
-          <div
-            className="pointer-events-auto max-w-full max-h-full flex items-center justify-center"
-            style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
-            onWheel={handleWheel}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerLeave={onPointerUp}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={resolveImageUrl(currentImage.url)}
-              alt={currentImage.alt_text || `${productName} - ${index + 1}`}
-              className="max-w-full max-h-full object-contain select-none"
-              style={{
-                transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
-                touchAction: 'none',
-              }}
-              draggable={false}
-            />
-          </div>
-        )}
+        {/* Box that takes 100% of viewport area so content is bounded */}
+        <div className="w-full h-full min-w-0 min-h-0 flex items-center justify-center pointer-events-none">
+          {currentImage && (
+            <div
+              ref={imageWrapperRef}
+              className="pointer-events-auto w-full h-full flex items-center justify-center overflow-hidden"
+              style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+              onWheel={handleWheel}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerLeave={onPointerUp}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={resolveImageUrl(currentImage.url)}
+                alt={currentImage.alt_text || `${productName} - ${index + 1}`}
+                className="max-w-full max-h-full object-contain select-none"
+                style={{
+                  transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
+                  touchAction: 'none',
+                }}
+                draggable={false}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Counter */}
