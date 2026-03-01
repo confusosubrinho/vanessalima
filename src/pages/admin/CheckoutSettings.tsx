@@ -267,7 +267,7 @@ function GatewaysToggleCard({
         const nextProvider = isActive ? "yampi" : (stripeProvider?.is_active ? "stripe" : "appmax");
         await supabase
           .from("integrations_checkout")
-          .update({ provider: nextProvider })
+          .update({ provider: nextProvider, enabled: true })
           .eq("id", checkoutConfig.id);
       }
     },

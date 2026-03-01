@@ -47,19 +47,25 @@ export default function CheckoutStart() {
         }
 
         if (flow === "gateway" && provider === "yampi") {
+          const att = getAttribution();
           const payload = {
             items: items.map((i) => ({ variant_id: i.variant.id, quantity: i.quantity })),
-            attribution: getAttribution(),
+            attribution: att ? { utm_source: att.utm_source, utm_medium: att.utm_medium, utm_campaign: att.utm_campaign, utm_term: att.utm_term, utm_content: att.utm_content, referrer: att.referrer, landing_page: att.landing_page } : undefined,
           };
-          const { data: yampiData } = await supabase.functions.invoke("checkout-create-session", { body: payload });
-          const redirectUrl = yampiData?.redirect_url;
-          if (redirectUrl) {
+          const { data: yampiData, error: yampiInvokeError } = await supabase.functions.invoke("checkout-create-session", { body: payload });
+          if (yampiInvokeError) throw new Error(yampiInvokeError.message || "Erro ao conectar com o servidor de checkout");
+          const errMsg = yampiData?.error as string | undefined;
+          if (errMsg && !yampiData?.redirect_url) throw new Error(errMsg);
+          const redirectUrl = yampiData?.redirect_url as string | undefined;
+          if (redirectUrl && redirectUrl.startsWith("http")) {
             clearCart();
             window.location.href = redirectUrl;
-          } else if (yampiData?.fallback && yampiData?.redirect_url) {
-            navigate(yampiData.redirect_url, { replace: true });
+          } else if (yampiData?.fallback && redirectUrl) {
+            navigate(redirectUrl, { replace: true });
+          } else if (errMsg) {
+            throw new Error(errMsg);
           } else {
-            throw new Error(yampiData?.error || "Erro ao gerar link de pagamento Yampi");
+            throw new Error("Erro ao gerar link de pagamento Yampi. Tente o checkout da loja.");
           }
           return;
         }

@@ -66,17 +66,30 @@ export function BannerCarousel() {
           return (
             <div key={banner.id} className="w-full flex-shrink-0">
               <a href={banner.cta_url || '#'} className="block">
-                <img
-                  src={imageUrl}
-                  alt={banner.title || 'Banner promocional'}
-                  className="w-full h-auto object-cover"
-                  style={{ maxHeight: isMobile ? '400px' : '500px' }}
-                  loading={index === 0 ? 'eager' : 'lazy'}
-                  fetchPriority={index === 0 ? 'high' : 'auto'}
-                  decoding={index === 0 ? 'sync' : 'async'}
-                  width={isMobile ? 768 : 1440}
-                  height={isMobile ? 400 : 500}
-                />
+                {/* Mobile: padrão 600x800 (3:4), imagem inteira sem cortar */}
+                <span
+                  className={
+                    isMobile
+                      ? 'block w-full aspect-[3/4] bg-muted flex items-center justify-center overflow-hidden'
+                      : 'block w-full'
+                  }
+                >
+                  <img
+                    src={imageUrl}
+                    alt={banner.title || 'Banner promocional'}
+                    className={
+                      isMobile
+                        ? 'w-full h-full object-contain'
+                        : 'w-full h-auto object-cover'
+                    }
+                    style={isMobile ? undefined : { maxHeight: '500px' }}
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    fetchPriority={index === 0 ? 'high' : 'auto'}
+                    decoding={index === 0 ? 'sync' : 'async'}
+                    width={isMobile ? 600 : 1440}
+                    height={isMobile ? 800 : 500}
+                  />
+                </span>
               </a>
             </div>
           );
