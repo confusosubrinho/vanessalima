@@ -79,12 +79,12 @@ export function BannerCarousel() {
                     src={imageUrl}
                     alt={banner.title || 'Banner promocional'}
                     className="w-full h-full object-contain"
-                    style={isMobile ? { maxHeight: '550px' } : { maxHeight: '500px' }}
+                    style={isMobile ? { maxHeight: '550px' } : { maxHeight: '600px' }}
                     loading={index === 0 ? 'eager' : 'lazy'}
                     fetchPriority={index === 0 ? 'high' : 'auto'}
                     decoding={index === 0 ? 'sync' : 'async'}
                     width={isMobile ? 750 : 1440}
-                    height={isMobile ? 900 : 500}
+                    height={isMobile ? 900 : 600}
                   />
                 </span>
               </a>
