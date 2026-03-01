@@ -188,7 +188,6 @@ export function useProduct(slug: string) {
   export function useBanners() {
     return useQuery({
       queryKey: ['banners'],
-      refetchOnMount: false,
       queryFn: async () => {
         const { data, error } = await supabase
           .from('banners')
@@ -199,7 +198,8 @@ export function useProduct(slug: string) {
         if (error) throw error;
         return data as Banner[];
       },
-      staleTime: 1000 * 60 * 5,
+      staleTime: 1000 * 60 * 2,
+      refetchOnWindowFocus: true,
     });
   }
  

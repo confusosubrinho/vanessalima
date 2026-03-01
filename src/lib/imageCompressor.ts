@@ -9,6 +9,112 @@ const MAX_DIMENSION = 1600;
 const QUALITY = 0.8;
 const THUMB_SIZE = 400;
 
+/** Retorna as dimensões da imagem (width, height). */
+export function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  if (!file.type.startsWith('image/')) {
+    return Promise.resolve({ width: 0, height: 0 });
+  }
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => reject(new Error('Falha ao carregar imagem'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Opções para processamento de imagem de banner */
+export interface ProcessBannerImageOptions {
+  /** Redimensionar para caber em width x height (ex: 1920x600). Não redimensiona se não informado. */
+  maxWidth?: number;
+  maxHeight?: number;
+  /** Qualidade de compressão 0–1 (ex: 0.8 = 80%). */
+  quality: number;
+  /** Converter para WebP. Se false, mantém JPEG/PNG com compressão. */
+  convertToWebP: boolean;
+}
+
+/**
+ * Processa imagem de banner: opcionalmente redimensiona (caber em maxWidth×maxHeight),
+ * comprime com a qualidade indicada e opcionalmente converte para WebP.
+ */
+export async function processBannerImage(
+  file: File,
+  options: ProcessBannerImageOptions
+): Promise<{ file: File; fileName: string }> {
+  if (!file.type.startsWith('image/')) {
+    const ext = file.name.split('.').pop() || '';
+    const baseName = file.name.replace(`.${ext}`, '');
+    const fileName = `${baseName}-${Date.now()}.${ext}`;
+    return { file, fileName };
+  }
+
+  const { maxWidth, maxHeight, quality, convertToWebP } = options;
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      img.onload = () => {
+        let w = img.naturalWidth;
+        let h = img.naturalHeight;
+
+        if (maxWidth != null && maxHeight != null && (w > maxWidth || h > maxHeight)) {
+          const scale = Math.min(maxWidth / w, maxHeight / h);
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const mimeType = convertToWebP ? 'image/webp' : (file.type === 'image/png' ? 'image/png' : 'image/jpeg');
+        const extension = convertToWebP ? 'webp' : (file.type === 'image/png' ? 'png' : 'jpg');
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Failed to process image'));
+              return;
+            }
+
+            const originalName = file.name.replace(/\.[^/.]+$/, '');
+            const dimensionPattern = /\d+x\d+/;
+            const hasDimension = dimensionPattern.test(originalName);
+            const baseName = hasDimension ? originalName : `${originalName}-${w}x${h}`;
+            const fileName = `${baseName}-${Date.now()}.${extension}`;
+            const processedFile = new File([blob], fileName, { type: mimeType });
+
+            resolve({ file: processedFile, fileName });
+          },
+          mimeType,
+          convertToWebP ? quality : Math.max(0.7, quality)
+        );
+      };
+
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = e.target?.result as string;
+    };
+
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function compressImageToWebP(
   file: File,
   options?: { maxDimension?: number; quality?: number }

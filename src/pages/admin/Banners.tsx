@@ -13,8 +13,10 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { useToast } from '@/hooks/use-toast';
-import { compressImageToWebP } from '@/lib/imageCompressor';
+import { processBannerImage } from '@/lib/imageCompressor';
 import { useDragReorder } from '@/hooks/useDragReorder';
+import { BannerImageOptionsDialog } from '@/components/admin/BannerImageOptionsDialog';
+import type { BannerImageOptionsResult } from '@/components/admin/BannerImageOptionsDialog';
 
 interface Banner {
   id: string;
@@ -38,6 +40,7 @@ export default function Banners() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [uploading, setUploading] = useState<'desktop' | 'mobile' | null>(null);
+  const [pendingBannerFile, setPendingBannerFile] = useState<{ file: File; type: 'desktop' | 'mobile' } | null>(null);
 
   const [formData, setFormData] = useState({
     title: '', subtitle: '', image_url: '', mobile_image_url: '',
@@ -58,7 +61,10 @@ export default function Banners() {
       const updates = reordered.map((b, i) => supabase.from('banners').update({ display_order: i }).eq('id', b.id));
       await Promise.all(updates);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-banners'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-banners'] });
+      queryClient.invalidateQueries({ queryKey: ['banners'] });
+    },
   });
 
   const { getDragProps } = useDragReorder({
@@ -72,8 +78,8 @@ export default function Banners() {
   const handleFileUpload = useCallback(async (file: File, type: 'desktop' | 'mobile') => {
     setUploading(type);
     try {
-      const { file: compressedFile, fileName } = await compressImageToWebP(file);
-      const { error: uploadError } = await supabase.storage.from('product-media').upload(fileName, compressedFile);
+      const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('product-media').upload(fileName, file);
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('product-media').getPublicUrl(fileName);
       if (type === 'desktop') setFormData(prev => ({ ...prev, image_url: publicUrl }));
@@ -83,6 +89,39 @@ export default function Banners() {
       toast({ title: 'Erro ao enviar', description: error.message, variant: 'destructive' });
     } finally { setUploading(null); }
   }, [toast]);
+
+  const handleFileSelect = useCallback((file: File, type: 'desktop' | 'mobile') => {
+    if (!file.type.startsWith('image/')) {
+      handleFileUpload(file, type);
+      return;
+    }
+    setPendingBannerFile({ file, type });
+  }, [handleFileUpload]);
+
+  const handleBannerOptionsConfirm = useCallback(async (options: BannerImageOptionsResult) => {
+    if (!pendingBannerFile) return;
+    const { file, type } = pendingBannerFile;
+    setPendingBannerFile(null);
+    setUploading(type);
+    try {
+      const processOpts = {
+        quality: options.quality,
+        convertToWebP: options.convertToWebP,
+        ...(options.resizeToMax && options.maxWidth != null && options.maxHeight != null
+          ? { maxWidth: options.maxWidth, maxHeight: options.maxHeight }
+          : {}),
+      };
+      const { file: processedFile, fileName } = await processBannerImage(file, processOpts);
+      const { error: uploadError } = await supabase.storage.from('product-media').upload(fileName, processedFile);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from('product-media').getPublicUrl(fileName);
+      if (type === 'desktop') setFormData(prev => ({ ...prev, image_url: publicUrl }));
+      else setFormData(prev => ({ ...prev, mobile_image_url: publicUrl }));
+      toast({ title: 'Imagem enviada!' });
+    } catch (error: any) {
+      toast({ title: 'Erro ao enviar', description: error.message, variant: 'destructive' });
+    } finally { setUploading(null); }
+  }, [pendingBannerFile, toast]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -105,6 +144,7 @@ export default function Banners() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-banners'] });
+      queryClient.invalidateQueries({ queryKey: ['banners'] });
       setIsDialogOpen(false); resetForm();
       toast({ title: editingBanner ? 'Banner atualizado!' : 'Banner criado!' });
     },
@@ -118,6 +158,7 @@ export default function Banners() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-banners'] });
+      queryClient.invalidateQueries({ queryKey: ['banners'] });
       toast({ title: 'Banner excluído!' });
     },
   });
@@ -166,7 +207,7 @@ export default function Banners() {
                       <div className="flex gap-2">
                         <Input value={formData.image_url} onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} placeholder="https://... ou faça upload" required />
                         <label className="cursor-pointer">
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'desktop')} />
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'desktop')} />
                           <Button type="button" variant="outline" asChild disabled={uploading === 'desktop'}>
                             <span><Upload className="h-4 w-4 mr-2" />{uploading === 'desktop' ? '...' : 'Upload'}</span>
                           </Button>
@@ -182,22 +223,22 @@ export default function Banners() {
                 </TabsContent>
                 <TabsContent value="mobile" className="space-y-4 mt-4">
                   <div>
-                    <Label>Imagem Mobile (600x800 recomendado)</Label>
-                    <p className="text-xs text-muted-foreground mb-2">Opcional. Se não informada, a imagem desktop será usada.</p>
+                    <Label>Imagem Mobile (750×900 recomendado)</Label>
+                    <p className="text-xs text-muted-foreground mb-2">Opcional. Se não informada, a imagem desktop será usada. O preview e o carrossel exibem a imagem por completo, sem cortar.</p>
                     <div className="space-y-3">
                       <div className="flex gap-2">
                         <Input value={formData.mobile_image_url} onChange={(e) => setFormData({ ...formData, mobile_image_url: e.target.value })} placeholder="https://... ou faça upload" />
                         <label className="cursor-pointer">
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'mobile')} />
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'mobile')} />
                           <Button type="button" variant="outline" asChild disabled={uploading === 'mobile'}>
                             <span><Upload className="h-4 w-4 mr-2" />{uploading === 'mobile' ? '...' : 'Upload'}</span>
                           </Button>
                         </label>
                       </div>
                       {formData.mobile_image_url ? (
-                        <div className="max-w-[200px] mx-auto">
-                          <AspectRatio ratio={3/4} className="bg-muted rounded-lg overflow-hidden">
-                            <img src={formData.mobile_image_url} alt="Preview Mobile" className="w-full h-full object-cover" />
+                        <div className="max-w-[280px] mx-auto">
+                          <AspectRatio ratio={750/900} className="bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+                            <img src={formData.mobile_image_url} alt="Preview Mobile" className="w-full h-full object-contain" />
                           </AspectRatio>
                         </div>
                       ) : formData.image_url && (
@@ -237,6 +278,12 @@ export default function Banners() {
             </form>
           </DialogContent>
         </Dialog>
+        <BannerImageOptionsDialog
+          open={!!pendingBannerFile}
+          file={pendingBannerFile?.file ?? null}
+          onConfirm={handleBannerOptionsConfirm}
+          onCancel={() => setPendingBannerFile(null)}
+        />
       </div>
 
       {isLoading ? (
