@@ -432,7 +432,20 @@ export default function Checkout() {
         throw orderError;
       }
 
-      // 2. Insert order items
+      // 2. Validate variant IDs exist before inserting order items
+      const variantIds = items.map(i => i.variant.id);
+      const { data: validVariants } = await supabase
+        .from('product_variants')
+        .select('id')
+        .in('id', variantIds);
+      const validIds = new Set((validVariants || []).map(v => v.id));
+      const invalidItems = items.filter(i => !validIds.has(i.variant.id));
+      if (invalidItems.length > 0) {
+        // Cancel the order we just created since items are invalid
+        await supabase.from('orders').delete().eq('id', order.id);
+        throw new Error(`Alguns produtos do carrinho não estão mais disponíveis: ${invalidItems.map(i => i.product.name).join(', ')}. Remova-os e tente novamente.`);
+      }
+
       const orderItems = items.map(item => ({
         order_id: order.id,
         product_id: item.product.id,
