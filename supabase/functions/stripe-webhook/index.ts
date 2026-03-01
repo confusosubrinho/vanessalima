@@ -373,6 +373,50 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ─── checkout.session.completed ────────────────────────────
+      case "checkout.session.completed": {
+        const session = event.data.object as any;
+        const orderId = session.metadata?.order_id;
+        const piId = typeof session.payment_intent === "string" ? session.payment_intent : null;
+
+        console.log(`🛒 checkout.session.completed: session=${session.id}, order_id=${orderId || "N/A"}`);
+
+        if (orderId) {
+          const updateData: Record<string, unknown> = {
+            customer_email: session.customer_details?.email || null,
+            last_webhook_event: "checkout.session.completed",
+            external_reference: session.id,
+          };
+
+          // Update shipping info from Stripe-collected address
+          const shipping = session.shipping_details || session.customer_details;
+          if (shipping?.address) {
+            const addr = shipping.address;
+            updateData.shipping_name = shipping.name || session.customer_details?.name || "Cliente";
+            updateData.shipping_address = [addr.line1, addr.line2].filter(Boolean).join(", ") || "N/A";
+            updateData.shipping_city = addr.city || "N/A";
+            updateData.shipping_state = addr.state || "XX";
+            updateData.shipping_zip = (addr.postal_code || "").replace(/\D/g, "") || "00000000";
+          } else if (session.customer_details?.name) {
+            updateData.shipping_name = session.customer_details.name;
+          }
+
+          if (session.customer_details?.phone) {
+            updateData.shipping_phone = session.customer_details.phone;
+          }
+
+          if (piId) {
+            updateData.transaction_id = piId;
+          }
+
+          await supabase.from("orders").update({
+            ...updateData,
+            updated_at: new Date().toISOString(),
+          }).eq("id", orderId);
+        }
+        break;
+      }
+
       default:
         console.log(`ℹ️ Unhandled event type: ${event.type}`);
         break;
