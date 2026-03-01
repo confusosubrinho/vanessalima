@@ -34,6 +34,41 @@ export default function CheckoutStart() {
 
     const startCheckout = async () => {
       try {
+        // Uma única fonte de verdade: qual fluxo está ativo (transparente vs gateway)
+        const { data: resolveData } = await supabase.functions.invoke("checkout-create-session", {
+          body: { action: "resolve" },
+        });
+        const flow = resolveData?.flow as string | undefined;
+        const provider = resolveData?.provider as string | undefined;
+
+        if (flow === "transparent" || !flow) {
+          navigate("/checkout", { replace: true });
+          return;
+        }
+
+        if (flow === "gateway" && provider === "yampi") {
+          const payload = {
+            items: items.map((i) => ({ variant_id: i.variant.id, quantity: i.quantity })),
+            attribution: getAttribution(),
+          };
+          const { data: yampiData } = await supabase.functions.invoke("checkout-create-session", { body: payload });
+          const redirectUrl = yampiData?.redirect_url;
+          if (redirectUrl) {
+            clearCart();
+            window.location.href = redirectUrl;
+          } else if (yampiData?.fallback && yampiData?.redirect_url) {
+            navigate(yampiData.redirect_url, { replace: true });
+          } else {
+            throw new Error(yampiData?.error || "Erro ao gerar link de pagamento Yampi");
+          }
+          return;
+        }
+
+        if (flow !== "gateway" || provider !== "stripe") {
+          navigate("/checkout", { replace: true });
+          return;
+        }
+
         const { data: session } = await supabase.auth.getSession();
         const userId = session?.session?.user?.id || null;
         const guestToken = userId ? null : crypto.randomUUID();

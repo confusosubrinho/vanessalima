@@ -15,7 +15,41 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const body = await req.json();
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const action = body?.action as string | undefined;
+
+    // ─── Action: resolve ─── (fonte única: qual fluxo usar — transparente vs gateway)
+    if (action === "resolve") {
+      const { data: checkoutConfig } = await supabase.from("integrations_checkout").select("*").limit(1).maybeSingle();
+      if (!checkoutConfig?.enabled) {
+        return jsonRes({ flow: "transparent", redirect_url: "/checkout" });
+      }
+      const provider = checkoutConfig.provider as string;
+      if (provider === "appmax" || provider === "native") {
+        return jsonRes({ flow: "transparent", redirect_url: "/checkout" });
+      }
+      const { data: providerRow } = await supabase
+        .from("integrations_checkout_providers")
+        .select("is_active, config")
+        .eq("provider", provider)
+        .maybeSingle();
+      if (!providerRow?.is_active) {
+        return jsonRes({ flow: "transparent", redirect_url: "/checkout" });
+      }
+      const config = (providerRow.config || {}) as Record<string, unknown>;
+      if (provider === "stripe") {
+        const checkoutMode = (config.checkout_mode as string) || "embedded";
+        if (checkoutMode === "external") {
+          return jsonRes({ flow: "gateway", provider: "stripe", checkout_mode: "external" });
+        }
+        return jsonRes({ flow: "transparent", redirect_url: "/checkout", provider: "stripe", checkout_mode: "embedded" });
+      }
+      if (provider === "yampi") {
+        return jsonRes({ flow: "gateway", provider: "yampi" });
+      }
+      return jsonRes({ flow: "transparent", redirect_url: "/checkout" });
+    }
+
     const { items, attribution } = body as {
       items: { variant_id: string; quantity: number }[];
       attribution?: { utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_term?: string; utm_content?: string; referrer?: string; landing_page?: string };
@@ -26,20 +60,25 @@ Deno.serve(async (req) => {
     }
 
     // 1. Read checkout config
-    const { data: checkoutConfig } = await supabase.from("integrations_checkout").select("*").limit(1).single();
+    const { data: checkoutConfig } = await supabase.from("integrations_checkout").select("*").limit(1).maybeSingle();
     if (!checkoutConfig?.enabled) {
       return jsonRes({ redirect_url: "/checkout", fallback: true });
     }
 
     const provider = checkoutConfig.provider;
 
-    // 2. Get provider config
+    // 2. Provider 'appmax' / 'native' = checkout na própria loja (sem config em integrations_checkout_providers)
+    if (provider === "appmax" || provider === "native") {
+      return jsonRes({ redirect_url: "/checkout" });
+    }
+
+    // 3. Get provider config (stripe, yampi, etc.)
     const { data: providerConfig } = await supabase
       .from("integrations_checkout_providers")
       .select("*")
       .eq("provider", provider)
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
     if (!providerConfig) {
       if (checkoutConfig.fallback_to_native) {

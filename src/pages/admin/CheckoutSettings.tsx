@@ -238,9 +238,10 @@ function GatewaysToggleCard({
         .eq("id", stripeProvider.id);
       if (error) throw error;
       if (checkoutConfig?.id) {
+        const nextProvider = isActive ? "stripe" : (yampiProvider?.is_active ? "yampi" : "appmax");
         await supabase
           .from("integrations_checkout")
-          .update({ provider: isActive ? "stripe" : "appmax", enabled: true })
+          .update({ provider: nextProvider, enabled: true })
           .eq("id", checkoutConfig.id);
       }
     },
@@ -262,9 +263,17 @@ function GatewaysToggleCard({
         .update({ is_active: isActive })
         .eq("id", yampiProvider.id);
       if (error) throw error;
+      if (checkoutConfig?.id) {
+        const nextProvider = isActive ? "yampi" : (stripeProvider?.is_active ? "stripe" : "appmax");
+        await supabase
+          .from("integrations_checkout")
+          .update({ provider: nextProvider })
+          .eq("id", checkoutConfig.id);
+      }
     },
     onSuccess: (_, isActive) => {
       queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["integrations-checkout"] });
       toast({ title: isActive ? "Yampi ativado" : "Yampi desativado" });
     },
     onError: (err: Error) => {
@@ -369,12 +378,13 @@ function StripeSection({
         .update({ is_active: isActive })
         .eq("id", stripeProvider.id);
       if (error) throw error;
-      // Sync main checkout config: Stripe on → stripe; Stripe off → appmax
       if (checkoutConfig?.id) {
+        const yampiProvider = providers?.find((p: any) => p.provider === "yampi");
+        const nextProvider = isActive ? "stripe" : (yampiProvider?.is_active ? "yampi" : "appmax");
         await supabase
           .from("integrations_checkout")
           .update({
-            provider: isActive ? "stripe" : "appmax",
+            provider: nextProvider,
             enabled: true,
           })
           .eq("id", checkoutConfig.id);

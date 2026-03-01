@@ -8,6 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/integrations/supabase/types';
@@ -92,9 +93,23 @@ export default function Checkout() {
   const idempotencyKeyRef = useRef<string>(cartId);
   const submitInProgressRef = useRef(false);
 
-  // Stripe state
+  // Provider ativo (fonte única: integrations_checkout) — define qual formulário mostrar
+  const { data: checkoutConfig } = useQuery({
+    queryKey: ['integrations-checkout'],
+    queryFn: async () => {
+      const { data } = await supabase.from('integrations_checkout').select('provider').limit(1).maybeSingle();
+      return data;
+    },
+  });
+  const activeProvider = checkoutConfig?.provider as string | undefined;
+
+  // Stripe state (só mostrar formulário Stripe se for o provider ativo e modo embedded)
   const { config: stripeConfig } = useStripeConfig();
-  const isStripeActive = stripeConfig?.is_active && !!stripeConfig?.publishable_key;
+  const isStripeActive =
+    activeProvider === 'stripe' &&
+    stripeConfig?.is_active === true &&
+    !!stripeConfig?.publishable_key &&
+    stripeConfig?.checkout_mode !== 'external';
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
   const [stripeOrderId, setStripeOrderId] = useState<string | null>(null);
   /** PIX on checkout: QR + code displayed on same page, no redirect */
