@@ -12,7 +12,8 @@ export function BannerCarousel() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const displayBanners = (banners || []).filter((b: any) =>
-    isMobile ? b.show_on_mobile !== false : b.show_on_desktop !== false
+    b.is_active !== false &&
+    (isMobile ? b.show_on_mobile !== false : b.show_on_desktop !== false)
   );
 
   const resetTimer = useCallback(() => {
@@ -66,28 +67,24 @@ export function BannerCarousel() {
           return (
             <div key={banner.id} className="w-full flex-shrink-0">
               <a href={banner.cta_url || '#'} className="block">
-                {/* Mobile: padrão 600x800 (3:4), imagem inteira sem cortar */}
+                {/* Mobile: max-height 550px, imagem inteira (object-contain) */}
                 <span
                   className={
                     isMobile
-                      ? 'block w-full aspect-[3/4] bg-muted flex items-center justify-center overflow-hidden'
+                      ? 'block w-full max-h-[550px] bg-muted flex items-center justify-center overflow-hidden'
                       : 'block w-full'
                   }
                 >
                   <img
                     src={imageUrl}
                     alt={banner.title || 'Banner promocional'}
-                    className={
-                      isMobile
-                        ? 'w-full h-full object-contain'
-                        : 'w-full h-auto object-cover'
-                    }
-                    style={isMobile ? undefined : { maxHeight: '500px' }}
+                    className="w-full h-full object-contain"
+                    style={isMobile ? { maxHeight: '550px' } : { maxHeight: '500px' }}
                     loading={index === 0 ? 'eager' : 'lazy'}
                     fetchPriority={index === 0 ? 'high' : 'auto'}
                     decoding={index === 0 ? 'sync' : 'async'}
-                    width={isMobile ? 600 : 1440}
-                    height={isMobile ? 800 : 500}
+                    width={isMobile ? 750 : 1440}
+                    height={isMobile ? 900 : 500}
                   />
                 </span>
               </a>
