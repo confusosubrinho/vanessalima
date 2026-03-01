@@ -336,33 +336,118 @@ Deno.serve(async (req) => {
 
     // ─── Action: create_checkout_session (external Stripe Checkout) ───
     if (action === "create_checkout_session") {
-      const { order_id, amount, customer_email, customer_name, products, success_url, cancel_url, order_access_token } = body;
+      const { order_id, amount, customer_email, customer_name, products, success_url, cancel_url, order_access_token, coupon_code, discount_amount = 0 } = body;
 
       if (!order_id || !amount || !success_url) {
         return jsonRes({ error: "order_id, amount e success_url são obrigatórios" }, 400);
       }
 
-      const lineItems = (products || []).map((p: any) => ({
-        price_data: {
-          currency: "brl",
-          product_data: { name: p.name },
-          unit_amount: Math.round(p.price * 100),
-        },
-        quantity: p.quantity,
-      }));
+      // ── Auth check ──
+      const authHeader = req.headers.get("Authorization");
+      const hasBearer = !!authHeader?.startsWith("Bearer ");
+      if (!hasBearer) {
+        if (!order_access_token) return jsonRes({ error: "Autenticação necessária" }, 401);
+        const { data: orderRow } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("id", order_id)
+          .eq("access_token", order_access_token)
+          .maybeSingle();
+        if (!orderRow) return jsonRes({ error: "Acesso negado ao pedido" }, 403);
+      }
 
-      if (lineItems.length === 0) {
+      // ── Server-side price validation ──
+      const lineItems: any[] = [];
+      const stockDecrements: { variant_id: string; quantity: number }[] = [];
+      let serverSubtotal = 0;
+
+      for (const product of (products || [])) {
+        if (!product.variant_id) continue;
+        const { data: variantData } = await supabase
+          .from("product_variants")
+          .select("id, price_modifier, sale_price, base_price, products!inner(id, base_price, sale_price, is_active, name)")
+          .eq("id", product.variant_id)
+          .single();
+
+        if (!variantData) return jsonRes({ error: `Variante ${product.variant_id} não encontrada` }, 400);
+        const productData = variantData.products as any;
+        if (!productData?.is_active) return jsonRes({ error: `Produto "${productData?.name || product.name}" indisponível` }, 400);
+
+        let realUnitPrice: number;
+        if (variantData.sale_price && Number(variantData.sale_price) > 0) {
+          realUnitPrice = Number(variantData.sale_price);
+        } else if (variantData.base_price && Number(variantData.base_price) > 0) {
+          realUnitPrice = Number(variantData.base_price);
+        } else {
+          realUnitPrice = Number(productData.sale_price || productData.base_price) + Number(variantData.price_modifier || 0);
+        }
+
+        serverSubtotal += realUnitPrice * (product.quantity || 1);
+
+        // Stock validation
+        const qty = product.quantity || 1;
+        const { data: result, error: rpcError } = await supabase.rpc("decrement_stock", {
+          p_variant_id: product.variant_id,
+          p_quantity: qty,
+        });
+        if (rpcError) {
+          for (const dec of stockDecrements) {
+            await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
+          }
+          return jsonRes({ error: `Erro de estoque: ${rpcError.message}` }, 400);
+        }
+        const stockResult = typeof result === "string" ? JSON.parse(result) : result;
+        if (!stockResult?.success) {
+          for (const dec of stockDecrements) {
+            await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
+          }
+          return jsonRes({ error: stockResult?.message || "Estoque insuficiente" }, 400);
+        }
+        stockDecrements.push({ variant_id: product.variant_id, quantity: qty });
+
         lineItems.push({
           price_data: {
             currency: "brl",
-            product_data: { name: "Pedido" },
-            unit_amount: Math.round(amount * 100),
+            product_data: { name: product.name },
+            unit_amount: Math.round(realUnitPrice * 100),
+          },
+          quantity: qty,
+        });
+      }
+
+      // ── Shipping as line item ──
+      const { data: orderRow } = await supabase.from("orders").select("shipping_cost").eq("id", order_id).maybeSingle();
+      const shippingCost = Number(orderRow?.shipping_cost ?? 0);
+      if (shippingCost > 0) {
+        lineItems.push({
+          price_data: {
+            currency: "brl",
+            product_data: { name: "Frete" },
+            unit_amount: Math.round(shippingCost * 100),
           },
           quantity: 1,
         });
       }
 
-      const session = await stripe.checkout.sessions.create({
+      // ── Coupon / discount ──
+      let validatedDiscount = 0;
+      if (coupon_code) {
+        const { data: coupon } = await supabase
+          .from("coupons")
+          .select("*")
+          .eq("code", coupon_code.toUpperCase())
+          .eq("is_active", true)
+          .maybeSingle();
+        if (coupon) {
+          validatedDiscount = (coupon.discount_type as string) === "percentage"
+            ? (serverSubtotal * Number(coupon.discount_value)) / 100
+            : Number(coupon.discount_value);
+          validatedDiscount = Math.min(serverSubtotal, Math.max(0, validatedDiscount));
+        }
+      }
+
+      // ── Build Stripe Checkout session ──
+      const sessionParams: any = {
         mode: "payment",
         customer_email: customer_email || undefined,
         line_items: lineItems,
@@ -372,13 +457,29 @@ Deno.serve(async (req) => {
         payment_intent_data: {
           metadata: { order_id, order_access_token: order_access_token || "" },
         },
-      });
+        payment_method_types: ["card", "boleto"],
+        locale: "pt-BR",
+      };
+
+      // Apply discount as Stripe coupon
+      if (validatedDiscount > 0) {
+        const stripeCoupon = await stripe.coupons.create({
+          amount_off: Math.round(validatedDiscount * 100),
+          currency: "brl",
+          duration: "once",
+          name: coupon_code || "Desconto",
+        });
+        sessionParams.discounts = [{ coupon: stripeCoupon.id }];
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionParams);
 
       await supabase.from("orders").update({
         provider: "stripe",
         gateway: "stripe",
         transaction_id: session.payment_intent as string,
         payment_method: "card",
+        total_amount: (serverSubtotal - validatedDiscount + shippingCost),
       }).eq("id", order_id);
 
       return jsonRes({ checkout_url: session.url, session_id: session.id });
