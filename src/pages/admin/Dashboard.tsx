@@ -176,7 +176,9 @@ export default function Dashboard() {
         <Icon className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent className="p-3 md:p-6 pt-0">
-        <div className="text-lg md:text-2xl font-bold truncate">{prefix}{typeof value === 'number' && prefix ? formatPrice(value) : value}</div>
+        <div className="text-lg md:text-2xl font-bold truncate">
+          {prefix === 'R$' && typeof value === 'number' ? formatPrice(value) : prefix ? `${prefix}${typeof value === 'number' ? formatPrice(value) : value}` : value}
+        </div>
         <div className={`flex items-center text-xs mt-0.5 ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
           {pct >= 0 ? <TrendingUp className="h-3 w-3 mr-0.5" /> : <TrendingDown className="h-3 w-3 mr-0.5" />}
           {pct >= 0 ? '+' : ''}{pct}% vs anterior

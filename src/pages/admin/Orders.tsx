@@ -195,6 +195,13 @@ export default function Orders() {
     cancelled: 'Cancelado',
   };
 
+  const getProviderLabel = (provider: string | null | undefined): string => {
+    if (provider === 'stripe') return 'Stripe';
+    if (provider === 'appmax') return 'Appmax';
+    if (provider === 'yampi') return 'Yampi';
+    return 'Site';
+  };
+
   // Apply filters (null-safe: order_number/shipping_name can be null)
   const searchLower = searchQuery.toLowerCase();
   let filteredOrders = orders?.filter(o =>
@@ -456,9 +463,12 @@ export default function Orders() {
               <div key={order.id} className="border rounded-lg p-3 space-y-2" onClick={() => setSelectedOrder(order)}>
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-sm">{order.order_number}</span>
-                  <Badge className={`${statusColors[order.status]} text-[10px] px-1.5 py-0.5`}>
-                    {statusLabels[order.status]}
-                  </Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[10px] px-1 py-0">{getProviderLabel((order as any).provider)}</Badge>
+                    <Badge className={`${statusColors[order.status]} text-[10px] px-1.5 py-0.5`}>
+                      {statusLabels[order.status]}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span className="truncate mr-2">{order.shipping_name}</span>
@@ -497,6 +507,7 @@ export default function Orders() {
                 <TableHead>Cliente</TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead>Valor</TableHead>
+                <TableHead>Checkout</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
@@ -504,11 +515,11 @@ export default function Orders() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell>
+                  <TableCell colSpan={7} className="text-center py-8">Carregando...</TableCell>
                 </TableRow>
               ) : filteredOrders?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="p-0">
+                  <TableCell colSpan={7} className="p-0">
                     <AdminEmptyState
                       icon={ShoppingCart}
                       title="Nenhum pedido"
@@ -529,6 +540,9 @@ export default function Orders() {
                     </TableCell>
                     <TableCell>{formatDate(order.created_at)}</TableCell>
                     <TableCell className="font-medium">{formatPrice(Number(order.total_amount))}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs font-normal">{getProviderLabel((order as any).provider)}</Badge>
+                    </TableCell>
                     <TableCell>
                       <Select
                         value={order.status}
@@ -568,16 +582,12 @@ export default function Orders() {
           </DialogHeader>
           {selectedOrder && (
             <div className="space-y-4">
-              {((selectedOrder as any).customer_email || (selectedOrder as any).provider) && (
-                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  {(selectedOrder as any).customer_email && (
-                    <span>Email: {(selectedOrder as any).customer_email}</span>
-                  )}
-                  {(selectedOrder as any).provider && (
-                    <Badge variant="outline" className="text-xs">{(selectedOrder as any).provider === 'yampi' ? 'Yampi' : 'Appmax'}</Badge>
-                  )}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                {(selectedOrder as any).customer_email && (
+                  <span>Email: {(selectedOrder as any).customer_email}</span>
+                )}
+                <Badge variant="outline" className="text-xs">{getProviderLabel((selectedOrder as any).provider)}</Badge>
+              </div>
               {orderItemsLoading ? (
                 <p className="text-sm text-muted-foreground">Carregando itens...</p>
               ) : orderItems && orderItems.length > 0 ? (

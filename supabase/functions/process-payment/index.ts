@@ -529,6 +529,7 @@ Deno.serve(async (req) => {
       if (order_id) {
         await supabase.from("orders").update({
           status: "processing",
+          provider: "appmax",
           coupon_code: coupon_code || null,
           discount_amount: validatedDiscount || discount_amount || 0,
           appmax_customer_id: String(appmaxCustomerId),

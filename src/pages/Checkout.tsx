@@ -404,6 +404,7 @@ export default function Checkout() {
           idempotency_key: idempotencyKey,
           access_token: guestToken,
           notes: null,
+          provider: isStripeActive ? 'stripe' : 'appmax',
         } as any)
         .select()
         .single();

@@ -567,7 +567,7 @@ export default function AdminLayout() {
         <div className={isDark ? 'dark' : ''}>
           {wizardOverlay}
           <GlobalSearch />
-          <div className="min-h-screen flex flex-col bg-background text-foreground">
+          <div className="min-h-screen flex flex-col bg-background text-foreground font-site">
             <header className="sticky top-0 z-40 h-12 border-b bg-background flex items-center px-3 gap-2">
               <MobileMenuSheet />
               <h1 className="text-sm font-semibold flex-1 truncate">{getPageTitle(location.pathname)}</h1>
@@ -597,7 +597,7 @@ export default function AdminLayout() {
         {wizardOverlay}
         <GlobalSearch />
         <SidebarProvider>
-          <div className="min-h-screen flex w-full bg-background text-foreground">
+          <div className="min-h-screen flex w-full bg-background text-foreground font-site">
             <AdminSidebar />
             <div className="flex-1 flex flex-col">
               <header className="h-14 border-b bg-background flex items-center px-4 gap-4">

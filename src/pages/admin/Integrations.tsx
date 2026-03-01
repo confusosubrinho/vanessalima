@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useStoreSettings } from '@/hooks/useProducts';
-import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, PackagePlus, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi, Eye, EyeOff, Save, Copy, Stethoscope, ClipboardCopy } from 'lucide-react';
+import { ExternalLink, Check, AlertCircle, Settings2, Plug, CreditCard, Package, PackagePlus, Truck, ChevronDown, ChevronUp, Plus, Trash2, MapPin, Store, Link2, Loader2, ArrowUpDown, Filter, Activity, Clock, RefreshCw, Wifi, Eye, EyeOff, Save, Copy, Stethoscope, ClipboardCopy, Upload } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -2207,8 +2207,12 @@ function StripeGatewayPanel() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [publishableKey, setPublishableKey] = useState('');
+  const [secretKey, setSecretKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [showSecretKey, setShowSecretKey] = useState(false);
+  const [syncingStripeCatalog, setSyncingStripeCatalog] = useState(false);
+  const [stripeSyncProgress, setStripeSyncProgress] = useState('');
 
   const { data: provider, isLoading } = useQuery({
     queryKey: ['stripe-provider'],
@@ -2227,6 +2231,7 @@ function StripeGatewayPanel() {
     if (provider) {
       const config = (provider.config || {}) as Record<string, string>;
       setPublishableKey(config.publishable_key || '');
+      setSecretKey(config.secret_key || '');
     }
   }, [provider]);
 
@@ -2237,11 +2242,12 @@ function StripeGatewayPanel() {
     }
     setSaving(true);
     try {
+      const existingConfig = (provider?.config || {}) as Record<string, unknown>;
       const payload = {
         provider: 'stripe',
         display_name: 'Stripe',
         is_active: true,
-        config: { publishable_key: publishableKey },
+        config: { ...existingConfig, publishable_key: publishableKey, secret_key: secretKey.trim() || undefined },
         updated_at: new Date().toISOString(),
       };
       if (provider?.id) {
@@ -2305,6 +2311,51 @@ function StripeGatewayPanel() {
     }
   };
 
+  const runStripeCatalogSync = async () => {
+    if (syncingStripeCatalog) return;
+    setSyncingStripeCatalog(true);
+    setStripeSyncProgress('Iniciando...');
+    let offset = 0;
+    const batchSize = 10;
+    let totalProducts = 0;
+    let totalPrices = 0;
+    let totalUpdated = 0;
+    let totalErrors = 0;
+    try {
+      while (true) {
+        setStripeSyncProgress(`Enviando produtos ${offset + 1}-${offset + batchSize}...`);
+        const { data, error } = await supabase.functions.invoke('stripe-catalog-sync', {
+          body: { only_active: true, offset, limit: batchSize },
+        });
+        if (error) throw error;
+        totalProducts += data?.created_products ?? 0;
+        totalPrices += data?.created_prices ?? 0;
+        totalUpdated += data?.updated_products ?? 0;
+        totalErrors += data?.errors_count ?? 0;
+        const processed = data?.processed ?? 0;
+        setStripeSyncProgress(`${offset + processed} produtos processados`);
+        if (!data?.has_more) break;
+        offset += batchSize;
+      }
+      setStripeSyncProgress('');
+      toast({
+        title: 'Catálogo Stripe sincronizado!',
+        description: `${totalProducts} produtos criados, ${totalPrices} preços criados, ${totalUpdated} produtos atualizados${totalErrors > 0 ? `, ${totalErrors} erros` : ''}.`,
+        variant: totalErrors > 0 ? 'destructive' : 'default',
+      });
+      queryClient.invalidateQueries({ queryKey: ['stripe-provider'] });
+    } catch (err: unknown) {
+      setStripeSyncProgress('');
+      toast({
+        title: 'Erro ao sincronizar',
+        description: err instanceof Error ? err.message : 'Erro desconhecido',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncingStripeCatalog(false);
+    }
+  };
+
   if (isLoading) return <div className="text-sm text-muted-foreground">Carregando...</div>;
 
   return (
@@ -2340,8 +2391,49 @@ function StripeGatewayPanel() {
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Encontre no <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="underline">Stripe Dashboard → API Keys</a>. A Secret Key é configurada separadamente nos segredos do backend.
+            Encontre no <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="underline">Stripe Dashboard → API Keys</a>.
           </p>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Secret Key (sk_...)</Label>
+          <div className="relative">
+            <Input
+              type={showSecretKey ? 'text' : 'password'}
+              value={secretKey}
+              onChange={e => setSecretKey(e.target.value)}
+              placeholder="sk_live_... ou sk_test_..."
+              className="text-xs h-8 pr-8 font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSecretKey(!showSecretKey)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showSecretKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Necessária para criar sessões de checkout e sincronizar o catálogo. Mantenha em sigilo.
+          </p>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">Catálogo no Stripe</Label>
+          <p className="text-[10px] text-muted-foreground mb-1">
+            Envia produtos ativos e variantes para o catálogo do Stripe (Products e Prices). Salve as chaves antes.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={runStripeCatalogSync}
+            disabled={syncingStripeCatalog || !secretKey.trim()}
+            className="w-full"
+          >
+            {syncingStripeCatalog ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+            {syncingStripeCatalog ? stripeSyncProgress || 'Sincronizando...' : 'Sincronizar catálogo Stripe'}
+          </Button>
         </div>
 
         <div className="bg-muted/60 border rounded-md p-2.5 text-xs text-muted-foreground space-y-1">

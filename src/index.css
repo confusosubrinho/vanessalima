@@ -112,6 +112,11 @@
     font-family: var(--font-base, 'Maven Pro', 'Lato', sans-serif);
   }
 
+  /* Same font as site for admin panel */
+  .font-site {
+    font-family: var(--font-base, 'Maven Pro', 'Lato', sans-serif);
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading, 'Maven Pro', 'Lato', sans-serif);
     font-weight: 600;
