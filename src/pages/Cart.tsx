@@ -102,7 +102,7 @@ export default function Cart() {
           {/* Cart items */}
           <div className="lg:col-span-2 space-y-4">
             {items.map((item) => {
-              const freshStock = freshStockData?.get(item.variant.id);
+              const freshStock = freshStockData instanceof Map ? freshStockData.get(item.variant.id) : undefined;
               const currentStock = freshStock?.stock_quantity ?? item.variant.stock_quantity;
               const isActive = freshStock?.is_active ?? true;
               const stockInsufficient = currentStock < item.quantity;
