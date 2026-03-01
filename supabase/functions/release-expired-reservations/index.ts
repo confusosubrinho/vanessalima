@@ -36,7 +36,13 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+  const { data: stripeProvider } = await supabase
+    .from("integrations_checkout_providers")
+    .select("config")
+    .eq("provider", "stripe")
+    .maybeSingle();
+  const stripeConfig = (stripeProvider?.config || {}) as Record<string, unknown>;
+  const stripeKey = (stripeConfig.secret_key as string)?.trim() || Deno.env.get("STRIPE_SECRET_KEY");
   const stripe = stripeKey ? new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" }) : null;
 
   const cutoff = new Date(Date.now() - RESERVATION_TTL_MINUTES * 60 * 1000).toISOString();

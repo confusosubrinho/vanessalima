@@ -16,14 +16,22 @@ Deno.serve(async (req) => {
     return new Response("Method not allowed", { status: 405 });
   }
 
-  const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-    apiVersion: "2025-08-27.basil",
-  });
-
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+
+  const { data: stripeProvider } = await supabase
+    .from("integrations_checkout_providers")
+    .select("config")
+    .eq("provider", "stripe")
+    .maybeSingle();
+  const stripeConfig = (stripeProvider?.config || {}) as Record<string, unknown>;
+  const secretKey = (stripeConfig.secret_key as string)?.trim() || Deno.env.get("STRIPE_SECRET_KEY") || "";
+
+  const stripe = new Stripe(secretKey, {
+    apiVersion: "2025-08-27.basil",
+  });
 
   const signature = req.headers.get("stripe-signature");
   const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");

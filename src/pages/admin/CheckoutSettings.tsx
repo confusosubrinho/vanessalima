@@ -223,15 +223,21 @@ function StripeSection({
   const stripeProvider = providers?.find((p) => p.provider === "stripe");
   const stripeConfig = (stripeProvider?.config as Record<string, unknown>) || {};
   const [showKey, setShowKey] = useState(false);
+  const [showSecretKey, setShowSecretKey] = useState(false);
   const [keyForm, setKeyForm] = useState((stripeConfig.publishable_key as string) || "");
+  const [secretKeyForm, setSecretKeyForm] = useState((stripeConfig.secret_key as string) || "");
   const [saving, setSaving] = useState(false);
   const [checkoutMode, setCheckoutMode] = useState<string>(
     (stripeConfig.checkout_mode as string) || "embedded"
   );
+  const [syncingStripeCatalog, setSyncingStripeCatalog] = useState(false);
+  const [stripeSyncProgress, setStripeSyncProgress] = useState("");
 
   useEffect(() => {
     const key = (stripeConfig.publishable_key as string) || "";
+    const sk = (stripeConfig.secret_key as string) || "";
     if (key) setKeyForm(key);
+    if (sk) setSecretKeyForm(sk);
     setCheckoutMode((stripeConfig.checkout_mode as string) || "embedded");
   }, [stripeProvider?.id]);
 
@@ -268,6 +274,7 @@ function StripeSection({
       const config = {
         ...stripeConfig,
         publishable_key: keyForm.trim() || null,
+        secret_key: secretKeyForm.trim() || null,
         checkout_mode: checkoutMode,
       };
       if (stripeProvider?.id) {
@@ -299,6 +306,51 @@ function StripeSection({
 
   const hasKey = !!keyForm.trim();
   const isValidKey = keyForm.startsWith("pk_live_") || keyForm.startsWith("pk_test_");
+
+  const runStripeCatalogSync = async () => {
+    if (syncingStripeCatalog) return;
+    setSyncingStripeCatalog(true);
+    setStripeSyncProgress("Iniciando...");
+    let offset = 0;
+    const batchSize = 10;
+    let totalProducts = 0;
+    let totalPrices = 0;
+    let totalUpdated = 0;
+    let totalErrors = 0;
+    try {
+      while (true) {
+        setStripeSyncProgress(`Enviando produtos ${offset + 1}-${offset + batchSize}...`);
+        const { data, error } = await supabase.functions.invoke("stripe-catalog-sync", {
+          body: { only_active: true, offset, limit: batchSize },
+        });
+        if (error) throw error;
+        totalProducts += data?.created_products ?? 0;
+        totalPrices += data?.created_prices ?? 0;
+        totalUpdated += data?.updated_products ?? 0;
+        totalErrors += data?.errors_count ?? 0;
+        const processed = data?.processed ?? 0;
+        setStripeSyncProgress(`${offset + processed} produtos processados`);
+        if (!data?.has_more) break;
+        offset += batchSize;
+      }
+      setStripeSyncProgress("");
+      toast({
+        title: "Catálogo Stripe sincronizado!",
+        description: `${totalProducts} produtos criados, ${totalPrices} preços criados, ${totalUpdated} produtos atualizados${totalErrors > 0 ? `, ${totalErrors} erros` : ""}.`,
+        variant: totalErrors > 0 ? "destructive" : "default",
+      });
+      queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
+    } catch (err: unknown) {
+      setStripeSyncProgress("");
+      toast({
+        title: "Erro ao sincronizar",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingStripeCatalog(false);
+    }
+  };
 
   return (
     <Card className="border-primary/20">
@@ -423,6 +475,60 @@ function StripeSection({
               Stripe Dashboard <ExternalLink className="h-2.5 w-2.5" />
             </a>
           </p>
+        </div>
+
+        {/* Secret Key */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Chave Secreta (Secret Key)</Label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                type={showSecretKey ? "text" : "password"}
+                value={secretKeyForm}
+                onChange={(e) => setSecretKeyForm(e.target.value)}
+                placeholder="sk_live_... ou sk_test_..."
+                className="font-mono text-xs pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSecretKey(!showSecretKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showSecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          {secretKeyForm.trim() && !secretKeyForm.startsWith("sk_live_") && !secretKeyForm.startsWith("sk_test_") && (
+            <p className="text-xs text-destructive flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              A chave deve começar com sk_live_ ou sk_test_
+            </p>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            Necessária para criar sessões de checkout e processar pagamentos. Mantenha em sigilo. Mesma página do Dashboard acima.
+          </p>
+        </div>
+
+        {/* Sincronizar catálogo Stripe */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Catálogo no Stripe</Label>
+          <p className="text-xs text-muted-foreground">
+            Envia todos os produtos ativos e suas variantes para o catálogo do Stripe (Products e Prices). Assim os itens aparecem no Dashboard da Stripe. Salve as chaves acima antes de sincronizar.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={runStripeCatalogSync}
+            disabled={syncingStripeCatalog || !secretKeyForm.trim()}
+            className="w-full"
+          >
+            {syncingStripeCatalog ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Upload className="h-4 w-4 mr-2" />
+            )}
+            {syncingStripeCatalog ? stripeSyncProgress || "Sincronizando..." : "Sincronizar catálogo Stripe"}
+          </Button>
         </div>
 
         {/* Fallback */}

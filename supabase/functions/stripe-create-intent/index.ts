@@ -18,31 +18,31 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2025-08-27.basil",
-    });
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    const { data: stripeProvider } = await supabase
+      .from("integrations_checkout_providers")
+      .select("config, is_active")
+      .eq("provider", "stripe")
+      .maybeSingle();
+    const stripeConfig = (stripeProvider?.config || {}) as Record<string, unknown>;
+    const secretKey = (stripeConfig.secret_key as string)?.trim() || Deno.env.get("STRIPE_SECRET_KEY") || "";
+
+    const stripe = new Stripe(secretKey, {
+      apiVersion: "2025-08-27.basil",
+    });
 
     const body = await req.json();
     const { action } = body;
 
     // ─── Action: get_config ───
     if (action === "get_config") {
-      // Return the publishable key for the frontend
-      const { data: provider } = await supabase
-        .from("integrations_checkout_providers")
-        .select("config, is_active")
-        .eq("provider", "stripe")
-        .maybeSingle();
-
-      const config = (provider?.config || {}) as Record<string, unknown>;
       return jsonRes({
-        publishable_key: config.publishable_key || null,
-        is_active: provider?.is_active || false,
+        publishable_key: stripeConfig.publishable_key || null,
+        is_active: stripeProvider?.is_active ?? false,
       });
     }
 
@@ -429,6 +429,13 @@ Deno.serve(async (req) => {
         });
       }
 
+      if (lineItems.length === 0) {
+        for (const dec of stockDecrements) {
+          await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
+        }
+        return jsonRes({ error: "Nenhum item válido para checkout" }, 400);
+      }
+
       // ── Coupon / discount ──
       let validatedDiscount = 0;
       if (coupon_code) {
@@ -457,7 +464,7 @@ Deno.serve(async (req) => {
         payment_intent_data: {
           metadata: { order_id, order_access_token: order_access_token || "" },
         },
-        payment_method_types: ["card", "boleto"],
+        payment_method_types: ["card"],
         locale: "pt-BR",
         shipping_address_collection: {
           allowed_countries: ["BR"],
@@ -478,23 +485,40 @@ Deno.serve(async (req) => {
         sessionParams.discounts = [{ coupon: stripeCoupon.id }];
       }
 
-      const session = await stripe.checkout.sessions.create(sessionParams);
+      let session;
+      try {
+        session = await stripe.checkout.sessions.create(sessionParams);
+      } catch (stripeErr: any) {
+        for (const dec of stockDecrements) {
+          await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
+        }
+        const msg = stripeErr?.message || "Erro ao criar sessão de checkout";
+        const code = stripeErr?.code || stripeErr?.type;
+        console.error("Stripe checkout.sessions.create failed:", msg, code ? `(${code})` : "");
+        return jsonRes({ error: msg }, 500);
+      }
 
-      await supabase.from("orders").update({
+      const updatePayload: Record<string, unknown> = {
         provider: "stripe",
         gateway: "stripe",
-        transaction_id: session.payment_intent as string,
         external_reference: session.id,
         payment_method: "card",
-        total_amount: (serverSubtotal - validatedDiscount + shippingCost),
-      }).eq("id", order_id);
+        total_amount: serverSubtotal - validatedDiscount + shippingCost,
+      };
+      if (session.payment_intent) {
+        updatePayload.transaction_id = typeof session.payment_intent === "string" ? session.payment_intent : (session.payment_intent as any)?.id;
+      }
+
+      await supabase.from("orders").update(updatePayload).eq("id", order_id);
 
       return jsonRes({ checkout_url: session.url, session_id: session.id });
     }
 
     return jsonRes({ error: "Ação inválida" }, 400);
   } catch (error: any) {
-    console.error("Stripe error:", error.message);
-    return jsonRes({ error: error.message || "Erro ao processar pagamento Stripe" }, 500);
+    const msg = error?.message || String(error);
+    const code = error?.code ?? error?.type;
+    console.error("Stripe error:", msg, code ? `(${code})` : "");
+    return jsonRes({ error: msg || "Erro ao processar pagamento Stripe" }, 500);
   }
 });

@@ -43,6 +43,15 @@ Deno.serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceKey);
+
+  const { data: stripeProvider } = await supabase
+    .from("integrations_checkout_providers")
+    .select("config")
+    .eq("provider", "stripe")
+    .maybeSingle();
+  const stripeConfig = (stripeProvider?.config || {}) as Record<string, unknown>;
+  const stripeSecretKey = (stripeConfig.secret_key as string)?.trim() || Deno.env.get("STRIPE_SECRET_KEY") || "";
+
   let body: { action?: string };
   try {
     body = await req.json();
@@ -64,8 +73,7 @@ Deno.serve(async (req) => {
       .eq("status", "pending")
       .lt("created_at", cutoff);
     const released: string[] = [];
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    const stripe = stripeKey ? new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" }) : null;
+    const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" }) : null;
     for (const order of orders || []) {
       const { data: items } = await supabase
         .from("order_items")
@@ -99,7 +107,13 @@ Deno.serve(async (req) => {
       .eq("status", "pending")
       .not("transaction_id", "is", null)
       .lt("created_at", cutoff);
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2025-08-27.basil" });
+    const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" }) : null;
+    if (!stripe) {
+      return new Response(
+        JSON.stringify({ error: "Stripe secret key não configurada (admin ou env)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     let reconciled = 0;
     for (const o of orders || []) {
       const { data: order } = await supabase.from("orders").select("transaction_id").eq("id", o.id).single();

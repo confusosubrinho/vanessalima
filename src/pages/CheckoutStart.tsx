@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useCart } from "@/contexts/CartContext";
@@ -10,6 +10,7 @@ export default function CheckoutStart() {
   const navigate = useNavigate();
   const { items, subtotal, discount, selectedShipping, clearCart, appliedCoupon, cartId, shippingZip } = useCart();
   const [error, setError] = useState<string | null>(null);
+  const hasStartedCheckout = useRef(false);
 
   const formatPrice = (price: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(price);
@@ -18,19 +19,18 @@ export default function CheckoutStart() {
   const totalValue = subtotal - discount + shippingCost;
 
   useEffect(() => {
+    captureAttribution();
+
+    // #region agent log
+    fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:effect',message:'effect run',data:{itemsLength:items.length,cartId:cartId||null},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     if (items.length === 0) {
       navigate("/carrinho");
       return;
     }
-  }, [items.length, navigate]);
-
-  useEffect(() => {
-    captureAttribution();
-
-    if (!items.length) {
-      navigate("/carrinho");
-      return;
-    }
+    if (hasStartedCheckout.current) return;
+    hasStartedCheckout.current = true;
 
     const startCheckout = async () => {
       try {
@@ -67,6 +67,10 @@ export default function CheckoutStart() {
           } as any)
           .select()
           .single();
+
+        // #region agent log
+        fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:afterOrderInsert',message:'order insert result',data:{orderId:order?.id||null,orderErrorCode:orderError?.code||null,orderErrorMsg:orderError?.message?.slice(0,120)||null},hypothesisId:'D',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
 
         if (orderError) {
           // Handle duplicate cart_id
@@ -131,10 +135,22 @@ export default function CheckoutStart() {
           }
         );
 
-        if (stripeError) throw new Error(stripeError.message);
-        if (stripeData?.error) throw new Error(stripeData.error);
+        const backendError = stripeData?.error != null
+          ? (typeof stripeData.error === "string" ? stripeData.error : JSON.stringify(stripeData.error))
+          : null;
+        const hasCheckoutUrl = !!(stripeData?.checkout_url);
+
+        // #region agent log
+        fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:afterInvoke',message:'stripe-create-intent response',data:{hasStripeError:!!stripeError,stripeErrorMessage:stripeError?.message?.slice(0,100)||null,backendError:backendError?.slice(0,150)||null,hasCheckoutUrl,checkoutUrlHost:stripeData?.checkout_url?new URL(stripeData.checkout_url).host:null},hypothesisId:'B,C,E',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+
+        if (stripeError) throw new Error(backendError || stripeError.message);
+        if (backendError) throw new Error(backendError);
 
         if (stripeData?.checkout_url) {
+          // #region agent log
+          fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:redirect',message:'redirecting to Stripe',data:{checkoutUrlHost:new URL(stripeData.checkout_url).host},hypothesisId:'success',timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
           clearCart();
           window.location.href = stripeData.checkout_url;
         } else {
@@ -142,13 +158,16 @@ export default function CheckoutStart() {
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Erro ao iniciar checkout";
+        // #region agent log
+        fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:catch',message:'checkout error',data:{errorMessage:msg.slice(0,200)},hypothesisId:'B,C,D,E',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         console.error("Checkout start error:", msg);
         setError(msg);
       }
     };
 
     startCheckout();
-  }, []);
+  }, [items.length, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
