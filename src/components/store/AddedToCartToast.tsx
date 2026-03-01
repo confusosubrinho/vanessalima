@@ -1,6 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { ShoppingBag, X } from 'lucide-react';
+import { CheckCircle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface AddedToCartToastProps {
@@ -24,7 +23,7 @@ export function AddedToCartToast({
 
   useEffect(() => {
     if (visible) {
-      timerRef.current = setTimeout(onClose, 4000);
+      timerRef.current = setTimeout(onClose, 4500);
       return () => clearTimeout(timerRef.current);
     }
   }, [visible, onClose]);
@@ -32,29 +31,42 @@ export function AddedToCartToast({
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-32 md:bottom-6 right-4 left-4 md:left-auto md:w-[360px] z-[60] animate-slide-up">
-      <div className="bg-background border border-border rounded-lg shadow-xl p-3 flex items-center gap-3">
-        <img
-          src={imageUrl || '/placeholder.svg'}
-          alt={productName}
-          className="w-14 h-14 object-cover rounded-md flex-shrink-0"
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 text-primary mb-0.5">
-            <ShoppingBag className="h-3.5 w-3.5" />
-            <span className="text-xs font-semibold">Adicionado ao carrinho</span>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+      <div className="pointer-events-auto bg-background border border-border rounded-2xl shadow-2xl p-5 w-[340px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-300">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 text-primary">
+            <CheckCircle className="h-5 w-5" />
+            <span className="text-sm font-bold tracking-tight">Adicionado ao carrinho</span>
           </div>
-          <p className="text-sm font-medium truncate">{productName}</p>
-          <p className="text-xs text-muted-foreground">{variantInfo}</p>
-        </div>
-        <div className="flex flex-col gap-1.5 flex-shrink-0">
-          <Button size="sm" className="h-8 text-xs rounded-full px-3" onClick={onViewCart}>
-            Ver carrinho
-          </Button>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors self-center">
-            <X className="h-3.5 w-3.5" />
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors rounded-full p-1 hover:bg-muted"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
+
+        {/* Product */}
+        <div className="flex items-center gap-4 mb-4">
+          <img
+            src={imageUrl || '/placeholder.svg'}
+            alt={productName}
+            className="w-16 h-16 object-cover rounded-xl flex-shrink-0 border border-border"
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate text-foreground">{productName}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{variantInfo}</p>
+          </div>
+        </div>
+
+        {/* Action */}
+        <Button
+          className="w-full h-10 rounded-xl font-semibold text-sm"
+          onClick={onViewCart}
+        >
+          Ver carrinho
+        </Button>
       </div>
     </div>
   );
