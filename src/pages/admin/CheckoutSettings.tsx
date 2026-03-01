@@ -109,6 +109,14 @@ export default function CheckoutSettings() {
         </p>
       </div>
 
+      {/* Ativar / desativar gateways — Stripe e Yampi */}
+      <GatewaysToggleCard
+        providers={providers}
+        checkoutConfig={checkoutConfig}
+        queryClient={queryClient}
+        toast={toast}
+      />
+
       {/* Status Overview */}
       <Card>
         <CardContent className="pt-6">
@@ -204,6 +212,118 @@ export default function CheckoutSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// GATEWAYS TOGGLE CARD (Stripe e Yampi ativar/desativar)
+// ═══════════════════════════════════════════════════════════
+
+function GatewaysToggleCard({
+  providers,
+  checkoutConfig,
+  queryClient,
+  toast,
+}: {
+  providers: any[] | undefined;
+  checkoutConfig: any;
+  queryClient: ReturnType<typeof useQueryClient>;
+  toast: ReturnType<typeof useToast>["toast"];
+}) {
+  const stripeProvider = providers?.find((p) => p.provider === "stripe");
+  const yampiProvider = providers?.find((p) => p.provider === "yampi");
+
+  const updateStripeActive = useMutation({
+    mutationFn: async (isActive: boolean) => {
+      if (!stripeProvider?.id) throw new Error("Stripe não configurado");
+      const { error } = await supabase
+        .from("integrations_checkout_providers")
+        .update({ is_active: isActive })
+        .eq("id", stripeProvider.id);
+      if (error) throw error;
+      if (checkoutConfig?.id) {
+        await supabase
+          .from("integrations_checkout")
+          .update({ provider: isActive ? "stripe" : "appmax", enabled: true })
+          .eq("id", checkoutConfig.id);
+      }
+    },
+    onSuccess: (_, isActive) => {
+      queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["integrations-checkout"] });
+      toast({ title: isActive ? "Stripe ativado" : "Stripe desativado" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleYampi = useMutation({
+    mutationFn: async (isActive: boolean) => {
+      if (!yampiProvider?.id) throw new Error("Yampi não configurado");
+      const { error } = await supabase
+        .from("integrations_checkout_providers")
+        .update({ is_active: isActive })
+        .eq("id", yampiProvider.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, isActive) => {
+      queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
+      toast({ title: isActive ? "Yampi ativado" : "Yampi desativado" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Plug className="h-4 w-4" />
+          Gateways de pagamento
+        </CardTitle>
+        <CardDescription>
+          Ative ou desative cada gateway. Stripe = checkout no seu site (cartão e PIX). Yampi = redirecionamento para o checkout Yampi. Quando Stripe estiver desativado, o checkout usa Appmax.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+          <div>
+            <p className="font-medium text-sm">Stripe (checkout no seu site)</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Cartão e PIX na própria página de checkout. Desativar = uso do Appmax.
+            </p>
+          </div>
+          {stripeProvider ? (
+            <Switch
+              checked={stripeProvider.is_active}
+              onCheckedChange={(checked) => updateStripeActive.mutate(checked)}
+              disabled={updateStripeActive.isPending}
+            />
+          ) : (
+            <span className="text-xs text-muted-foreground">Configure as chaves abaixo para ativar</span>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+          <div>
+            <p className="font-medium text-sm">Yampi (checkout por redirecionamento)</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Ative para oferecer o checkout Yampi. Configure alias e token na seção Yampi abaixo.
+            </p>
+          </div>
+          {yampiProvider ? (
+            <Switch
+              checked={yampiProvider.is_active ?? false}
+              onCheckedChange={(checked) => toggleYampi.mutate(checked)}
+              disabled={toggleYampi.isPending}
+            />
+          ) : (
+            <span className="text-xs text-muted-foreground">Adicione Yampi na seção abaixo primeiro</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // STRIPE SECTION
 // ═══════════════════════════════════════════════════════════
 
@@ -249,12 +369,15 @@ function StripeSection({
         .update({ is_active: isActive })
         .eq("id", stripeProvider.id);
       if (error) throw error;
-      // Also update main config
-      if (isActive) {
+      // Sync main checkout config: Stripe on → stripe; Stripe off → appmax
+      if (checkoutConfig?.id) {
         await supabase
           .from("integrations_checkout")
-          .update({ provider: "stripe", enabled: true })
-          .eq("id", checkoutConfig?.id);
+          .update({
+            provider: isActive ? "stripe" : "appmax",
+            enabled: true,
+          })
+          .eq("id", checkoutConfig.id);
       }
     },
     onSuccess: (_, isActive) => {
