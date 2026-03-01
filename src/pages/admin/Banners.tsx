@@ -204,19 +204,21 @@ export default function Banners() {
                 </TabsList>
                 <TabsContent value="desktop" className="space-y-4 mt-4">
                   <div>
-                    <Label>Imagem Desktop (1920x600 recomendado) *</Label>
+                    <Label>Imagem Desktop *</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5 mb-2">Medidas recomendadas: 1920×600 px (altura máx. 600 px na loja)</p>
                     <div className="mt-2 space-y-3">
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <Input value={formData.image_url} onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} placeholder="https://... ou escolha abaixo" required className="flex-1 min-w-[200px]" />
-                        <div className="flex gap-1">
+                      <Input value={formData.image_url} onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} placeholder="URL da imagem ou use os botões abaixo" required className="w-full" />
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">Origem da imagem:</p>
+                        <div className="flex flex-wrap gap-2">
                           <Button type="button" variant="outline" size="sm" onClick={() => setImagePickerFor('desktop')}>
                             <ImagePlus className="h-4 w-4 mr-1.5" />
-                            Do banco
+                            Escolher do banco
                           </Button>
                           <label className="cursor-pointer">
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'desktop')} />
                             <Button type="button" variant="outline" size="sm" asChild disabled={uploading === 'desktop'}>
-                              <span><HardDrive className="h-4 w-4 mr-1.5" />{uploading === 'desktop' ? '...' : 'Do dispositivo'}</span>
+                              <span><HardDrive className="h-4 w-4 mr-1.5" />{uploading === 'desktop' ? 'Enviando...' : 'Subir do dispositivo'}</span>
                             </Button>
                           </label>
                         </div>
@@ -231,20 +233,21 @@ export default function Banners() {
                 </TabsContent>
                 <TabsContent value="mobile" className="space-y-4 mt-4">
                   <div>
-                    <Label>Imagem Mobile (750×900 recomendado)</Label>
-                    <p className="text-xs text-muted-foreground mb-2">Opcional. Se não informada, a imagem desktop será usada. O preview e o carrossel exibem a imagem por completo, sem cortar.</p>
+                    <Label>Imagem Mobile</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5 mb-2">Medidas recomendadas: 750×900 px (altura máx. 550 px na loja). Opcional — se não informada, usa a do desktop.</p>
                     <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <Input value={formData.mobile_image_url} onChange={(e) => setFormData({ ...formData, mobile_image_url: e.target.value })} placeholder="https://... ou escolha abaixo" className="flex-1 min-w-[200px]" />
-                        <div className="flex gap-1">
+                      <Input value={formData.mobile_image_url} onChange={(e) => setFormData({ ...formData, mobile_image_url: e.target.value })} placeholder="URL da imagem ou use os botões abaixo" className="w-full" />
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">Origem da imagem:</p>
+                        <div className="flex flex-wrap gap-2">
                           <Button type="button" variant="outline" size="sm" onClick={() => setImagePickerFor('mobile')}>
                             <ImagePlus className="h-4 w-4 mr-1.5" />
-                            Do banco
+                            Escolher do banco
                           </Button>
                           <label className="cursor-pointer">
                             <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'mobile')} />
                             <Button type="button" variant="outline" size="sm" asChild disabled={uploading === 'mobile'}>
-                              <span><HardDrive className="h-4 w-4 mr-1.5" />{uploading === 'mobile' ? '...' : 'Do dispositivo'}</span>
+                              <span><HardDrive className="h-4 w-4 mr-1.5" />{uploading === 'mobile' ? 'Enviando...' : 'Subir do dispositivo'}</span>
                             </Button>
                           </label>
                         </div>
