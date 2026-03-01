@@ -161,6 +161,7 @@ export default function CheckoutSettings() {
       {/* Yampi Integration - Collapsible */}
       <YampiSection
         providers={providers}
+        checkoutConfig={checkoutConfig}
         queryClient={queryClient}
         toast={toast}
         projectId={projectId}
@@ -699,12 +700,14 @@ function StripeSection({
 
 function YampiSection({
   providers,
+  checkoutConfig,
   queryClient,
   toast,
   projectId,
   testLogs,
 }: {
   providers: any[] | undefined;
+  checkoutConfig: any;
   queryClient: ReturnType<typeof useQueryClient>;
   toast: ReturnType<typeof useToast>["toast"];
   projectId: string;
@@ -777,9 +780,19 @@ function YampiSection({
         .update({ is_active: isActive })
         .eq("id", yampiProvider.id);
       if (error) throw error;
+      // Definir o gateway ativo no checkout: ao ativar Yampi usa yampi; ao desativar usa stripe ou appmax
+      if (checkoutConfig?.id) {
+        const stripeProvider = providers?.find((p: any) => p.provider === "stripe");
+        const nextProvider = isActive ? "yampi" : (stripeProvider?.is_active ? "stripe" : "appmax");
+        await supabase
+          .from("integrations_checkout")
+          .update({ provider: nextProvider, enabled: true })
+          .eq("id", checkoutConfig.id);
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_, isActive) => {
       queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["integrations-checkout"] });
       toast({ title: yampiActive ? "Yampi desativada" : "Yampi ativada" });
     },
   });
