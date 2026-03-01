@@ -34,6 +34,22 @@ export default function CheckoutStart() {
 
     const startCheckout = async () => {
       try {
+        // Check which provider is active
+        const { data: checkoutConfig } = await supabase
+          .from("integrations_checkout")
+          .select("*")
+          .limit(1)
+          .single();
+
+        const provider = checkoutConfig?.provider || "stripe";
+
+        // If Stripe is the provider, go directly to the transparent checkout page
+        if (provider === "stripe" || !checkoutConfig?.enabled) {
+          navigate("/checkout");
+          return;
+        }
+
+        // For other providers (Yampi), use checkout-create-session
         const attribution = getAttribution();
         const cartItems = items.map((item) => ({
           variant_id: item.variant.id,
@@ -48,14 +64,12 @@ export default function CheckoutStart() {
         if (fnError) throw new Error(fnError.message);
         if (data?.error) throw new Error(data.error);
 
-        // #6 Save session_id and clear cart before redirect
         if (data?.session_id) {
           localStorage.setItem("checkout_session_id", data.session_id);
         }
 
         if (data?.redirect_url) {
           if (data.redirect_url.startsWith("http")) {
-            // External redirect (Yampi) - clear cart now
             clearCart();
             window.location.href = data.redirect_url;
           } else {
@@ -87,7 +101,7 @@ export default function CheckoutStart() {
           </div>
         ) : (
           <>
-            {/* #9 Mini order summary */}
+            {/* Mini order summary */}
             <div className="border rounded-lg p-4 space-y-3">
               <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
                 Resumo do pedido
@@ -108,9 +122,7 @@ export default function CheckoutStart() {
                       </p>
                     </div>
                     <p className="text-sm font-medium whitespace-nowrap">
-                      {formatPrice(
-                        getCartItemUnitPrice(item) * item.quantity
-                      )}
+                      {formatPrice(getCartItemUnitPrice(item) * item.quantity)}
                     </p>
                   </div>
                 ))}
@@ -147,7 +159,7 @@ export default function CheckoutStart() {
               </p>
             </div>
 
-            {/* #8 Trust badges */}
+            {/* Trust badges */}
             <div className="flex items-center justify-center gap-6 pt-4 border-t">
               <div className="flex items-center gap-1.5 text-muted-foreground">
                 <Lock className="h-4 w-4" />
