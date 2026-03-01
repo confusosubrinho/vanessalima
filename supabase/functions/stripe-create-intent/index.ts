@@ -459,6 +459,12 @@ Deno.serve(async (req) => {
         },
         payment_method_types: ["card", "boleto"],
         locale: "pt-BR",
+        shipping_address_collection: {
+          allowed_countries: ["BR"],
+        },
+        phone_number_collection: {
+          enabled: true,
+        },
       };
 
       // Apply discount as Stripe coupon
@@ -478,6 +484,7 @@ Deno.serve(async (req) => {
         provider: "stripe",
         gateway: "stripe",
         transaction_id: session.payment_intent as string,
+        external_reference: session.id,
         payment_method: "card",
         total_amount: (serverSubtotal - validatedDiscount + shippingCost),
       }).eq("id", order_id);

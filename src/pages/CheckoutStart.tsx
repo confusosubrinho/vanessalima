@@ -8,7 +8,7 @@ import { getCartItemUnitPrice } from "@/lib/cartPricing";
 
 export default function CheckoutStart() {
   const navigate = useNavigate();
-  const { items, subtotal, discount, selectedShipping, clearCart } = useCart();
+  const { items, subtotal, discount, selectedShipping, clearCart, appliedCoupon, cartId, shippingZip } = useCart();
   const [error, setError] = useState<string | null>(null);
 
   const formatPrice = (price: number) =>
@@ -34,55 +34,116 @@ export default function CheckoutStart() {
 
     const startCheckout = async () => {
       try {
-        // Check which provider is active
-        const { data: checkoutConfig } = await supabase
-          .from("integrations_checkout")
-          .select("*")
-          .limit(1)
+        const { data: session } = await supabase.auth.getSession();
+        const userId = session?.session?.user?.id || null;
+        const guestToken = userId ? null : crypto.randomUUID();
+
+        const orderTotal = subtotal - discount + shippingCost;
+
+        // Create order with placeholder shipping data (Stripe will collect real address)
+        const { data: order, error: orderError } = await supabase
+          .from("orders")
+          .insert({
+            order_number: "TEMP",
+            user_id: userId,
+            cart_id: cartId,
+            subtotal: subtotal,
+            shipping_cost: shippingCost,
+            discount_amount: discount,
+            total_amount: orderTotal,
+            status: "pending",
+            shipping_name: "Aguardando Stripe",
+            shipping_address: "Aguardando Stripe",
+            shipping_city: "Aguardando",
+            shipping_state: "XX",
+            shipping_zip: shippingZip || "00000000",
+            shipping_phone: null,
+            coupon_code: appliedCoupon?.code || null,
+            customer_email: null,
+            idempotency_key: cartId,
+            access_token: guestToken,
+            provider: "stripe",
+            gateway: "stripe",
+          } as any)
+          .select()
           .single();
 
-        const provider = checkoutConfig?.provider || "stripe";
-
-        // If Stripe is the provider, go directly to the transparent checkout page
-        if (provider === "stripe" || !checkoutConfig?.enabled) {
-          navigate("/checkout");
-          return;
+        if (orderError) {
+          // Handle duplicate cart_id
+          if (orderError.code === "23505" && orderError.message?.includes("cart_id")) {
+            const { data: existingByCart } = await (supabase.from("orders") as any)
+              .select("id, order_number")
+              .eq("cart_id", cartId)
+              .limit(1)
+              .maybeSingle();
+            if (existingByCart) {
+              navigate(`/pedido-confirmado/${existingByCart.id}`, {
+                state: { orderId: existingByCart.id, orderNumber: existingByCart.order_number },
+                replace: true,
+              });
+              return;
+            }
+          }
+          throw orderError;
         }
 
-        // For other providers (Yampi), use checkout-create-session
-        const attribution = getAttribution();
-        const cartItems = items.map((item) => ({
-          variant_id: item.variant.id,
+        // Insert order items
+        const orderItems = items.map((item) => ({
+          order_id: order.id,
+          product_id: item.product.id,
+          product_variant_id: item.variant.id,
+          product_name: item.product.name,
+          variant_info: `${item.variant.size}${item.variant.color ? " / " + item.variant.color : ""}`,
           quantity: item.quantity,
+          unit_price: getCartItemUnitPrice(item),
+          total_price: getCartItemUnitPrice(item) * item.quantity,
+          title_snapshot: item.product.name,
+          image_snapshot: item.product.images?.[0]?.url || null,
         }));
 
-        const { data, error: fnError } = await supabase.functions.invoke(
-          "checkout-create-session",
-          { body: { items: cartItems, attribution } }
+        await supabase.from("order_items").insert(orderItems);
+
+        // Build products array for Stripe
+        const products = items.map((item) => ({
+          variant_id: item.variant.id,
+          name: item.product.name,
+          quantity: item.quantity,
+          unit_price: getCartItemUnitPrice(item),
+        }));
+
+        const origin = window.location.origin;
+
+        // Call Stripe to create checkout session
+        const { data: stripeData, error: stripeError } = await supabase.functions.invoke(
+          "stripe-create-intent",
+          {
+            body: {
+              action: "create_checkout_session",
+              order_id: order.id,
+              amount: orderTotal,
+              products,
+              coupon_code: appliedCoupon?.code || null,
+              discount_amount: discount,
+              order_access_token: guestToken,
+              success_url: `${origin}/checkout/obrigado?session_id={CHECKOUT_SESSION_ID}`,
+              cancel_url: `${origin}/carrinho`,
+            },
+          }
         );
 
-        if (fnError) throw new Error(fnError.message);
-        if (data?.error) throw new Error(data.error);
+        if (stripeError) throw new Error(stripeError.message);
+        if (stripeData?.error) throw new Error(stripeData.error);
 
-        if (data?.session_id) {
-          localStorage.setItem("checkout_session_id", data.session_id);
-        }
-
-        if (data?.redirect_url) {
-          if (data.redirect_url.startsWith("http")) {
-            clearCart();
-            window.location.href = data.redirect_url;
-          } else {
-            navigate(data.redirect_url);
-          }
+        if (stripeData?.checkout_url) {
+          clearCart();
+          window.location.href = stripeData.checkout_url;
         } else {
-          navigate("/checkout");
+          throw new Error("URL de checkout não retornada");
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Erro ao iniciar checkout";
         console.error("Checkout start error:", msg);
         setError(msg);
-        setTimeout(() => navigate("/checkout"), 3000);
       }
     };
 
@@ -95,9 +156,12 @@ export default function CheckoutStart() {
         {error ? (
           <div className="text-center space-y-4">
             <p className="text-destructive text-sm">{error}</p>
-            <p className="text-muted-foreground text-xs">
-              Redirecionando para checkout alternativo...
-            </p>
+            <button
+              onClick={() => navigate("/carrinho")}
+              className="text-primary underline text-sm"
+            >
+              Voltar ao carrinho
+            </button>
           </div>
         ) : (
           <>
@@ -155,7 +219,7 @@ export default function CheckoutStart() {
             <div className="text-center space-y-3">
               <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
               <p className="text-muted-foreground text-sm">
-                Preparando seu checkout seguro...
+                Redirecionando para pagamento seguro...
               </p>
             </div>
 
