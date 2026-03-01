@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Pencil, Trash2, GripVertical, Upload, Smartphone, Monitor } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Smartphone, Monitor, ImagePlus, HardDrive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +17,7 @@ import { processBannerImage } from '@/lib/imageCompressor';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { BannerImageOptionsDialog } from '@/components/admin/BannerImageOptionsDialog';
 import type { BannerImageOptionsResult } from '@/components/admin/BannerImageOptionsDialog';
+import { MediaPickerDialog } from '@/components/admin/MediaPickerDialog';
 
 interface Banner {
   id: string;
@@ -41,6 +42,7 @@ export default function Banners() {
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null);
   const [uploading, setUploading] = useState<'desktop' | 'mobile' | null>(null);
   const [pendingBannerFile, setPendingBannerFile] = useState<{ file: File; type: 'desktop' | 'mobile' } | null>(null);
+  const [imagePickerFor, setImagePickerFor] = useState<'desktop' | 'mobile' | null>(null);
 
   const [formData, setFormData] = useState({
     title: '', subtitle: '', image_url: '', mobile_image_url: '',
@@ -204,14 +206,20 @@ export default function Banners() {
                   <div>
                     <Label>Imagem Desktop (1920x600 recomendado) *</Label>
                     <div className="mt-2 space-y-3">
-                      <div className="flex gap-2">
-                        <Input value={formData.image_url} onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} placeholder="https://... ou faça upload" required />
-                        <label className="cursor-pointer">
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'desktop')} />
-                          <Button type="button" variant="outline" asChild disabled={uploading === 'desktop'}>
-                            <span><Upload className="h-4 w-4 mr-2" />{uploading === 'desktop' ? '...' : 'Upload'}</span>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <Input value={formData.image_url} onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} placeholder="https://... ou escolha abaixo" required className="flex-1 min-w-[200px]" />
+                        <div className="flex gap-1">
+                          <Button type="button" variant="outline" size="sm" onClick={() => setImagePickerFor('desktop')}>
+                            <ImagePlus className="h-4 w-4 mr-1.5" />
+                            Do banco
                           </Button>
-                        </label>
+                          <label className="cursor-pointer">
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'desktop')} />
+                            <Button type="button" variant="outline" size="sm" asChild disabled={uploading === 'desktop'}>
+                              <span><HardDrive className="h-4 w-4 mr-1.5" />{uploading === 'desktop' ? '...' : 'Do dispositivo'}</span>
+                            </Button>
+                          </label>
+                        </div>
                       </div>
                       {formData.image_url && (
                         <AspectRatio ratio={16/5} className="bg-muted rounded-lg overflow-hidden">
@@ -226,14 +234,20 @@ export default function Banners() {
                     <Label>Imagem Mobile (750×900 recomendado)</Label>
                     <p className="text-xs text-muted-foreground mb-2">Opcional. Se não informada, a imagem desktop será usada. O preview e o carrossel exibem a imagem por completo, sem cortar.</p>
                     <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <Input value={formData.mobile_image_url} onChange={(e) => setFormData({ ...formData, mobile_image_url: e.target.value })} placeholder="https://... ou faça upload" />
-                        <label className="cursor-pointer">
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'mobile')} />
-                          <Button type="button" variant="outline" asChild disabled={uploading === 'mobile'}>
-                            <span><Upload className="h-4 w-4 mr-2" />{uploading === 'mobile' ? '...' : 'Upload'}</span>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <Input value={formData.mobile_image_url} onChange={(e) => setFormData({ ...formData, mobile_image_url: e.target.value })} placeholder="https://... ou escolha abaixo" className="flex-1 min-w-[200px]" />
+                        <div className="flex gap-1">
+                          <Button type="button" variant="outline" size="sm" onClick={() => setImagePickerFor('mobile')}>
+                            <ImagePlus className="h-4 w-4 mr-1.5" />
+                            Do banco
                           </Button>
-                        </label>
+                          <label className="cursor-pointer">
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'mobile')} />
+                            <Button type="button" variant="outline" size="sm" asChild disabled={uploading === 'mobile'}>
+                              <span><HardDrive className="h-4 w-4 mr-1.5" />{uploading === 'mobile' ? '...' : 'Do dispositivo'}</span>
+                            </Button>
+                          </label>
+                        </div>
                       </div>
                       {formData.mobile_image_url ? (
                         <div className="max-w-[280px] mx-auto">
@@ -283,6 +297,15 @@ export default function Banners() {
           file={pendingBannerFile?.file ?? null}
           onConfirm={handleBannerOptionsConfirm}
           onCancel={() => setPendingBannerFile(null)}
+        />
+        <MediaPickerDialog
+          open={imagePickerFor !== null}
+          onSelect={(url) => {
+            if (imagePickerFor === 'desktop') setFormData((prev) => ({ ...prev, image_url: url }));
+            else if (imagePickerFor === 'mobile') setFormData((prev) => ({ ...prev, mobile_image_url: url }));
+            setImagePickerFor(null);
+          }}
+          onCancel={() => setImagePickerFor(null)}
         />
       </div>
 
