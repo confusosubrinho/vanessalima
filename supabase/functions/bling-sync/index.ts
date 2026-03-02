@@ -221,30 +221,59 @@ function extractParentInfoFromName(name: string): { parentBlingId: number | null
   return { parentBlingId: null, baseName: name, attributes: "", hasAttributes: false };
 }
 
-async function findOrCreateCategory(supabase: any, categoryName: string): Promise<string | null> {
+async function findOrCreateCategory(
+  supabase: any,
+  categoryName: string,
+  categoriesCache?: { id: string; name: string; slug: string }[]
+): Promise<string | null> {
   if (!categoryName) return null;
-  let { data: cat } = await supabase.from("categories").select("id").eq("name", categoryName).maybeSingle();
-  if (cat) return cat.id;
   const normalized = categoryName.toLowerCase().trim();
-  const { data: allCats } = await supabase.from("categories").select("id, name");
-  if (allCats?.length) {
-    const match = allCats.find((c: any) => { const n = c.name.toLowerCase().trim(); return n === normalized || n.includes(normalized) || normalized.includes(n); });
-    if (match) return match.id;
-    const inputWords = normalized.split(/\s+/).filter(w => w.length > 2);
-    let bestMatch: any = null, bestScore = 0;
-    for (const c of allCats) {
-      const catWords = c.name.toLowerCase().trim().split(/\s+/).filter((w: string) => w.length > 2);
-      const overlap = inputWords.filter(w => catWords.some((cw: string) => cw.includes(w) || w.includes(cw))).length;
-      const score = overlap / Math.max(inputWords.length, catWords.length);
-      if (score > bestScore && score >= 0.5) { bestScore = score; bestMatch = c; }
+
+  let allCats = categoriesCache;
+  if (!allCats || allCats.length === 0) {
+    const { data } = await supabase.from("categories").select("id, name, slug");
+    if (allCats) {
+      allCats.push(...(data || []));
+    } else {
+      allCats = data || [];
     }
-    if (bestMatch) return bestMatch.id;
   }
+
+  // Exact match
+  let exactMatch = allCats!.find((c: any) => c.name.toLowerCase().trim() === normalized);
+  if (exactMatch) return exactMatch.id;
+
+  // Partial match
+  const match = allCats!.find((c: any) => {
+    if (!c.name) return false;
+    const n = c.name.toLowerCase().trim();
+    return n.includes(normalized) || normalized.includes(n);
+  });
+  if (match) return match.id;
+
+  // Fuzzy match
+  const inputWords = normalized.split(/\s+/).filter((w: string) => w.length > 2);
+  let bestMatch: any = null, bestScore = 0;
+  for (const c of allCats!) {
+    if (!c.name) continue;
+    const catWords = c.name.toLowerCase().trim().split(/\s+/).filter((w: string) => w.length > 2);
+    const overlap = inputWords.filter((w: string) => catWords.some((cw: string) => cw.includes(w) || w.includes(cw))).length;
+    const score = overlap / Math.max(inputWords.length, catWords.length);
+    if (score > bestScore && score >= 0.5) { bestScore = score; bestMatch = c; }
+  }
+  if (bestMatch) return bestMatch.id;
+
+  // Create new
   const catSlug = slugify(categoryName);
-  const { data: existingSlug } = await supabase.from("categories").select("id").eq("slug", catSlug).maybeSingle();
+  const existingSlug = allCats!.find(c => c.slug === catSlug);
   const finalSlug = existingSlug ? `${catSlug}-${Date.now()}` : catSlug;
+
   const { data: newCat } = await supabase.from("categories").insert({ name: categoryName, slug: finalSlug, is_active: true }).select("id").single();
-  return newCat?.id || null;
+  if (newCat) {
+    allCats!.push({ ...newCat, name: categoryName, slug: finalSlug });
+    return newCat.id;
+  }
+  return null;
 }
 
 // ─── Download image from external URL and re-upload to Supabase Storage ───
@@ -527,9 +556,10 @@ async function syncProducts(supabase: any, token: string, config: BlingSyncConfi
   const blingStoreId = (storeSettings as any)?.bling_store_id || null;
 
   const categoryCache = new Map<string, string | null>();
+  const categoriesListCache: { id: string; name: string; slug: string }[] = [];
   async function getCategoryId(name: string): Promise<string | null> {
     if (categoryCache.has(name)) return categoryCache.get(name)!;
-    const id = await findOrCreateCategory(supabase, name);
+    const id = await findOrCreateCategory(supabase, name, categoriesListCache);
     categoryCache.set(name, id);
     return id;
   }
