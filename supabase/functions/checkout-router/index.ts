@@ -5,12 +5,7 @@
 import { z } from "https://esm.sh/zod@3.23.8";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-request-id, stripe-signature, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SINGLETON_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -72,29 +67,35 @@ function rateLimitCheck(key: string): boolean {
   return true;
 }
 
-function jsonRes(body: Record<string, unknown>, status = 200) {
+function jsonRes(body: Record<string, unknown>, status = 200, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
-  if (req.method !== "POST") return jsonRes({ success: false, error: "Method not allowed" }, 405);
+  const corsHeaders = {
+    ...getCorsHeaders(req.headers.get("Origin")),
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-request-id, stripe-signature, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  };
+
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") return jsonRes({ success: false, error: "Method not allowed" }, 405, corsHeaders);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) {
     console.error("checkout-router: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-    return jsonRes({ success: false, error: "Configuração do servidor incompleta" }, 500);
+    return jsonRes({ success: false, error: "Configuração do servidor incompleta" }, 500, corsHeaders);
   }
 
   let body: Record<string, unknown>;
   try {
     body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   } catch {
-    return jsonRes({ success: false, error: "Body JSON inválido" }, 400);
+    return jsonRes({ success: false, error: "Body JSON inválido" }, 400, corsHeaders);
   }
 
   const route = (body?.route ?? body?.action) as Route | undefined;
@@ -103,7 +104,8 @@ Deno.serve(async (req) => {
   if (!route || !ROUTES.includes(route)) {
     return jsonRes(
       { success: false, error: "route inválida. Use: start | resolve | create_gateway_session | stripe_intent | process_payment" },
-      400
+      400,
+      corsHeaders
     );
   }
 
@@ -112,7 +114,7 @@ Deno.serve(async (req) => {
     const parsed = startStartSchema.safeParse({ ...body, route: "start" });
     if (!parsed.success) {
       const msg = parsed.error.errors.map((e) => e.message).join("; ") || "Payload inválido para route start";
-      return jsonRes({ success: false, error: msg }, 400);
+      return jsonRes({ success: false, error: msg }, 400, corsHeaders);
     }
     const startReq = parsed.data;
     const cartId = startReq.cart_id;
@@ -129,7 +131,7 @@ Deno.serve(async (req) => {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
     const rateKey = `${cartId}|${ip}`;
     if (!rateLimitCheck(rateKey)) {
-      return jsonRes({ success: false, error: "Muitas requisições. Tente novamente em alguns minutos." }, 429);
+      return jsonRes({ success: false, error: "Muitas requisições. Tente novamente em alguns minutos." }, 429, corsHeaders);
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -142,7 +144,7 @@ Deno.serve(async (req) => {
       .in("id", variantIds);
 
     if (variantsErr || !variantsRows?.length) {
-      return jsonRes({ success: false, error: "Variantes não encontradas ou inválidas" }, 400);
+      return jsonRes({ success: false, error: "Variantes não encontradas ou inválidas" }, 400, corsHeaders);
     }
 
     type VariantRow = {
@@ -167,7 +169,7 @@ Deno.serve(async (req) => {
     for (const i of itemsInput) {
       const meta = variantMap.get(i.variant_id);
       if (!meta) {
-        return jsonRes({ success: false, error: `Variante inválida: ${i.variant_id}` }, 400);
+        return jsonRes({ success: false, error: `Variante inválida: ${i.variant_id}` }, 400, corsHeaders);
       }
       const unitPrice = meta.unit_price;
       const lineTotal = unitPrice * i.quantity;
@@ -193,15 +195,19 @@ Deno.serve(async (req) => {
 
     if (settings) {
       if (!settings.enabled) {
-        return jsonRes({
-          success: true,
-          provider: settings.active_provider as "stripe" | "yampi" | "appmax",
-          channel: settings.channel as "internal" | "external",
-          experience: settings.experience as "transparent" | "native",
-          action: "render",
-          redirect_url: "/checkout",
-          message: "Checkout desativado.",
-        });
+        return jsonRes(
+          {
+            success: true,
+            provider: settings.active_provider as "stripe" | "yampi" | "appmax",
+            channel: settings.channel as "internal" | "external",
+            experience: settings.experience as "transparent" | "native",
+            action: "render",
+            redirect_url: "/checkout",
+            message: "Checkout desativado.",
+          },
+          200,
+          corsHeaders
+        );
       }
       provider = settings.active_provider as "stripe" | "yampi" | "appmax";
       channel = settings.channel as "internal" | "external";
@@ -275,7 +281,7 @@ Deno.serve(async (req) => {
         }
         if (!orderId) {
           console.error("checkout-router start order insert error:", orderErr);
-          return jsonRes({ success: false, error: orderErr.message }, 500);
+          return jsonRes({ success: false, error: orderErr.message }, 500, corsHeaders);
         }
       } else {
         orderId = newOrder?.id ?? null;
@@ -327,17 +333,21 @@ Deno.serve(async (req) => {
       const redirectUrl = yampiData.redirect_url as string | undefined;
       const errMsg = yampiData.error as string | undefined;
       if (errMsg && !redirectUrl) {
-        return jsonRes({ success: false, provider, channel, experience, action: "redirect", error: errMsg }, 400);
+        return jsonRes({ success: false, provider, channel, experience, action: "redirect", error: errMsg }, 400, corsHeaders);
       }
       console.log(JSON.stringify({ scope: "checkout-router", request_id: requestId, route: "start", provider, channel, duration_ms: Date.now() - t0 }));
-      return jsonRes({
-        success: true,
-        provider,
-        channel,
-        experience,
-        action: "redirect",
-        redirect_url: redirectUrl || `${origin}/checkout`,
-      });
+      return jsonRes(
+        {
+          success: true,
+          provider,
+          channel,
+          experience,
+          action: "redirect",
+          redirect_url: redirectUrl || `${origin}/checkout`,
+        },
+        200,
+        corsHeaders
+      );
     }
 
     if (channel === "external" && provider === "stripe") {
@@ -365,18 +375,27 @@ Deno.serve(async (req) => {
       const stripeData = stripeRes.ok ? (await stripeRes.json().catch(() => ({}))) as Record<string, unknown> : {};
       const checkoutUrl = stripeData.checkout_url as string | undefined;
       const errMsg = stripeData.error as string | undefined;
-      if (errMsg) return jsonRes({ success: false, provider, channel, experience, action: "redirect", error: errMsg }, stripeRes.ok ? 200 : stripeRes.status);
+      if (errMsg)
+        return jsonRes(
+          { success: false, provider, channel, experience, action: "redirect", error: errMsg },
+          stripeRes.ok ? 200 : stripeRes.status,
+          corsHeaders
+        );
       console.log(JSON.stringify({ scope: "checkout-router", request_id: requestId, route: "start", provider, channel, duration_ms: Date.now() - t0 }));
-      return jsonRes({
-        success: true,
-        provider,
-        channel,
-        experience,
-        action: "redirect",
-        redirect_url: checkoutUrl,
-        order_id: orderId ?? undefined,
-        order_access_token: guestToken ?? undefined,
-      });
+      return jsonRes(
+        {
+          success: true,
+          provider,
+          channel,
+          experience,
+          action: "redirect",
+          redirect_url: checkoutUrl,
+          order_id: orderId ?? undefined,
+          order_access_token: guestToken ?? undefined,
+        },
+        200,
+        corsHeaders
+      );
     }
 
     if (channel === "internal" && provider === "stripe") {
@@ -402,42 +421,59 @@ Deno.serve(async (req) => {
       const stripeData = stripeRes.ok ? (await stripeRes.json().catch(() => ({}))) as Record<string, unknown> : {};
       const clientSecret = stripeData.client_secret as string | undefined;
       const errMsg = stripeData.error as string | undefined;
-      if (errMsg) return jsonRes({ success: false, provider, channel, experience, action: "render", error: errMsg }, stripeRes.ok ? 200 : stripeRes.status);
+      if (errMsg)
+        return jsonRes(
+          { success: false, provider, channel, experience, action: "render", error: errMsg },
+          stripeRes.ok ? 200 : stripeRes.status,
+          corsHeaders
+        );
       console.log(JSON.stringify({ scope: "checkout-router", request_id: requestId, route: "start", provider, channel, duration_ms: Date.now() - t0 }));
-      return jsonRes({
-        success: true,
-        provider,
-        channel,
-        experience,
-        action: "render",
-        client_secret: clientSecret,
-        order_id: orderId ?? undefined,
-        order_access_token: guestToken ?? undefined,
-      });
+      return jsonRes(
+        {
+          success: true,
+          provider,
+          channel,
+          experience,
+          action: "render",
+          client_secret: clientSecret,
+          order_id: orderId ?? undefined,
+          order_access_token: guestToken ?? undefined,
+        },
+        200,
+        corsHeaders
+      );
     }
 
     if (channel === "internal" && provider === "appmax") {
       console.log(JSON.stringify({ scope: "checkout-router", request_id: requestId, route: "start", provider, channel, duration_ms: Date.now() - t0 }));
-      return jsonRes({
-        success: true,
+      return jsonRes(
+        {
+          success: true,
+          provider,
+          channel,
+          experience,
+          action: "render",
+          order_id: orderId ?? undefined,
+          order_access_token: guestToken ?? undefined,
+          redirect_url: "/checkout",
+        },
+        200,
+        corsHeaders
+      );
+    }
+
+    return jsonRes(
+      {
+        success: false,
         provider,
         channel,
         experience,
         action: "render",
-        order_id: orderId ?? undefined,
-        order_access_token: guestToken ?? undefined,
-        redirect_url: "/checkout",
-      });
-    }
-
-    return jsonRes({
-      success: false,
-      provider,
-      channel,
-      experience,
-      action: "render",
-      error: "Combinação provider/channel não suportada para start",
-    }, 400);
+        error: "Combinação provider/channel não suportada para start",
+      },
+      400,
+      corsHeaders
+    );
   }
 
   const target = TARGET_MAP[route as Exclude<Route, "start">];
@@ -473,10 +509,14 @@ Deno.serve(async (req) => {
     try {
       data = text ? (JSON.parse(text) as Record<string, unknown>) : {};
     } catch {
-      return jsonRes({
-        success: false,
-        error: res.ok ? "Resposta inválida do servidor" : `Erro ${res.status}`,
-      }, res.ok ? 502 : res.status);
+      return jsonRes(
+        {
+          success: false,
+          error: res.ok ? "Resposta inválida do servidor" : `Erro ${res.status}`,
+        },
+        res.ok ? 502 : res.status,
+        corsHeaders
+      );
     }
 
     const errMsg = typeof data.error === "string" ? data.error : data.error != null ? JSON.stringify(data.error) : null;
@@ -487,10 +527,10 @@ Deno.serve(async (req) => {
       ...(errMsg && { error: errMsg }),
       ...data,
     };
-    return jsonRes(unified, res.ok ? 200 : res.status);
+    return jsonRes(unified, res.ok ? 200 : res.status, corsHeaders);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("checkout-router delegate error:", msg);
-    return jsonRes({ success: false, error: msg || "Erro ao processar checkout" }, 500);
+    return jsonRes({ success: false, error: msg || "Erro ao processar checkout" }, 500, corsHeaders);
   }
 });

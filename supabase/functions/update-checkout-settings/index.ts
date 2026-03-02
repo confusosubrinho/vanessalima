@@ -4,11 +4,7 @@
  * Requer Authorization: Bearer <user_jwt>. Apenas admin. Valida combinações provider/channel/experience.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-request-id",
-};
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SINGLETON_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -16,10 +12,10 @@ type Provider = "stripe" | "yampi" | "appmax";
 type Channel = "internal" | "external";
 type Experience = "transparent" | "native";
 
-function jsonRes(body: Record<string, unknown>, status = 200) {
+function jsonRes(body: Record<string, unknown>, status = 200, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
@@ -40,11 +36,16 @@ function validateCombination(provider: Provider, channel: Channel, experience: E
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
-  if (req.method !== "POST") return jsonRes({ success: false, error: "Method not allowed" }, 405);
+  const corsHeaders = {
+    ...getCorsHeaders(req.headers.get("Origin")),
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-request-id",
+  };
+
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") return jsonRes({ success: false, error: "Method not allowed" }, 405, corsHeaders);
 
   const userJwt = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
-  if (!userJwt) return jsonRes({ success: false, error: "Unauthorized" }, 401);
+  if (!userJwt) return jsonRes({ success: false, error: "Unauthorized" }, 401, corsHeaders);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -54,13 +55,13 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: `Bearer ${userJwt}` } },
   });
   const { data: isAdmin } = await supabaseUser.rpc("is_admin");
-  if (!isAdmin) return jsonRes({ success: false, error: "Forbidden" }, 403);
+  if (!isAdmin) return jsonRes({ success: false, error: "Forbidden" }, 403, corsHeaders);
 
   let body: Record<string, unknown>;
   try {
     body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   } catch {
-    return jsonRes({ success: false, error: "Body JSON inválido" }, 400);
+    return jsonRes({ success: false, error: "Body JSON inválido" }, 400, corsHeaders);
   }
 
   const active_provider = body.active_provider as Provider | undefined;
@@ -74,7 +75,8 @@ Deno.serve(async (req) => {
   if (!active_provider || !channel || !experience) {
     return jsonRes(
       { success: false, error: "active_provider, channel e experience são obrigatórios" },
-      400
+      400,
+      corsHeaders
     );
   }
   const providers: Provider[] = ["stripe", "yampi", "appmax"];
@@ -83,15 +85,16 @@ Deno.serve(async (req) => {
   if (!providers.includes(active_provider) || !channels.includes(channel) || !experiences.includes(experience)) {
     return jsonRes(
       { success: false, error: "active_provider, channel ou experience com valor inválido" },
-      400
+      400,
+      corsHeaders
     );
   }
   if (environment !== "sandbox" && environment !== "production") {
-    return jsonRes({ success: false, error: "environment deve ser sandbox ou production" }, 400);
+    return jsonRes({ success: false, error: "environment deve ser sandbox ou production" }, 400, corsHeaders);
   }
 
   const validationError = validateCombination(active_provider, channel, experience);
-  if (validationError) return jsonRes({ success: false, error: validationError }, 400);
+  if (validationError) return jsonRes({ success: false, error: validationError }, 400, corsHeaders);
 
   const supabase = createClient(supabaseUrl, serviceKey);
 
@@ -104,7 +107,7 @@ Deno.serve(async (req) => {
 
   if (fetchError && fetchError.code !== "PGRST116") {
     console.error("update-checkout-settings fetch error:", fetchError);
-    return jsonRes({ success: false, error: "Erro ao ler configuração atual" }, 500);
+    return jsonRes({ success: false, error: "Erro ao ler configuração atual" }, 500, corsHeaders);
   }
 
   const oldValue = current
@@ -144,7 +147,7 @@ Deno.serve(async (req) => {
 
   if (updateError) {
     console.error("update-checkout-settings update error:", updateError);
-    return jsonRes({ success: false, error: updateError.message }, 500);
+    return jsonRes({ success: false, error: updateError.message }, 500, corsHeaders);
   }
 
   const newValue = {
@@ -203,5 +206,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return jsonRes({ success: true, settings: updated });
+  return jsonRes({ success: true, settings: updated }, 200, corsHeaders);
 });

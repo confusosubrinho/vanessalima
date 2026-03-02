@@ -1,13 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-request-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-function jsonRes(body: Record<string, unknown>, status = 200) {
+function jsonRes(body: Record<string, unknown>, status = 200, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -15,6 +10,12 @@ function jsonRes(body: Record<string, unknown>, status = 200) {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = {
+    ...getCorsHeaders(req.headers.get("Origin")),
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-request-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  };
+
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
@@ -42,10 +43,14 @@ Deno.serve(async (req) => {
 
     // ─── Action: get_config ───
     if (action === "get_config") {
-      return jsonRes({
-        publishable_key: stripeConfig.publishable_key || null,
-        is_active: stripeProvider?.is_active ?? false,
-      });
+      return jsonRes(
+        {
+          publishable_key: stripeConfig.publishable_key || null,
+          is_active: stripeProvider?.is_active ?? false,
+        },
+        200,
+        corsHeaders
+      );
     }
 
     // ─── Action: create_payment_intent ───
@@ -64,7 +69,7 @@ Deno.serve(async (req) => {
       } = body;
 
       if (!order_id || !amount) {
-        return jsonRes({ error: "order_id e amount são obrigatórios" }, 400);
+        return jsonRes({ error: "order_id e amount são obrigatórios" }, 400, corsHeaders);
       }
 
       // ── Auth: Bearer or guest token ──
@@ -72,14 +77,14 @@ Deno.serve(async (req) => {
       const hasBearer = !!authHeader?.startsWith("Bearer ");
 
       if (!hasBearer) {
-        if (!order_access_token) return jsonRes({ error: "Autenticação necessária" }, 401);
+        if (!order_access_token) return jsonRes({ error: "Autenticação necessária" }, 401, corsHeaders);
         const { data: orderRow } = await supabase
           .from("orders")
           .select("id")
           .eq("id", order_id)
           .eq("access_token", order_access_token)
           .maybeSingle();
-        if (!orderRow) return jsonRes({ error: "Acesso negado ao pedido" }, 403);
+        if (!orderRow) return jsonRes({ error: "Acesso negado ao pedido" }, 403, corsHeaders);
       }
 
       // ── Read pricing config ──
@@ -127,7 +132,7 @@ Deno.serve(async (req) => {
         else serverSubtotalFull += lineTotal;
       }
 
-      if (priceErrors.length > 0) return jsonRes({ error: priceErrors.join("; ") }, 400);
+      if (priceErrors.length > 0) return jsonRes({ error: priceErrors.join("; ") }, 400, corsHeaders);
 
       // ── Coupon validation ──
       let validatedDiscount = 0;
@@ -141,7 +146,7 @@ Deno.serve(async (req) => {
 
         if (coupon) {
           if (coupon.expiry_date && new Date(coupon.expiry_date as string) < new Date()) {
-            return jsonRes({ error: "Cupom expirado" }, 400);
+            return jsonRes({ error: "Cupom expirado" }, 400, corsHeaders);
           }
           validatedDiscount = (coupon.discount_type as string) === "percentage"
             ? (serverSubtotal * Number(coupon.discount_value)) / 100
@@ -205,7 +210,7 @@ Deno.serve(async (req) => {
           error_context: { order_id, client_amount: amount, server_total: serverTotal },
           severity: "warning",
         });
-        return jsonRes({ error: "Valor do pedido divergente. Recarregue a página." }, 400);
+        return jsonRes({ error: "Valor do pedido divergente. Recarregue a página." }, 400, corsHeaders);
       }
 
       const authorizedAmount = serverTotal;
@@ -223,14 +228,14 @@ Deno.serve(async (req) => {
           for (const dec of stockDecrements) {
             await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
           }
-          return jsonRes({ error: `Erro de estoque: ${rpcError.message}` }, 400);
+          return jsonRes({ error: `Erro de estoque: ${rpcError.message}` }, 400, corsHeaders);
         }
         const stockResult = typeof result === "string" ? JSON.parse(result) : result;
         if (!stockResult?.success) {
           for (const dec of stockDecrements) {
             await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
           }
-          return jsonRes({ error: stockResult?.message || "Estoque insuficiente" }, 400);
+          return jsonRes({ error: stockResult?.message || "Estoque insuficiente" }, 400, corsHeaders);
         }
         stockDecrements.push({ variant_id: product.variant_id, quantity: qty });
       }
@@ -296,7 +301,7 @@ Deno.serve(async (req) => {
           for (const dec of stockDecrements) {
             await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
           }
-          return jsonRes({ error: "O método PIX não está ativado na sua conta Stripe. Use cartão de crédito ou ative o PIX no painel Stripe." }, 400);
+          return jsonRes({ error: "O método PIX não está ativado na sua conta Stripe. Use cartão de crédito ou ative o PIX no painel Stripe." }, 400, corsHeaders);
         }
         throw stripeErr;
       }
@@ -337,7 +342,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      return jsonRes(res);
+      return jsonRes(res, 200, corsHeaders);
     }
 
     // ─── Action: create_checkout_session (external Stripe Checkout) ───
@@ -345,21 +350,21 @@ Deno.serve(async (req) => {
       const { order_id, amount, customer_email, customer_name, products, success_url, cancel_url, order_access_token, coupon_code, discount_amount = 0 } = body;
 
       if (!order_id || !amount || !success_url) {
-        return jsonRes({ error: "order_id, amount e success_url são obrigatórios" }, 400);
+        return jsonRes({ error: "order_id, amount e success_url são obrigatórios" }, 400, corsHeaders);
       }
 
       // ── Auth check ──
       const authHeader = req.headers.get("Authorization");
       const hasBearer = !!authHeader?.startsWith("Bearer ");
       if (!hasBearer) {
-        if (!order_access_token) return jsonRes({ error: "Autenticação necessária" }, 401);
+        if (!order_access_token) return jsonRes({ error: "Autenticação necessária" }, 401, corsHeaders);
         const { data: orderRow } = await supabase
           .from("orders")
           .select("id")
           .eq("id", order_id)
           .eq("access_token", order_access_token)
           .maybeSingle();
-        if (!orderRow) return jsonRes({ error: "Acesso negado ao pedido" }, 403);
+        if (!orderRow) return jsonRes({ error: "Acesso negado ao pedido" }, 403, corsHeaders);
       }
 
       // ── Server-side price validation ──
@@ -375,9 +380,9 @@ Deno.serve(async (req) => {
           .eq("id", product.variant_id)
           .single();
 
-        if (!variantData) return jsonRes({ error: `Variante ${product.variant_id} não encontrada` }, 400);
+        if (!variantData) return jsonRes({ error: `Variante ${product.variant_id} não encontrada` }, 400, corsHeaders);
         const productData = variantData.products as any;
-        if (!productData?.is_active) return jsonRes({ error: `Produto "${productData?.name || product.name}" indisponível` }, 400);
+        if (!productData?.is_active) return jsonRes({ error: `Produto "${productData?.name || product.name}" indisponível` }, 400, corsHeaders);
 
         let realUnitPrice: number;
         if (variantData.sale_price && Number(variantData.sale_price) > 0) {
@@ -400,14 +405,14 @@ Deno.serve(async (req) => {
           for (const dec of stockDecrements) {
             await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
           }
-          return jsonRes({ error: `Erro de estoque: ${rpcError.message}` }, 400);
+          return jsonRes({ error: `Erro de estoque: ${rpcError.message}` }, 400, corsHeaders);
         }
         const stockResult = typeof result === "string" ? JSON.parse(result) : result;
         if (!stockResult?.success) {
           for (const dec of stockDecrements) {
             await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
           }
-          return jsonRes({ error: stockResult?.message || "Estoque insuficiente" }, 400);
+          return jsonRes({ error: stockResult?.message || "Estoque insuficiente" }, 400, corsHeaders);
         }
         stockDecrements.push({ variant_id: product.variant_id, quantity: qty });
 
@@ -439,7 +444,7 @@ Deno.serve(async (req) => {
         for (const dec of stockDecrements) {
           await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
         }
-        return jsonRes({ error: "Nenhum item válido para checkout" }, 400);
+        return jsonRes({ error: "Nenhum item válido para checkout" }, 400, corsHeaders);
       }
 
       // ── Coupon / discount ──
@@ -503,7 +508,7 @@ Deno.serve(async (req) => {
         const msg = stripeErr?.message || "Erro ao criar sessão de checkout";
         const code = stripeErr?.code || stripeErr?.type;
         console.error("Stripe checkout.sessions.create failed:", msg, code ? `(${code})` : "");
-        return jsonRes({ error: msg }, 500);
+        return jsonRes({ error: msg }, 500, corsHeaders);
       }
 
       const updatePayload: Record<string, unknown> = {
@@ -521,14 +526,14 @@ Deno.serve(async (req) => {
 
       console.log(JSON.stringify({ scope: "stripe-create-intent", request_id: requestId, provider: "stripe", order_id, session_id: session.id, action: "create_checkout_session" }));
 
-      return jsonRes({ checkout_url: session.url, session_id: session.id });
+      return jsonRes({ checkout_url: session.url, session_id: session.id }, 200, corsHeaders);
     }
 
-    return jsonRes({ error: "Ação inválida" }, 400);
+    return jsonRes({ error: "Ação inválida" }, 400, corsHeaders);
   } catch (error: any) {
     const msg = error?.message || String(error);
     const code = error?.code ?? error?.type;
     console.error("Stripe error:", msg, code ? `(${code})` : "");
-    return jsonRes({ error: msg || "Erro ao processar pagamento Stripe" }, 500);
+    return jsonRes({ error: msg || "Erro ao processar pagamento Stripe" }, 500, corsHeaders);
   }
 });
