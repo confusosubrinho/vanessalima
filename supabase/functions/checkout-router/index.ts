@@ -9,7 +9,7 @@ import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-request-id, stripe-signature",
+    "authorization, x-client-info, apikey, content-type, x-request-id, stripe-signature, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const SINGLETON_ID = "00000000-0000-0000-0000-000000000001";

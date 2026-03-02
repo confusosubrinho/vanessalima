@@ -42,11 +42,11 @@ export default function CheckoutSettings() {
     queryKey: ["checkout-settings"],
     queryFn: async () => {
       const { data } = await supabase
-        .from("checkout_settings")
+        .from("checkout_settings" as any)
         .select("*")
         .eq("id", "00000000-0000-0000-0000-000000000001")
         .maybeSingle();
-      return data;
+      return data as unknown as { enabled: boolean; active_provider: string; channel: string; experience: string; updated_at: string } | null;
     },
   });
 
