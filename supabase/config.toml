@@ -83,3 +83,24 @@ verify_jwt = false
 
 [functions.admin-commerce-action]
 verify_jwt = false
+
+[functions.checkout-router]
+verify_jwt = false
+
+[functions.update-checkout-settings]
+verify_jwt = false
+
+[functions.reprocess-stripe-webhook]
+verify_jwt = false
+
+[functions.stripe-catalog-sync]
+verify_jwt = false
+
+[functions.generate-seo]
+verify_jwt = false
+
+[functions.tray-import]
+verify_jwt = false
+
+[functions.yampi-sync-images]
+verify_jwt = false
