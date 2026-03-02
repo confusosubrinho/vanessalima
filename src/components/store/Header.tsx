@@ -22,6 +22,8 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
 
 const DROPDOWN_CLOSE_DELAY = 200; // ms
 
+const CHECKOUT_START_HREF = '/checkout/start';
+
 function useDropdown() {
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -432,7 +434,7 @@ export function Header() {
                       
                       {selectedShipping ? (
                         <Button asChild className="w-full" size="sm">
-                          <Link to={checkoutHref} onClick={() => setIsCartOpen(false)} onMouseEnter={prefetchCheckoutStartPage}>Finalizar Compra</Link>
+                          <Link to={CHECKOUT_START_HREF} onClick={() => setIsCartOpen(false)} onMouseEnter={prefetchCheckoutStartPage}>Finalizar Compra</Link>
                         </Button>
                       ) : (
                         <Button asChild className="w-full" size="sm" variant="secondary">
