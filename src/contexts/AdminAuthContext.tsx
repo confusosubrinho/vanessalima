@@ -3,7 +3,7 @@
  * Componentes do admin podem chamar onSessionExpired() ao receber 401/403 para
  * limpar cache, fazer logout e redirecionar para /admin/login.
  */
-import { createContext, useContext, useCallback } from 'react';
+import { createContext, useContext, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +27,41 @@ export function AdminAuthProvider({
   onSessionExpired: (message?: string) => void;
 }) {
   const value: AdminAuthContextValue = { onSessionExpired };
+
+  // Watchdog global para capturar erros 401/403 em requisições
+  useEffect(() => {
+    const originalFetch = window.fetch;
+
+    window.fetch = async (...args) => {
+      try {
+        const response = await originalFetch(...args);
+
+        if (response.status === 401 || response.status === 403) {
+          const url = typeof args[0] === 'string'
+            ? args[0]
+            : (args[0] instanceof Request ? args[0].url : '');
+
+          const isSupabaseRequest = url.includes('supabase.co') || url.includes(import.meta.env.VITE_SUPABASE_URL || 'supabase');
+
+          // Não interceptar requests de auth para evitar loop na hora de logar ou renovar token
+          const isAuthEndpoint = url.includes('/auth/v1/');
+
+          if (isSupabaseRequest && !isAuthEndpoint) {
+            onSessionExpired('Sessão expirada ou acesso negado. Faça login novamente.');
+          }
+        }
+
+        return response;
+      } catch (error) {
+        throw error;
+      }
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, [onSessionExpired]);
+
   return (
     <AdminAuthContext.Provider value={value}>
       {children}
