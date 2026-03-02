@@ -151,11 +151,11 @@ export function InstagramFeed() {
                     />
                   ) : (
                     <video
-                      src={video.video_url}
-                      className={`absolute inset-0 w-full h-full object-cover ${isActive ? 'opacity-0' : 'opacity-100'}`}
+                      src={`${video.video_url}#t=0.1`}
+                      className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${isActive ? 'opacity-0' : 'opacity-100'}`}
                       muted
                       playsInline
-                      preload="metadata"
+                      preload="auto"
                     />
                   )}
                   <video
