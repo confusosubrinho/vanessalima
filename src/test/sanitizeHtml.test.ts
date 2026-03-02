@@ -3,12 +3,9 @@ import { sanitizeHtml } from '../lib/sanitizeHtml';
 
 describe('sanitizeHtml', () => {
   it('should return empty string for non-string inputs', () => {
-    // @ts-expect-error testing invalid input
-    expect(sanitizeHtml(null)).toBe('');
-    // @ts-expect-error testing invalid input
-    expect(sanitizeHtml(undefined)).toBe('');
-    // @ts-expect-error testing invalid input
-    expect(sanitizeHtml(123)).toBe('');
+    expect(sanitizeHtml(null as unknown as string)).toBe('');
+    expect(sanitizeHtml(undefined as unknown as string)).toBe('');
+    expect(sanitizeHtml(123 as unknown as string)).toBe('');
   });
 
   it('should return empty string for empty or whitespace-only strings', () => {

@@ -108,7 +108,14 @@ export default function CheckoutStart() {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Erro ao iniciar checkout";
         console.error("Checkout start error:", msg);
-        setError(msg);
+        
+        // Detect stale variant error and show user-friendly message
+        const variantMatch = msg.match(/Variante inválida:\s*([\w-]+)/);
+        if (variantMatch) {
+          setError("Um ou mais itens do seu carrinho não estão mais disponíveis. Por favor, volte ao carrinho e remova os itens indisponíveis.");
+        } else {
+          setError(msg);
+        }
         hasStartedCheckout.current = false;
       }
     };

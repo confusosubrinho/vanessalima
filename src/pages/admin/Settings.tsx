@@ -57,7 +57,7 @@ export default function Settings() {
         .single();
       
       if (error && error.code !== 'PGRST116') throw error;
-      return data as StoreSettings | null;
+      return data as unknown as StoreSettings | null;
     },
   });
 
