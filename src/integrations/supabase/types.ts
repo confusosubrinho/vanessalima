@@ -3180,6 +3180,7 @@ export type Database = {
           created_at: string | null
           facebook_pixel_id: string | null
           facebook_url: string | null
+          favicon_url: string | null
           free_shipping_threshold: number | null
           full_address: string | null
           google_analytics_id: string | null
@@ -3205,6 +3206,7 @@ export type Database = {
           shipping_store_pickup_address: string | null
           shipping_store_pickup_enabled: boolean | null
           shipping_store_pickup_label: string | null
+          show_variants_on_grid: boolean | null
           store_name: string | null
           tiktok_pixel_id: string | null
           updated_at: string | null
@@ -3222,6 +3224,7 @@ export type Database = {
           created_at?: string | null
           facebook_pixel_id?: string | null
           facebook_url?: string | null
+          favicon_url?: string | null
           free_shipping_threshold?: number | null
           full_address?: string | null
           google_analytics_id?: string | null
@@ -3247,6 +3250,7 @@ export type Database = {
           shipping_store_pickup_address?: string | null
           shipping_store_pickup_enabled?: boolean | null
           shipping_store_pickup_label?: string | null
+          show_variants_on_grid?: boolean | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string | null
@@ -3264,6 +3268,7 @@ export type Database = {
           created_at?: string | null
           facebook_pixel_id?: string | null
           facebook_url?: string | null
+          favicon_url?: string | null
           free_shipping_threshold?: number | null
           full_address?: string | null
           google_analytics_id?: string | null
@@ -3289,6 +3294,7 @@ export type Database = {
           shipping_store_pickup_address?: string | null
           shipping_store_pickup_enabled?: boolean | null
           shipping_store_pickup_label?: string | null
+          show_variants_on_grid?: boolean | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string | null
