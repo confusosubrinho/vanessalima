@@ -5,29 +5,6 @@ import { useCart } from "@/contexts/CartContext";
 import { captureAttribution, getAttribution } from "@/lib/attribution";
 import { Loader2, ShieldCheck, Lock, CreditCard } from "lucide-react";
 import { getCartItemUnitPrice } from "@/lib/cartPricing";
-import { generateRequestId, invokeCheckoutFunction } from "@/lib/checkoutClient";
-import { Button } from "@/components/ui/button";
-
-export default function CheckoutStart() {
-  const navigate = useNavigate();
-  const { items, subtotal, discount, selectedShipping, clearCart, appliedCoupon, cartId, shippingZip } = useCart();
-  const [error, setError] = useState<string | null>(null);
-  const [retryTrigger, setRetryTrigger] = useState(0);
-  const hasStartedCheckout = useRef(false);
-
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(price);
-
-  const shippingCost = selectedShipping?.price ?? 0;
-  const totalValue = subtotal - discount + shippingCost;
-
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useCart } from "@/contexts/CartContext";
-import { captureAttribution, getAttribution } from "@/lib/attribution";
-import { Loader2, ShieldCheck, Lock, CreditCard } from "lucide-react";
-import { getCartItemUnitPrice } from "@/lib/cartPricing";
 import { generateRequestId, invokeCheckoutRouter } from "@/lib/checkoutClient";
 import type { CheckoutStartResponse } from "@/types/checkoutStart";
 import { Button } from "@/components/ui/button";

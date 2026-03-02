@@ -31,7 +31,7 @@ export function AddedToCartToast({
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+    <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
       <div className="pointer-events-auto bg-background border border-border rounded-2xl shadow-2xl p-5 w-[340px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-300">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
