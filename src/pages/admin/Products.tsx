@@ -5,6 +5,7 @@ import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Up
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
+import pLimit from 'p-limit';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -339,21 +340,27 @@ export default function Products() {
     let successCount = 0;
     let errorCount = 0;
 
-    for (const product of eligibleProducts) {
-      try {
-        const { data, error } = await supabase.functions.invoke('bling-sync-single-stock', {
-          body: { product_id: product.id },
-        });
-        if (error || (data && !data.success)) {
+    const limit = pLimit(5);
+    const syncTasks = eligibleProducts.map(product =>
+      limit(async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke('bling-sync-single-stock', {
+            body: { product_id: product.id },
+          });
+          if (error || (data && !data.success)) {
+            errorCount++;
+          } else {
+            successCount++;
+          }
+        } catch {
           errorCount++;
-        } else {
-          successCount++;
+        } finally {
+          setBulkSyncProgress(prev => ({ ...prev, done: prev.done + 1 }));
         }
-      } catch {
-        errorCount++;
-      }
-      setBulkSyncProgress(prev => ({ ...prev, done: prev.done + 1 }));
-    }
+      })
+    );
+
+    await Promise.all(syncTasks);
 
     setBulkSyncing(false);
     queryClient.invalidateQueries({ queryKey: ['admin-products'] });
