@@ -11,13 +11,15 @@ export function preloadLcpImage(): void {
   const url = (import.meta.env?.VITE_SUPABASE_URL ?? '').trim();
   if (!url || url.includes('placeholder')) return;
 
-  supabase
-    .from('banners')
-    .select('image_url, mobile_image_url, show_on_mobile')
-    .eq('is_active', true)
-    .order('display_order', { ascending: true })
-    .limit(1)
-    .maybeSingle()
+  Promise.resolve(
+    supabase
+      .from('banners')
+      .select('image_url, mobile_image_url, show_on_mobile')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+  )
     .then(({ data }) => {
       if (!data?.image_url) return;
       const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
