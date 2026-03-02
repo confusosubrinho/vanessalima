@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
-import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { CartProvider } from "@/contexts/CartContext";
 import { ErrorBoundary } from "@/components/store/ErrorBoundary";
 import { ScrollToTop } from "@/components/store/ScrollToTop";
@@ -18,31 +18,25 @@ import NotFound from "./pages/NotFound";
 
 // Lazy load non-critical pages
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
-
-function ProductDetailKeyed() {
-  return <ProductDetail />;
-}
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const SizePage = lazy(() => import("./pages/SizePage"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Cart = lazy(() => import("./pages/Cart"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const MyAccount = lazy(() => import("./pages/MyAccount"));
-const FAQPage = lazy(() => import("./pages/FAQPage"));
-const SobrePage = lazy(() => import("./pages/SobrePage"));
-const PoliticaPrivacidadePage = lazy(() => import("./pages/PoliticaPrivacidadePage"));
-const TermosPage = lazy(() => import("./pages/TermosPage"));
-const TrocasPage = lazy(() => import("./pages/TrocasPage"));
-const ComoComprarPage = lazy(() => import("./pages/ComoComprarPage"));
-const FormasPagamentoPage = lazy(() => import("./pages/FormasPagamentoPage"));
-const AtendimentoPage = lazy(() => import("./pages/AtendimentoPage"));
-const BestSellersPage = lazy(() => import("./pages/BestSellersPage"));
-const PromotionsPage = lazy(() => import("./pages/PromotionsPage"));
-const NewArrivalsPage = lazy(() => import("./pages/NewArrivalsPage"));
 const RastreioPage = lazy(() => import("./pages/RastreioPage"));
 const OrderConfirmation = lazy(() => import("./pages/OrderConfirmation"));
 const FavoritesPage = lazy(() => import("./pages/FavoritesPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
+
+// Consolidated pages (replaces 5 individual institutional + 3 listing pages = 8 → 2 modules)
+const InstitutionalPageRoute = lazy(() => import("./pages/InstitutionalPageRoute"));
+const ProductListingPage = lazy(() => import("./pages/ProductListingPage"));
+
+// Standalone institutional pages with custom content (not CMS-driven)
+const ComoComprarPage = lazy(() => import("./pages/ComoComprarPage"));
+const FormasPagamentoPage = lazy(() => import("./pages/FormasPagamentoPage"));
+const AtendimentoPage = lazy(() => import("./pages/AtendimentoPage"));
 
 // Lazy load admin routes (heavy)
 const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
@@ -129,7 +123,7 @@ const App = () => {
           maxAge: 1000 * 60 * 60 * 24,
           dehydrateOptions: {
             shouldDehydrateQuery: (query: { queryKey: unknown[] }) =>
-              query.queryKey[0] !== 'store-settings-public', // não persistir: logo/identidade devem vir sempre frescos do servidor
+              query.queryKey[0] !== 'store-settings-public',
           },
         },
       }
@@ -156,7 +150,7 @@ const App = () => {
           <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/produto/:slug" element={<ProductDetailKeyed />} />
+              <Route path="/produto/:slug" element={<ProductDetail />} />
               <Route path="/categoria/:slug" element={<CategoryPage />} />
               <Route path="/conta" element={<MyAccount />} />
               <Route path="/auth" element={<Auth />} />
@@ -165,17 +159,24 @@ const App = () => {
               <Route path="/checkout/start" element={<CheckoutStart />} />
               <Route path="/checkout/obrigado" element={<CheckoutReturn />} />
               <Route path="/tamanho/:size" element={<SizePage />} />
-              <Route path="/faq" element={<FAQPage />} />
-              <Route path="/sobre" element={<SobrePage />} />
-              <Route path="/politica-privacidade" element={<PoliticaPrivacidadePage />} />
-              <Route path="/termos" element={<TermosPage />} />
-              <Route path="/trocas" element={<TrocasPage />} />
+
+              {/* Consolidated institutional pages (CMS-driven) */}
+              <Route path="/faq" element={<InstitutionalPageRoute />} />
+              <Route path="/sobre" element={<InstitutionalPageRoute />} />
+              <Route path="/politica-privacidade" element={<InstitutionalPageRoute />} />
+              <Route path="/termos" element={<InstitutionalPageRoute />} />
+              <Route path="/trocas" element={<InstitutionalPageRoute />} />
+
+              {/* Standalone institutional pages (custom content) */}
               <Route path="/como-comprar" element={<ComoComprarPage />} />
               <Route path="/formas-pagamento" element={<FormasPagamentoPage />} />
               <Route path="/atendimento" element={<AtendimentoPage />} />
-              <Route path="/mais-vendidos" element={<BestSellersPage />} />
-              <Route path="/promocoes" element={<PromotionsPage />} />
-              <Route path="/novidades" element={<NewArrivalsPage />} />
+
+              {/* Consolidated product listing pages */}
+              <Route path="/mais-vendidos" element={<ProductListingPage />} />
+              <Route path="/promocoes" element={<ProductListingPage />} />
+              <Route path="/novidades" element={<ProductListingPage />} />
+
               <Route path="/rastreio" element={<RastreioPage />} />
               <Route path="/pedido-confirmado/:orderId" element={<OrderConfirmation />} />
               <Route path="/pedido-confirmado" element={<OrderConfirmation />} />
@@ -211,7 +212,7 @@ const App = () => {
                 <Route path="sistema" element={<SystemAndLogs />} />
                 <Route path="tema" element={<ThemeEditor />} />
                 <Route path="notificacoes" element={<Notifications />} />
-              <Route path="avaliacoes" element={<Reviews />} />
+                <Route path="avaliacoes" element={<Reviews />} />
                 <Route path="equipe" element={<Team />} />
                 <Route path="checkout-transparente" element={<CheckoutSettings />} />
                 <Route path="commerce-health" element={<CommerceHealth />} />
