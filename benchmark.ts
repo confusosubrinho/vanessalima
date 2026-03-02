@@ -1,67 +1,79 @@
-import { test, expect } from "bun:test";
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-const mockOrderList = Array.from({ length: 50 }, (_, i) => ({
-  id: `order_${i}`,
-  provider: "stripe",
-  transaction_id: `txn_${i}`
-}));
+const LATENCY = 10; // 10ms network latency per query
+const NUM_ORDERS = 50;
 
-const mockItems = mockOrderList.flatMap(o => [
-  { order_id: o.id, product_variant_id: "v1", quantity: 1 },
-  { order_id: o.id, product_variant_id: "v2", quantity: 2 },
-]);
+const ordersList = Array.from({ length: NUM_ORDERS }, (_, i) => ({ id: `order_${i}`, transaction_id: `txn_${i}` }));
 
-const supabase = {
-  from: (table: string) => ({
-    select: (fields: string) => ({
-      eq: async (field: string, val: string) => {
-        // simulate 10ms network latency
-        await new Promise(r => setTimeout(r, 10));
-        return { data: mockItems.filter(i => i.order_id === val) };
-      },
-      in: async (field: string, vals: string[]) => {
-        // simulate 15ms network latency
-        await new Promise(r => setTimeout(r, 15));
-        return { data: mockItems.filter(i => vals.includes(i.order_id)) };
-      }
-    })
-  })
-};
-
-async function beforeOptimization() {
+async function runCurrent() {
   const start = performance.now();
-  for (const order of mockOrderList) {
-    const { data: items } = await supabase
-      .from("order_items")
-      .select("product_variant_id, quantity")
-      .eq("order_id", order.id);
+  let reconciled = 0;
+
+  // Simulated initial query
+  await delay(LATENCY);
+  const orders = ordersList.map(o => ({ id: o.id }));
+
+  for (const o of orders || []) {
+    // N+1 Query
+    await delay(LATENCY);
+    const order = { transaction_id: `txn_${o.id}` };
+
+    if (!order?.transaction_id) continue;
+
+    // Simulate stripe retrieve
+    await delay(LATENCY);
+    const pi = { status: "succeeded", amount: 1000 };
+
+    if (pi.status === "succeeded") {
+      // update order
+      await delay(LATENCY);
+      // check payments
+      await delay(LATENCY);
+      // insert payment
+      await delay(LATENCY);
+      reconciled++;
+    }
   }
-  return performance.now() - start;
+  const end = performance.now();
+  console.log(`Current approach time: ${(end - start).toFixed(2)}ms`);
 }
 
-async function afterOptimization() {
+async function runOptimized() {
   const start = performance.now();
-  const orderIds = mockOrderList.map(o => o.id);
-  let allOrderItems: any[] = [];
-  if (orderIds.length > 0) {
-    const { data: items } = await supabase
-      .from("order_items")
-      .select("order_id, product_variant_id, quantity")
-      .in("order_id", orderIds);
-    allOrderItems = items || [];
-  }
+  let reconciled = 0;
 
-  for (const order of mockOrderList) {
-    const items = allOrderItems.filter(i => i.order_id === order.id);
+  // Simulated initial query
+  await delay(LATENCY);
+  const orders = ordersList.map(o => ({ id: o.id, transaction_id: o.transaction_id }));
+
+  for (const o of orders || []) {
+    // N+1 Query REMOVED
+    const order = o;
+
+    if (!order?.transaction_id) continue;
+
+    // Simulate stripe retrieve
+    await delay(LATENCY);
+    const pi = { status: "succeeded", amount: 1000 };
+
+    if (pi.status === "succeeded") {
+      // update order
+      await delay(LATENCY);
+      // check payments
+      await delay(LATENCY);
+      // insert payment
+      await delay(LATENCY);
+      reconciled++;
+    }
   }
-  return performance.now() - start;
+  const end = performance.now();
+  console.log(`Optimized approach time: ${(end - start).toFixed(2)}ms`);
 }
 
-async function run() {
-  const t1 = await beforeOptimization();
-  console.log("Before:", t1, "ms");
-  const t2 = await afterOptimization();
-  console.log("After:", t2, "ms");
+async function main() {
+  console.log(`Benchmarking with ${NUM_ORDERS} orders and ${LATENCY}ms latency...`);
+  await runCurrent();
+  await runOptimized();
 }
 
-run();
+main();

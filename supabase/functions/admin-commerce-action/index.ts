@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
     const { data: orders } = await supabase
       .from("orders")
-      .select("id")
+      .select("id, transaction_id")
       .eq("status", "pending")
       .not("transaction_id", "is", null)
       .lt("created_at", cutoff);
@@ -133,17 +133,16 @@ Deno.serve(async (req) => {
       );
     }
     let reconciled = 0;
-    for (const o of orders || []) {
-      const { data: order } = await supabase.from("orders").select("transaction_id").eq("id", o.id).single();
+    for (const order of orders || []) {
       if (!order?.transaction_id) continue;
       try {
         const pi = await stripe.paymentIntents.retrieve(order.transaction_id);
         if (pi.status === "succeeded") {
-          await supabase.from("orders").update({ status: "paid", updated_at: new Date().toISOString() }).eq("id", o.id);
+          await supabase.from("orders").update({ status: "paid", updated_at: new Date().toISOString() }).eq("id", order.id);
           const { data: ex } = await supabase.from("payments").select("id").eq("provider", "stripe").eq("transaction_id", order.transaction_id).maybeSingle();
           if (!ex) {
             await supabase.from("payments").insert({
-              order_id: o.id,
+              order_id: order.id,
               provider: "stripe",
               gateway: "stripe",
               amount: pi.amount / 100,
