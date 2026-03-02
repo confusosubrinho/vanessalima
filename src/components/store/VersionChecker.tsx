@@ -14,7 +14,7 @@ export function VersionChecker() {
     const check = async () => {
       try {
         const { data } = await supabase
-          .from('store_settings')
+          .from('store_settings_public')
           .select('app_version')
           .limit(1)
           .maybeSingle();
