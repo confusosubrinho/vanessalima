@@ -892,6 +892,42 @@ export type Database = {
           },
         ]
       }
+      checkout_settings: {
+        Row: {
+          active_provider: string
+          channel: string
+          enabled: boolean
+          environment: string
+          experience: string
+          id: string
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          active_provider?: string
+          channel?: string
+          enabled?: boolean
+          environment?: string
+          experience?: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          active_provider?: string
+          channel?: string
+          enabled?: boolean
+          environment?: string
+          experience?: string
+          id?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       cleanup_runs: {
         Row: {
           bytes_freed: number | null

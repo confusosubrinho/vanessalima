@@ -37,14 +37,7 @@ export default function CheckoutStart() {
 
     const startCheckout = async () => {
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        if (!supabaseUrl || String(supabaseUrl).trim() === "") {
-          setError(
-            "Servidor de pagamento não configurado. Adicione VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no arquivo .env (veja .env.example)."
-          );
-          hasStartedCheckout.current = false;
-          return;
-        }
+        // VITE_SUPABASE_URL is always set in Lovable Cloud
 
         const payload = {
           request_id: requestId,
@@ -75,9 +68,9 @@ export default function CheckoutStart() {
           coupon_code: appliedCoupon?.code ?? null,
         };
 
-        const { data: session } = await supabase.auth.getSession();
-        if (session?.data?.session?.user?.id) {
-          (payload as Record<string, unknown>).user_id = session.data.session.user.id;
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user?.id) {
+          (payload as Record<string, unknown>).user_id = sessionData.session.user.id;
         } else {
           (payload as Record<string, unknown>).order_access_token = crypto.randomUUID();
         }
@@ -129,9 +122,9 @@ export default function CheckoutStart() {
         {error ? (
           <div className="text-center space-y-4">
             <p className="text-destructive text-sm">{error}</p>
-            {(error.includes("conectar ao servidor") || error.includes("não configurado")) && (
+            {error.includes("conectar ao servidor") && (
               <p className="text-muted-foreground text-xs max-w-sm mx-auto">
-                Confira o .env (VITE_SUPABASE_URL) e execute: supabase functions deploy checkout-router
+                Verifique sua conexão com a internet e tente novamente.
               </p>
             )}
             <div className="flex flex-col sm:flex-row gap-2 justify-center">
