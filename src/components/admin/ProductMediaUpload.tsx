@@ -56,10 +56,9 @@ export function ProductMediaUpload({ productId, media, onChange }: ProductMediaU
     if (!files || files.length === 0) return;
     
     setUploading(true);
-    const newMedia: MediaItem[] = [];
     
     try {
-      for (const file of Array.from(files)) {
+      const uploadPromises = Array.from(files).map(async (file, index) => {
         const isVideo = file.type.startsWith('video/');
         const { file: processedFile, fileName } = await compressImageToWebP(file);
         
@@ -73,15 +72,17 @@ export function ProductMediaUpload({ productId, media, onChange }: ProductMediaU
           .from('product-media')
           .getPublicUrl(fileName);
         
-        newMedia.push({
-          id: `temp-${Date.now()}-${Math.random()}`,
+        return {
+          id: `temp-${Date.now()}-${Math.random()}-${index}`,
           url: publicUrl,
           alt_text: null,
-          display_order: media.length + newMedia.length,
-          is_primary: media.length === 0 && newMedia.length === 0,
+          display_order: media.length + index,
+          is_primary: media.length === 0 && index === 0,
           media_type: isVideo ? 'video' : 'image',
-        });
-      }
+        };
+      });
+
+      const newMedia = await Promise.all(uploadPromises);
       
       onChange([...media, ...newMedia]);
       queryClient.invalidateQueries({ queryKey: ['product-media-library'] });
