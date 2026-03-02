@@ -435,13 +435,17 @@ async function batchStockSync(supabase: any) {
   // P0.1/P0.2 FIX: Update sync status for ALL products that had stock updated
   const now = new Date().toISOString();
   const productIdsArr = [...updatedProductIds];
-  for (let i = 0; i < productIdsArr.length; i += 100) {
-    const batch = productIdsArr.slice(i, i + 100);
-    await supabase.from("products").update({
-      bling_sync_status: "synced",
-      bling_last_synced_at: now,
-      bling_last_error: null,
-    }).in("id", batch);
+  let batch: string[] = [];
+  for (let i = 0; i < productIdsArr.length; i++) {
+    batch.push(productIdsArr[i]);
+    if (batch.length === 100 || i === productIdsArr.length - 1) {
+      await supabase.from("products").update({
+        bling_sync_status: "synced",
+        bling_last_synced_at: now,
+        bling_last_error: null,
+      }).in("id", batch);
+      batch = [];
+    }
   }
 
   // Log the run
