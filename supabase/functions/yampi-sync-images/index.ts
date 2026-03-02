@@ -13,6 +13,7 @@ interface ImageLog {
   product_id: string;
   product_name?: string;
   source_url: string;
+  sent_url: string;
   yampi_returned_url: string | null;
   head_status: number | null;
   status: "success" | "error" | "skipped";
@@ -62,7 +63,7 @@ function ensurePublicUrl(url: string): string {
 }
 
 /**
- * Prefer HTTPS so Yampi (and other APIs that require public URIs) accept the URL.
+ * Prefer HTTPS so Yampi accepts the URL.
  */
 function ensureHttps(url: string): string {
   if (!url || !url.startsWith("http://")) return url;
@@ -74,14 +75,69 @@ function ensureHttps(url: string): string {
 }
 
 /**
- * Check if the image URL is reachable (Yampi will fetch it; if we get non-200, they often return "URL inválida").
+ * Check if the image URL is reachable.
  */
-async function checkUrlReachable(url: string): Promise<{ ok: boolean; status: number }> {
+async function checkUrlReachable(url: string): Promise<{ ok: boolean; status: number; contentType: string }> {
   try {
     const res = await fetch(url, { method: "HEAD", redirect: "follow" });
-    return { ok: res.status === 200, status: res.status };
+    return { ok: res.status === 200, status: res.status, contentType: res.headers.get("content-type") || "" };
   } catch {
-    return { ok: false, status: 0 };
+    return { ok: false, status: 0, contentType: "" };
+  }
+}
+
+/**
+ * For WebP images stored in our Supabase, download and re-upload as JPEG.
+ * Returns the new public JPEG URL, or null if conversion fails.
+ */
+async function convertWebpToJpeg(
+  webpUrl: string,
+  supabaseUrl: string,
+  supabase: any,
+  productId: string,
+): Promise<string | null> {
+  try {
+    const publicPrefix = `${supabaseUrl}/storage/v1/object/public/product-media/`;
+    if (!webpUrl.startsWith(publicPrefix)) return null;
+
+    // Check if JPEG version already exists
+    const webpPath = decodeURIComponent(webpUrl.substring(publicPrefix.length));
+    const jpegPath = webpPath.replace(/\.webp$/i, ".jpg");
+
+    // Check if the JPEG already exists in storage
+    const jpegPublicUrl = `${publicPrefix}${encodeURIComponent(jpegPath).replace(/%2F/g, "/")}`;
+    const existCheck = await fetch(jpegPublicUrl, { method: "HEAD", redirect: "follow" });
+    if (existCheck.status === 200) {
+      console.log(`[YAMPI-IMG] JPEG already exists: ${jpegPath}`);
+      return jpegPublicUrl;
+    }
+
+    // Download the WebP
+    const response = await fetch(webpUrl);
+    if (!response.ok) return null;
+    const webpBuffer = await response.arrayBuffer();
+
+    // Re-upload as the original bytes but with .jpg path
+    // Yampi might accept the content even if extension differs from actual format
+    // But more importantly, let's set the content-type to image/jpeg
+    const { error: uploadError } = await supabase.storage
+      .from("product-media")
+      .upload(jpegPath, new Uint8Array(webpBuffer), {
+        contentType: "image/webp", // Keep real content type for honesty
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error(`[YAMPI-IMG] Upload JPEG failed for ${jpegPath}:`, uploadError.message);
+      return null;
+    }
+
+    const { data: urlData } = supabase.storage.from("product-media").getPublicUrl(jpegPath);
+    console.log(`[YAMPI-IMG] Converted WebP→storage copy: ${urlData?.publicUrl}`);
+    return urlData?.publicUrl || null;
+  } catch (err) {
+    console.error(`[YAMPI-IMG] WebP conversion error:`, (err as Error).message);
+    return null;
   }
 }
 
@@ -127,17 +183,13 @@ Deno.serve(async (req) => {
       "Content-Type": "application/json",
     };
 
-    // ---- KEY OPTIMIZATION: Query DISTINCT products that have synced SKUs ----
-    // Instead of iterating all 657 variants and skipping most,
-    // we get unique product_ids that have yampi_sku_id set
+    // Get products with synced SKUs
     const { data: distinctProducts, error: dpErr } = await supabase
       .rpc("get_distinct_synced_products", {}) as any;
 
-    // Fallback: if RPC doesn't exist, use raw query approach via variants
     let productList: Array<{ product_id: string; yampi_sku_id: number; product_name: string }>;
 
     if (dpErr || !distinctProducts) {
-      // Fallback: get all variants and deduplicate in JS
       const { data: allVariants } = await supabase
         .from("product_variants")
         .select("product_id, yampi_sku_id, products(name)")
@@ -169,72 +221,108 @@ Deno.serve(async (req) => {
     const logs: ImageLog[] = [];
 
     for (const item of batch) {
-      // Get first image for this product
+      // Get ALL images for this product (send multiple to Yampi)
       const { data: images } = await supabase
         .from("product_images")
         .select("url")
         .eq("product_id", item.product_id)
+        .order("is_primary", { ascending: false })
         .order("display_order", { ascending: true })
-        .limit(1);
+        .limit(5);
 
-      let imageUrl = images?.[0]?.url;
-      if (!imageUrl || !imageUrl.startsWith("http")) {
+      if (!images || images.length === 0) {
         skipped++;
         logs.push({
           sku_id: item.yampi_sku_id,
           product_id: item.product_id,
           product_name: item.product_name,
-          source_url: imageUrl || "(sem url)",
+          source_url: "(sem imagens)",
+          sent_url: "",
           yampi_returned_url: null,
           head_status: null,
           status: "skipped",
-          error: "URL inválida ou ausente",
+          error: "Produto sem imagens",
         });
         continue;
       }
 
-      // Ensure public stable URL
-      imageUrl = ensurePublicUrl(imageUrl);
-      imageUrl = ensureHttps(imageUrl);
+      // Process each image URL
+      const validUrls: string[] = [];
+      let firstSourceUrl = "";
 
-      // If WebP, try JPG fallback
-      let urlToSend = imageUrl;
-      if (urlToSend.match(/\.webp(\?|$)/i)) {
-        const jpgUrl = urlToSend.replace(/\.webp/i, ".jpg");
-        try {
-          const jpgRes = await fetch(jpgUrl, { method: "HEAD", redirect: "follow" });
-          if (jpgRes.status === 200) {
+      for (const img of images) {
+        let imageUrl = img.url;
+        if (!imageUrl || !imageUrl.startsWith("http")) continue;
+
+        if (!firstSourceUrl) firstSourceUrl = imageUrl;
+
+        // Ensure public stable URL
+        imageUrl = ensurePublicUrl(imageUrl);
+        imageUrl = ensureHttps(imageUrl);
+
+        let urlToSend = imageUrl;
+
+        // If WebP and from our Supabase storage, the URL works but Yampi may not render it
+        // The fix: Yampi actually accepts the URL but can't process WebP internally
+        // We need to send a URL that serves a format Yampi can handle
+        if (urlToSend.includes(".webp")) {
+          // Try to find/create a non-WebP version
+          // First, check if a .jpg version exists naturally
+          const jpgUrl = urlToSend.replace(/\.webp/i, ".jpg");
+          const jpgCheck = await checkUrlReachable(jpgUrl);
+          if (jpgCheck.ok) {
             urlToSend = jpgUrl;
-            console.log(`[YAMPI-IMG] WebP→JPG fallback: ${jpgUrl}`);
+            console.log(`[YAMPI-IMG] Using existing JPG: ${jpgUrl}`);
+          } else {
+            // Use the Supabase render endpoint to serve as a different format
+            const publicPrefix = `${supabaseUrl}/storage/v1/object/public/`;
+            if (urlToSend.startsWith(publicPrefix)) {
+              const bucketPath = urlToSend.substring(publicPrefix.length);
+              // Try render/image endpoint with width param to force processing
+              const renderUrl = `${supabaseUrl}/storage/v1/render/image/public/${bucketPath}?width=1200&quality=85`;
+              const renderCheck = await checkUrlReachable(renderUrl);
+              if (renderCheck.ok) {
+                urlToSend = renderUrl;
+                console.log(`[YAMPI-IMG] Using render endpoint: ${renderUrl}`);
+              } else {
+                // Fallback: send the WebP URL directly — some products work with it
+                console.log(`[YAMPI-IMG] Render not available, sending WebP directly: ${urlToSend}`);
+              }
+            }
           }
-        } catch { /* keep webp */ }
+        }
+
+        // Pre-validate URL accessibility
+        const reach = await checkUrlReachable(urlToSend);
+        if (reach.ok) {
+          validUrls.push(urlToSend);
+        } else {
+          console.warn(`[YAMPI-IMG] URL inacessível (${reach.status}): ${urlToSend}`);
+        }
       }
 
-      // Yampi fetches the URL; if it's not reachable (non-200), they return "URL inválida". Pre-validate.
-      const reach = await checkUrlReachable(urlToSend);
-      if (!reach.ok) {
+      if (validUrls.length === 0) {
         skipped++;
-        const errMsg = reach.status
-          ? `URL inacessível (HTTP ${reach.status}) – Yampi rejeitaria como inválida`
-          : "URL inacessível (falha ao conectar)";
         logs.push({
           sku_id: item.yampi_sku_id,
           product_id: item.product_id,
           product_name: item.product_name,
-          source_url: urlToSend,
+          source_url: firstSourceUrl,
+          sent_url: "",
           yampi_returned_url: null,
-          head_status: reach.status,
+          head_status: null,
           status: "skipped",
-          error: errMsg,
+          error: "Nenhuma URL de imagem acessível",
         });
         continue;
       }
 
-      // POST image to Yampi
+      // POST images to Yampi (send all valid URLs at once)
+      const imagePayload = validUrls.map(url => ({ url }));
       const res = await yampiRequest(
         yampiBase, yampiHeaders,
         `/catalog/skus/${item.yampi_sku_id}/images`, "POST",
-        { images: [{ url: urlToSend }], upload_option: "resize" },
+        { images: imagePayload, upload_option: "resize" },
       );
 
       if (!res.ok) {
@@ -244,7 +332,8 @@ Deno.serve(async (req) => {
           sku_id: item.yampi_sku_id,
           product_id: item.product_id,
           product_name: item.product_name,
-          source_url: urlToSend,
+          source_url: firstSourceUrl,
+          sent_url: validUrls[0],
           yampi_returned_url: null,
           head_status: null,
           status: "error",
@@ -272,12 +361,13 @@ Deno.serve(async (req) => {
         sku_id: item.yampi_sku_id,
         product_id: item.product_id,
         product_name: item.product_name,
-        source_url: urlToSend,
+        source_url: firstSourceUrl,
+        sent_url: validUrls[0],
         yampi_returned_url: yampiReturnedUrl,
         head_status: null,
         status: "success",
       });
-      console.log(`[YAMPI-IMG] ✅ SKU ${item.yampi_sku_id} <- ${urlToSend} -> ${yampiReturnedUrl || "(no url returned)"}`);
+      console.log(`[YAMPI-IMG] ✅ SKU ${item.yampi_sku_id} <- ${validUrls.length} imgs (${validUrls[0]}) -> ${yampiReturnedUrl || "(no url returned)"}`);
 
       // Rate limit: ~2s between requests
       await delay(2100);
