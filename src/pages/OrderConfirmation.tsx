@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Package, ArrowRight, Copy, Clock, Loader2, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Pressable } from '@/components/ui/Pressable';
@@ -70,6 +70,7 @@ function usePixCountdown(expirationDate: string | null) {
 export default function OrderConfirmation() {
   const location = useLocation();
   const { orderId: urlOrderId } = useParams<{ orderId: string }>();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { feedback: triggerFeedback } = useFeedback();
 
@@ -77,42 +78,55 @@ export default function OrderConfirmation() {
   const SESSION_KEY = `order_confirm_${urlOrderId || 'unknown'}`;
 
   const getInitialState = () => {
-    // 1. location.state (fresh navigation)
+    // 1. Get any existing persisted state
+    let stored: any = {};
+    try {
+      const s = sessionStorage.getItem(SESSION_KEY);
+      if (s) stored = JSON.parse(s);
+    } catch {}
+
+    // 2. location.state (fresh navigation)
     if (location.state?.orderId) {
       const s = {
         orderId: location.state.orderId,
-        orderNumber: location.state.orderNumber,
-        paymentMethod: location.state.paymentMethod || 'pix',
-        pixQrcode: location.state.pixQrcode || null,
-        pixEmv: location.state.pixEmv || null,
-        pixExpirationDate: location.state.pixExpirationDate || null,
-        customerEmail: location.state.customerEmail || null,
-        guestToken: location.state.guestToken || null,
+        orderNumber: location.state.orderNumber || stored.orderNumber,
+        status: location.state.status || stored.status || 'pending',
+        paymentMethod: location.state.paymentMethod || stored.paymentMethod || 'pix',
+        pixQrcode: location.state.pixQrcode || stored.pixQrcode || null,
+        pixEmv: location.state.pixEmv || stored.pixEmv || null,
+        pixExpirationDate: location.state.pixExpirationDate || stored.pixExpirationDate || null,
+        customerEmail: location.state.customerEmail || stored.customerEmail || null,
+        guestToken: location.state.guestToken || stored.guestToken || null,
       };
       try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch {}
       return s;
     }
-    // 2. sessionStorage (refresh)
-    try {
-      const stored = sessionStorage.getItem(SESSION_KEY);
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    // 3. Fallback
-    return {
-      orderId: urlOrderId || null,
-      orderNumber: null,
-      paymentMethod: 'pix',
-      pixQrcode: null,
-      pixEmv: null,
-      pixExpirationDate: null,
-      customerEmail: null,
-      guestToken: null,
+
+    // 3. Fallback to storage or default
+    const guestToken = stored.guestToken || searchParams.get('token') || null;
+    const finalState = {
+      orderId: stored.orderId || urlOrderId || null,
+      orderNumber: stored.orderNumber || null,
+      status: stored.status || 'pending',
+      paymentMethod: stored.paymentMethod || 'pix',
+      pixQrcode: stored.pixQrcode || null,
+      pixEmv: stored.pixEmv || null,
+      pixExpirationDate: stored.pixExpirationDate || null,
+      customerEmail: stored.customerEmail || null,
+      guestToken,
     };
+
+    // If we recovered something from storage or URL, ensure it's saved
+    if (finalState.orderId) {
+      try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(finalState)); } catch {}
+    }
+
+    return finalState;
   };
 
   const [confirmState] = useState(getInitialState);
   const [orderData, setOrderData] = useState<any>(null);
-  const [orderStatus, setOrderStatus] = useState('pending');
+  const [orderStatus, setOrderStatus] = useState(confirmState.status || 'pending');
   const [isLoading, setIsLoading] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState<string | null>(null);
 
@@ -146,16 +160,27 @@ export default function OrderConfirmation() {
         if (data) {
           setOrderData(data);
           setOrderStatus(data.status);
-          if (!confirmState.orderNumber && data.order_number) {
-            try {
-              const stored = sessionStorage.getItem(SESSION_KEY);
-              if (stored) {
-                const parsed = JSON.parse(stored);
-                parsed.orderNumber = data.order_number;
-                sessionStorage.setItem(SESSION_KEY, JSON.stringify(parsed));
-              }
-            } catch {}
-          }
+          // Sync database data to sessionStorage
+          try {
+            const storedString = sessionStorage.getItem(SESSION_KEY);
+            const parsed = storedString ? JSON.parse(storedString) : { ...confirmState };
+            let hasChanged = false;
+            if (data.order_number && parsed.orderNumber !== data.order_number) {
+              parsed.orderNumber = data.order_number;
+              hasChanged = true;
+            }
+            if (data.status && parsed.status !== data.status) {
+              parsed.status = data.status;
+              hasChanged = true;
+            }
+            if (data.payment_method && parsed.paymentMethod !== data.payment_method) {
+              parsed.paymentMethod = data.payment_method;
+              hasChanged = true;
+            }
+            if (hasChanged) {
+              sessionStorage.setItem(SESSION_KEY, JSON.stringify(parsed));
+            }
+          } catch {}
         }
       } finally {
         setIsLoading(false);
@@ -214,6 +239,18 @@ export default function OrderConfirmation() {
 
     return () => { supabase.removeChannel(channel); };
   }, [confirmState.orderId, urlOrderId, confirmState.guestToken]);
+
+  // Keep sessionStorage in sync with orderStatus state
+  useEffect(() => {
+    try {
+      const storedString = sessionStorage.getItem(SESSION_KEY);
+      const parsed = storedString ? JSON.parse(storedString) : { ...confirmState };
+      if (parsed.status !== orderStatus) {
+        parsed.status = orderStatus;
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(parsed));
+      }
+    } catch {}
+  }, [orderStatus, SESSION_KEY, confirmState]);
 
   // Success feedback once when order becomes paid/processing/shipped/delivered
   useEffect(() => {
