@@ -27,6 +27,7 @@ import { StockNotifyModal } from '@/components/store/StockNotifyModal';
 import { useRecentProducts, useRelatedProducts } from '@/hooks/useRecentProducts';
 import { resolveImageUrl } from '@/lib/imageUrl';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
+import { serializeJsonLd } from '@/lib/utils';
 import { useHaptics } from '@/hooks/useHaptics';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -576,8 +577,8 @@ export default function ProductDetail() {
         <meta name="description" content={safeSeoDescription || safeDescription.replace(/<[^>]*>/g, '').slice(0, 160) || ''} />
       </Helmet>
       {/* SEO: JSON-LD */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }} />
 
       {/* SEO: OG Meta Tags */}
       {typeof document !== 'undefined' && (() => {

@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { ChevronRight, RefreshCw } from 'lucide-react';
 import { StoreLayout } from '@/components/store/StoreLayout';
 import { ProductGrid } from '@/components/store/ProductGrid';
+import { serializeJsonLd } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CategoryFilters, FilterState } from '@/components/store/CategoryFilters';
 import { useProducts, useCategories } from '@/hooks/useProducts';
@@ -149,7 +150,7 @@ export default function CategoryPage() {
         <title>{category?.name ? `${category.name} | Loja` : 'Produtos | Loja'}</title>
         <meta name="description" content={category?.description || `Confira os produtos da categoria ${category?.name || 'Produtos'}.`} />
       </Helmet>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumbLd) }} />
 
       {/* Breadcrumb */}
       <div className="bg-muted/30 py-3">
