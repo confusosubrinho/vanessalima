@@ -101,13 +101,35 @@ Deno.serve(async (req) => {
       let serverSubtotalSale = 0;
       const priceErrors: string[] = [];
 
+      // Batch fetch all variants to avoid N+1 query
+      const variantIds = (products || [])
+        .map((p: any) => p.variant_id)
+        .filter((id: any) => id);
+
+      const variantsDataMap: Record<string, any> = {};
+
+      if (variantIds.length > 0) {
+        // Chunk requests to avoid hitting URL length limits on large carts
+        const chunkSize = 100;
+        for (let i = 0; i < variantIds.length; i += chunkSize) {
+          const chunk = variantIds.slice(i, i + chunkSize);
+          const { data: variantsChunk, error: variantsError } = await supabase
+            .from("product_variants")
+            .select("id, price_modifier, sale_price, base_price, products!inner(id, base_price, sale_price, is_active)")
+            .in("id", chunk);
+
+          if (!variantsError && variantsChunk) {
+            for (let j = 0; j < variantsChunk.length; j++) {
+              variantsDataMap[variantsChunk[j].id] = variantsChunk[j];
+            }
+          }
+        }
+      }
+
       for (const product of (products || [])) {
         if (!product.variant_id) continue;
-        const { data: variantData } = await supabase
-          .from("product_variants")
-          .select("id, price_modifier, sale_price, base_price, products!inner(id, base_price, sale_price, is_active)")
-          .eq("id", product.variant_id)
-          .single();
+
+        const variantData = variantsDataMap[product.variant_id];
 
         if (!variantData) { priceErrors.push(`Variante ${product.variant_id} não encontrada`); continue; }
         const productData = variantData.products as any;
@@ -372,13 +394,34 @@ Deno.serve(async (req) => {
       const stockDecrements: { variant_id: string; quantity: number }[] = [];
       let serverSubtotal = 0;
 
+      // Batch fetch all variants to avoid N+1 query
+      const checkoutVariantIds = (products || [])
+        .map((p: any) => p.variant_id)
+        .filter((id: any) => id);
+
+      const checkoutVariantsDataMap: Record<string, any> = {};
+
+      if (checkoutVariantIds.length > 0) {
+        const chunkSize = 100;
+        for (let i = 0; i < checkoutVariantIds.length; i += chunkSize) {
+          const chunk = checkoutVariantIds.slice(i, i + chunkSize);
+          const { data: variantsChunk, error: variantsError } = await supabase
+            .from("product_variants")
+            .select("id, price_modifier, sale_price, base_price, products!inner(id, base_price, sale_price, is_active, name)")
+            .in("id", chunk);
+
+          if (!variantsError && variantsChunk) {
+            for (let j = 0; j < variantsChunk.length; j++) {
+              checkoutVariantsDataMap[variantsChunk[j].id] = variantsChunk[j];
+            }
+          }
+        }
+      }
+
       for (const product of (products || [])) {
         if (!product.variant_id) continue;
-        const { data: variantData } = await supabase
-          .from("product_variants")
-          .select("id, price_modifier, sale_price, base_price, products!inner(id, base_price, sale_price, is_active, name)")
-          .eq("id", product.variant_id)
-          .single();
+
+        const variantData = checkoutVariantsDataMap[product.variant_id];
 
         if (!variantData) return jsonRes({ error: `Variante ${product.variant_id} não encontrada` }, 400, corsHeaders);
         const productData = variantData.products as any;
