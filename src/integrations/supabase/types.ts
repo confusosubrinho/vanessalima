@@ -3002,33 +3002,27 @@ export type Database = {
       stripe_webhook_events: {
         Row: {
           created_at: string
-          error_message: string | null
           event_id: string
           event_type: string
           id: string
           payload: Json | null
           processed: boolean
-          processed_at: string | null
         }
         Insert: {
           created_at?: string
-          error_message?: string | null
           event_id: string
           event_type: string
           id?: string
           payload?: Json | null
           processed?: boolean
-          processed_at?: string | null
         }
         Update: {
           created_at?: string
-          error_message?: string | null
           event_id?: string
           event_type?: string
           id?: string
           payload?: Json | null
           processed?: boolean
-          processed_at?: string | null
         }
         Relationships: []
       }
