@@ -38,6 +38,27 @@ Checklist e plano para Core Web Vitals (LCP, FID/INP, CLS) e experiência geral.
 
 Ferramentas: [PageSpeed Insights](https://pagespeed.web.dev/), Chrome DevTools → Lighthouse, “Network” e “Performance”.
 
+## Preview / Dev server (“100+ módulos”, página em branco)
+
+O aviso **“servidor de desenvolvimento sobrecarregado (projeto com 100+ módulos)”** na preview (ex.: Lovable) não é bug do app — é limite de CPU/memória do ambiente de dev. Os “módulos” são o grafo de dependências (seu código + `node_modules`); não dá para “apagar” sem remover funcionalidade.
+
+**O que fazer:**
+
+1. **Imediato:** Fechar e reabrir a aba da preview; se usar Lovable, em **Settings → Cloud → Advanced Settings** aumentar o tamanho da instância.
+2. **No projeto:** Foi configurado `optimizeDeps.include` no `vite.config.ts` para pre-bundlar as dependências mais pesadas no primeiro start; isso reduz trabalho sob demanda do dev server.
+3. **Limpar instalação (só se suspeitar de node_modules corrompido):**  
+   `Remove-Item -Recurse -Force node_modules; npm install`  
+   Isso não reduz o número de módulos, apenas reinstala pacotes.
+4. **Não remover dependências** só para “diminuir módulos”: o app usa React, Radix/shadcn, Supabase, Stripe, Recharts, etc.; removê-las quebra a aplicação. A contagem alta é esperada em um e-commerce com admin completo.
+
+## Alterações do painel não aparecem para visitante (anon)
+
+**Causa:** A view `store_settings_public` estava com `security_invoker = on`. Com RLS em `store_settings` permitindo apenas `is_admin()`, usuários anônimos que consultavam a view rodavam a query com suas próprias permissões e não viam nenhuma linha; só admin via as configurações atualizadas.
+
+**Solução:** Migração `20260302160000_store_settings_public_anon_read.sql` recria a view com `security_invoker = false` (SECURITY DEFINER). A view passa a executar com os privilégios do dono, retornando as configurações públicas para qualquer um que tenha `SELECT` na view (anon e authenticated). A tabela `store_settings` continua restrita a admins.
+
+Após aplicar a migração no Supabase (deploy ou `supabase db push`), visitantes passam a ver logo, header e demais dados públicos atualizados pelo painel.
+
 ## Próximos passos (opcional)
 
 1. **Logo (~78 KiB)**: O logo em `src/assets/logo.png` é exibido a ~198×70px mas o arquivo está em 1426×504. Para reduzir o peso, substitua por uma versão redimensionada (ex.: 400×140px) e comprimida (TinyPNG ou similar).

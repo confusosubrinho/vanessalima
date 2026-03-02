@@ -21,6 +21,22 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Pre-bundle heavy deps no dev para reduzir carga no servidor (menos módulos compilados sob demanda)
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "react-router-dom",
+      "@tanstack/react-query",
+      "@supabase/supabase-js",
+      "lucide-react",
+      "date-fns",
+      "zod",
+      "clsx",
+      "tailwind-merge",
+      "class-variance-authority",
+    ],
+  },
   build: {
     target: "es2020",
     cssMinify: true,
