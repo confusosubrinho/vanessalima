@@ -21,6 +21,44 @@ interface InstagramVideo {
   } | null;
 }
 
+/** Quando não há thumbnail configurado, mostra um frame estático do vídeo (ex.: 0.1s). */
+function FirstFramePlaceholder({
+  videoUrl,
+  activeOpacity,
+}: {
+  videoUrl: string;
+  activeOpacity: boolean;
+}) {
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || !videoUrl) return;
+    const onCanShow = () => {
+      try {
+        video.currentTime = 0.1;
+        video.pause();
+      } catch {
+        // ignore seek errors
+      }
+    };
+    video.addEventListener('loadeddata', onCanShow);
+    if (video.readyState >= 2) onCanShow();
+    return () => video.removeEventListener('loadeddata', onCanShow);
+  }, [videoUrl]);
+
+  return (
+    <video
+      ref={ref}
+      src={`${videoUrl}#t=0.1`}
+      className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${activeOpacity ? 'opacity-0' : 'opacity-100'}`}
+      muted
+      playsInline
+      preload="auto"
+    />
+  );
+}
+
 export function InstagramFeed() {
   const [activeIndex, setActiveIndex] = useState(2); // center item
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -128,6 +166,7 @@ export function InstagramFeed() {
           {videos.map((video, index) => {
             const isActive = index === activeIndex;
             const productImage = video.product?.images?.find(i => i.is_primary)?.url || video.product?.images?.[0]?.url;
+            const hasThumbnail = Boolean(video.thumbnail_url?.trim());
 
             return (
               <div
@@ -141,21 +180,18 @@ export function InstagramFeed() {
                 <div className={`relative rounded-2xl overflow-hidden bg-black ${
                   isActive ? 'aspect-[9/16] shadow-2xl' : 'aspect-[9/16]'
                 }`}>
-                  {/* Thumbnail or paused first frame */}
-                  {video.thumbnail_url ? (
+                  {/* Thumbnail configurado ou primeiro frame do vídeo (estático) */}
+                  {hasThumbnail ? (
                     <img
-                      src={video.thumbnail_url}
+                      src={video.thumbnail_url!}
                       alt={video.username ? `@${video.username}` : 'Video'}
                       className="absolute inset-0 w-full h-full object-cover"
                       loading="lazy"
                     />
                   ) : (
-                    <video
-                      src={`${video.video_url}#t=0.1`}
-                      className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${isActive ? 'opacity-0' : 'opacity-100'}`}
-                      muted
-                      playsInline
-                      preload="auto"
+                    <FirstFramePlaceholder
+                      videoUrl={video.video_url}
+                      activeOpacity={isActive}
                     />
                   )}
                   <video

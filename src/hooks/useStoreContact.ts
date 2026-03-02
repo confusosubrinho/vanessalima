@@ -13,10 +13,12 @@ export interface StoreContact {
   logo_url: string;
   header_logo_url: string;
   favicon_url?: string;
+  /** ISO date da última atualização (para cache-bust da URL do logo). */
+  updated_at?: string | null;
 }
 
 /** Dados públicos da loja (view). Uma única key para compartilhar cache no header, footer, etc.
- * staleTime baixo e refetchOnMount para que logo/identidade atualizados no painel apareçam logo no site. */
+ * staleTime curto + refetchOnWindowFocus para logo/identidade atualizados no painel aparecerem logo. */
 export function useStoreSettingsPublic() {
   return useQuery({
     queryKey: ['store-settings-public'],
@@ -28,8 +30,9 @@ export function useStoreSettingsPublic() {
       if (error) throw error;
       return (data as Database['public']['Views']['store_settings_public']['Row'] | null) || null;
     },
-    staleTime: 1000 * 60 * 2, // 2 min: refetch com mais frequência para refletir logo/identidade
-    refetchOnMount: true,     // sempre buscar dados frescos ao montar (header/footer)
+    staleTime: 1000 * 30,      // 30s: logo/identidade atualizados no painel aparecem em até 30s
+    refetchOnMount: true,
+    refetchOnWindowFocus: true, // ao voltar à aba, busca logo/header atualizados
   });
 }
 
@@ -47,6 +50,7 @@ export function useStoreContact() {
         logo_url: data.logo_url,
         header_logo_url: data.header_logo_url,
         favicon_url: (data as any).favicon_url,
+        updated_at: (data as any).updated_at,
       } as StoreContact)
     : null;
   return { data: contact, ...rest };

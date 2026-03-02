@@ -30,7 +30,11 @@ interface SecuritySeal {
 export function Footer() {
   const { data: contact } = useStoreContact();
   const storeName = contact?.store_name || 'Loja';
-  const logoSrc = contact?.header_logo_url || contact?.logo_url || logo;
+  const logoFromSettings = contact?.header_logo_url || contact?.logo_url;
+  const logoSrc =
+    logoFromSettings && logoFromSettings.trim() !== ''
+      ? `${logoFromSettings}${contact?.updated_at ? `?v=${encodeURIComponent(contact.updated_at)}` : ''}`
+      : logo;
 
   const { data: paymentMethods } = useQuery({
     queryKey: ['payment-methods'],

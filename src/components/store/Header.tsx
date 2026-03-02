@@ -80,7 +80,12 @@ export function Header() {
   // Fetch header settings from public view (cache compartilhado com footer etc.)
   const { data: headerSettings } = useStoreSettingsPublic();
 
-  const logo = headerSettings?.header_logo_url || headerSettings?.logo_url || defaultLogo;
+  // Logo do painel (header_logo_url ou logo_url); fallback para asset local. Cache-bust com updated_at para não mostrar logo antigo no navegador.
+  const logoFromSettings = headerSettings?.header_logo_url || headerSettings?.logo_url;
+  const logo =
+    logoFromSettings && logoFromSettings.trim() !== ''
+      ? `${logoFromSettings}${headerSettings?.updated_at ? `?v=${encodeURIComponent(headerSettings.updated_at)}` : ''}`
+      : defaultLogo;
   const subheadText = headerSettings?.header_subhead_text || 'Frete grátis para compras acima de R$ 399*';
   const highlightText = headerSettings?.header_highlight_text || 'Bijuterias';
   const highlightUrl = headerSettings?.header_highlight_url || '/bijuterias';
