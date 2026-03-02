@@ -94,12 +94,27 @@ const queryClient = new QueryClient({
   },
 });
 
+const PERSIST_CACHE_KEY = 'VANESSA_LIMA_QUERY_CACHE';
+const STORE_SETTINGS_PUBLIC_KEY = 'store-settings-public';
+
+/** Deserialize do cache: remove store-settings-public para não sobrescrever com dados antigos após reidratação. */
+function deserializePersistedClient(cacheString: string) {
+  const data = JSON.parse(cacheString) as { clientState?: { queries?: { queryKey: unknown[] }[] }; timestamp?: number; buster?: string };
+  if (data?.clientState?.queries) {
+    data.clientState.queries = data.clientState.queries.filter(
+      (q) => q.queryKey?.[0] !== STORE_SETTINGS_PUBLIC_KEY
+    );
+  }
+  return data;
+}
+
 const persister =
   typeof window !== 'undefined'
     ? createSyncStoragePersister({
         storage: window.localStorage,
-        key: 'VANESSA_LIMA_QUERY_CACHE',
+        key: PERSIST_CACHE_KEY,
         throttleTime: 1000,
+        deserialize: deserializePersistedClient,
       })
     : undefined;
 
