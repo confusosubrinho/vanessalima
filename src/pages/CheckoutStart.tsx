@@ -37,6 +37,15 @@ export default function CheckoutStart() {
 
     const startCheckout = async () => {
       try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        if (!supabaseUrl || String(supabaseUrl).trim() === "") {
+          setError(
+            "Servidor de pagamento não configurado. Adicione VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no arquivo .env (veja .env.example)."
+          );
+          hasStartedCheckout.current = false;
+          return;
+        }
+
         const payload = {
           request_id: requestId,
           cart_id: cartId!,
@@ -120,6 +129,11 @@ export default function CheckoutStart() {
         {error ? (
           <div className="text-center space-y-4">
             <p className="text-destructive text-sm">{error}</p>
+            {(error.includes("conectar ao servidor") || error.includes("não configurado")) && (
+              <p className="text-muted-foreground text-xs max-w-sm mx-auto">
+                Confira o .env (VITE_SUPABASE_URL) e execute: supabase functions deploy checkout-router
+              </p>
+            )}
             <div className="flex flex-col sm:flex-row gap-2 justify-center">
               <Button
                 onClick={() => {
