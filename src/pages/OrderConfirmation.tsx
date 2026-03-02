@@ -49,7 +49,7 @@ function usePixCountdown(expirationDate: string | null) {
     const tick = () => {
       const remaining = Math.max(0, expiry - Date.now());
       setTimeLeft(remaining);
-      if (remaining === 0) setIsExpired(true);
+      setIsExpired(remaining === 0);
     };
     tick();
     const interval = setInterval(tick, 1000);
