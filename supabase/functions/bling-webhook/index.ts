@@ -287,6 +287,7 @@ async function syncProductFields(supabase: any, headers: any, productId: string,
 
 // ─── Sync ONLY stock for an existing product ───
 async function syncStockOnly(supabase: any, headers: any, productId: string, blingProductId: number, detail: any) {
+  let stockUpdated = false;
   if (detail.variacoes?.length) {
     const varIds = detail.variacoes.map((v: any) => v.id);
     const idsParam = varIds.map((id: number) => `idsProdutos[]=${id}`).join("&");
@@ -301,6 +302,7 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
         const match = await findVariantByBlingIdOrSku(supabase, varBlingId);
         if (match) {
           await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", match.variantId);
+          stockUpdated = true;
         }
       }
     }
@@ -310,6 +312,15 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
     const stockJson = await stockRes.json();
     const qty = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
     await supabase.from("product_variants").update({ stock_quantity: qty }).eq("product_id", productId);
+    stockUpdated = true;
+  }
+
+  if (stockUpdated) {
+    await supabase.from("products").update({
+      bling_sync_status: "synced",
+      bling_last_synced_at: new Date().toISOString(),
+      bling_last_error: null,
+    }).eq("id", productId);
   }
 }
 
