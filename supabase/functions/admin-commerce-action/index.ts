@@ -92,24 +92,57 @@ Deno.serve(async (req) => {
       .lt("created_at", cutoff);
     const released: string[] = [];
     const stripe = stripeSecretKey ? new Stripe(stripeSecretKey, { apiVersion: "2025-08-27.basil" }) : null;
-    for (const order of orders || []) {
-      const { data: items } = await supabase
-        .from("order_items")
-        .select("product_variant_id, quantity")
-        .eq("order_id", order.id);
-      for (const item of items || []) {
-        if (item.product_variant_id && item.quantity) {
-          await supabase.rpc("increment_stock", { p_variant_id: item.product_variant_id, p_quantity: item.quantity });
-        }
+
+    if (orders && orders.length > 0) {
+      const orderIds = orders.map(o => o.id);
+
+      // Batch fetch order items to avoid N+1 queries
+      // Split into chunks of 100 to avoid URL length limits just in case
+      const chunkSize = 100;
+      let allItems: any[] = [];
+      for (let i = 0; i < orderIds.length; i += chunkSize) {
+        const chunk = orderIds.slice(i, i + chunkSize);
+        const { data: items } = await supabase
+          .from("order_items")
+          .select("product_variant_id, quantity")
+          .in("order_id", chunk);
+        if (items) allItems.push(...items);
       }
-      if (order.provider === "stripe" && order.transaction_id && stripe) {
-        try {
-          await stripe.paymentIntents.cancel(order.transaction_id);
-        } catch (_) {}
+
+      // Process increment_stock in parallel using Promise.all in chunks
+      const rpcChunkSize = 50;
+      for (let i = 0; i < allItems.length; i += rpcChunkSize) {
+        const chunk = allItems.slice(i, i + rpcChunkSize);
+        await Promise.all(chunk.map(item => {
+          if (item.product_variant_id && item.quantity) {
+            return supabase.rpc("increment_stock", { p_variant_id: item.product_variant_id, p_quantity: item.quantity });
+          }
+          return Promise.resolve();
+        }));
       }
-      await supabase.from("orders").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", order.id);
-      released.push(order.id);
+
+      // Process Stripe cancellations concurrently in chunks
+      const stripeChunkSize = 50;
+      for (let i = 0; i < orders.length; i += stripeChunkSize) {
+        const chunk = orders.slice(i, i + stripeChunkSize);
+        await Promise.all(chunk.map(order => {
+          if (order.provider === "stripe" && order.transaction_id && stripe) {
+            return stripe.paymentIntents.cancel(order.transaction_id).catch(() => {});
+          }
+          return Promise.resolve();
+        }));
+      }
+
+      // Batch update all order statuses
+      for (let i = 0; i < orderIds.length; i += chunkSize) {
+        const chunk = orderIds.slice(i, i + chunkSize);
+        await supabase.from("orders")
+          .update({ status: "cancelled", updated_at: new Date().toISOString() })
+          .in("id", chunk);
+        released.push(...chunk);
+      }
     }
+
     return new Response(
       JSON.stringify({ ok: true, action: "release_reservations", released: released.length, order_ids: released }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -121,7 +154,7 @@ Deno.serve(async (req) => {
     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
     const { data: orders } = await supabase
       .from("orders")
-      .select("id")
+      .select("id, transaction_id")
       .eq("status", "pending")
       .not("transaction_id", "is", null)
       .lt("created_at", cutoff);
@@ -133,28 +166,35 @@ Deno.serve(async (req) => {
       );
     }
     let reconciled = 0;
-    for (const o of orders || []) {
-      const { data: order } = await supabase.from("orders").select("transaction_id").eq("id", o.id).single();
-      if (!order?.transaction_id) continue;
-      try {
-        const pi = await stripe.paymentIntents.retrieve(order.transaction_id);
-        if (pi.status === "succeeded") {
-          await supabase.from("orders").update({ status: "paid", updated_at: new Date().toISOString() }).eq("id", o.id);
-          const { data: ex } = await supabase.from("payments").select("id").eq("provider", "stripe").eq("transaction_id", order.transaction_id).maybeSingle();
-          if (!ex) {
-            await supabase.from("payments").insert({
-              order_id: o.id,
-              provider: "stripe",
-              gateway: "stripe",
-              amount: pi.amount / 100,
-              status: "approved",
-              transaction_id: order.transaction_id,
-            });
+
+    // Process reconciliation in chunks to avoid overwhelming stripe and db connections
+    const chunkSize = 20;
+    const orderList = orders || [];
+    for (let i = 0; i < orderList.length; i += chunkSize) {
+      const chunk = orderList.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(async (order) => {
+        if (!order.transaction_id) return;
+        try {
+          const pi = await stripe.paymentIntents.retrieve(order.transaction_id);
+          if (pi.status === "succeeded") {
+            await supabase.from("orders").update({ status: "paid", updated_at: new Date().toISOString() }).eq("id", order.id);
+            const { data: ex } = await supabase.from("payments").select("id").eq("provider", "stripe").eq("transaction_id", order.transaction_id).maybeSingle();
+            if (!ex) {
+              await supabase.from("payments").insert({
+                order_id: order.id,
+                provider: "stripe",
+                gateway: "stripe",
+                amount: pi.amount / 100,
+                status: "approved",
+                transaction_id: order.transaction_id,
+              });
+            }
+            reconciled++;
           }
-          reconciled++;
-        }
-      } catch (_) {}
+        } catch (_) {}
+      }));
     }
+
     return new Response(
       JSON.stringify({ ok: true, action: "reconcile_stale", reconciled }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
