@@ -62,3 +62,12 @@ Enviado no body do POST para `/functions/v1/checkout-router`:
 - **internal + appmax:** action=render, redirect_url=/checkout (front segue com process-payment).
 
 Ver `docs/CHECKOUT_SETTINGS.md` para provider/channel/experience e validações.
+
+## Troubleshooting: "Não foi possível conectar ao servidor de pagamento"
+
+Se ao clicar em **Finalizar Compra** aparecer essa mensagem (ou "Failed to send a request to the Edge Function"):
+
+1. **Variáveis de ambiente** — Confirme que `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` estão definidas (ex.: `.env`) e apontam para o projeto Supabase correto.
+2. **Edge Function implantada** — A função `checkout-router` precisa estar deployada no mesmo projeto: `supabase functions deploy checkout-router`.
+3. **Conexão e CORS** — Em produção, a URL do front (origin) deve estar permitida no projeto. Em desenvolvimento local, use a URL do Supabase local ou do projeto remoto onde a função está deployada.
+4. **Logs** — No dashboard Supabase: Edge Functions → checkout-router → Logs, para ver erros 4xx/5xx ou timeout.

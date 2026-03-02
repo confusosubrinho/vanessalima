@@ -71,8 +71,15 @@ export async function invokeCheckoutFunction<T = unknown>(
 
   try {
     const result = await Promise.race([invokePromise, timeoutPromise]);
+    const rawMessage = result.error?.message ?? "";
+    const isEdgeFunctionUnreachable =
+      /failed to send a request to the edge function|fetch failed|network error|load failed/i.test(rawMessage);
     const err = result.error
-      ? new Error(result.error.message || "Erro ao processar")
+      ? new Error(
+          isEdgeFunctionUnreachable
+            ? "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes."
+            : rawMessage || "Erro ao processar"
+        )
       : result.data?.error != null
         ? new Error(
             typeof result.data.error === "string"
@@ -83,6 +90,10 @@ export async function invokeCheckoutFunction<T = unknown>(
     return { data: result.data as T, error: err };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Não conseguimos concluir. Tente novamente.";
-    return { data: null as T, error: new Error(msg) };
+    const friendly =
+      /failed to send a request to the edge function|fetch failed|network error|load failed/i.test(msg)
+        ? "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes."
+        : msg;
+    return { data: null as T, error: new Error(friendly) };
   }
 }
