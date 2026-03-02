@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { formatCPF } from '../lib/validators';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { formatCPF, lookupCEP } from '../lib/validators';
 
 describe('formatCPF', () => {
   it('should format an empty string correctly', () => {
@@ -35,5 +35,78 @@ describe('formatCPF', () => {
 
   it('should truncate strings with more than 11 numeric digits', () => {
     expect(formatCPF('123456789012345')).toBe('123.456.789-01');
+  });
+});
+
+describe('lookupCEP', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    vi.clearAllMocks();
+  });
+
+  it('should return null for invalid CEP lengths without calling fetch', async () => {
+    expect(await lookupCEP('1234567')).toBeNull();
+    expect(await lookupCEP('123456789')).toBeNull();
+    expect(await lookupCEP('')).toBeNull();
+    expect(await lookupCEP('abc-def')).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('should call the API and return data on successful response', async () => {
+    const mockData = {
+      cep: '01001-000',
+      logradouro: 'Praça da Sé',
+      complemento: 'lado ímpar',
+      bairro: 'Sé',
+      localidade: 'São Paulo',
+      uf: 'SP'
+    };
+
+    (global.fetch as any).mockResolvedValueOnce({
+      json: async () => mockData,
+    });
+
+    const result = await lookupCEP('01001-000');
+
+    expect(global.fetch).toHaveBeenCalledWith('https://viacep.com.br/ws/01001000/json/');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(mockData);
+  });
+
+  it('should return null if API returns { erro: true }', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      json: async () => ({ erro: true }),
+    });
+
+    const result = await lookupCEP('99999-999');
+
+    expect(global.fetch).toHaveBeenCalledWith('https://viacep.com.br/ws/99999999/json/');
+    expect(result).toBeNull();
+  });
+
+  it('should return null if fetch throws a network error', async () => {
+    (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+
+    const result = await lookupCEP('01001-000');
+
+    expect(global.fetch).toHaveBeenCalledWith('https://viacep.com.br/ws/01001000/json/');
+    expect(result).toBeNull();
+  });
+
+  it('should return null if JSON parsing fails', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      json: async () => { throw new Error('Invalid JSON'); },
+    });
+
+    const result = await lookupCEP('01001-000');
+
+    expect(global.fetch).toHaveBeenCalledWith('https://viacep.com.br/ws/01001000/json/');
+    expect(result).toBeNull();
   });
 });
