@@ -246,17 +246,37 @@ Deno.serve(async (req) => {
       const priceErrors: string[] = [];
       const lineItems: { product_id: string; category_id: string | null; lineTotal: number }[] = [];
 
+      // Batch fetch variants to prevent N+1 queries
+      const variantIds = products.map((p: any) => p.variant_id).filter(Boolean);
+      const variantsMap = new Map<string, any>();
+
+      if (variantIds.length > 0) {
+        // Unique IDs to reduce payload size
+        const uniqueVariantIds = Array.from(new Set(variantIds));
+        const CHUNK_SIZE = 100;
+
+        for (let i = 0; i < uniqueVariantIds.length; i += CHUNK_SIZE) {
+          const chunk = uniqueVariantIds.slice(i, i + CHUNK_SIZE);
+          const { data: variantsData } = await supabase
+            .from("product_variants")
+            .select(`
+              id, price_modifier, sale_price, base_price,
+              products!inner(id, category_id, base_price, sale_price, is_active)
+            `)
+            .in("id", chunk);
+
+          if (variantsData) {
+            for (const v of variantsData) {
+              variantsMap.set(v.id, v);
+            }
+          }
+        }
+      }
+
       for (const product of products) {
         if (!product.variant_id) continue;
 
-        const { data: variantData } = await supabase
-          .from("product_variants")
-          .select(`
-            id, price_modifier, sale_price, base_price,
-            products!inner(id, category_id, base_price, sale_price, is_active)
-          `)
-          .eq("id", product.variant_id)
-          .single();
+        const variantData = variantsMap.get(product.variant_id);
 
         if (!variantData) {
           priceErrors.push(`Variante ${product.variant_id} não encontrada`);
