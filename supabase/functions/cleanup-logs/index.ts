@@ -319,18 +319,30 @@ Deno.serve(async (req) => {
           .limit(5000);
         if (dupes) {
           const seen = new Set<string>();
-          const dupeIds: string[] = [];
-          for (const row of dupes) {
-            if (seen.has(row.event_id)) dupeIds.push(row.id);
-            else seen.add(row.event_id);
-          }
-          if (dupeIds.length > 0 && !isDryRun) {
-            for (let i = 0; i < dupeIds.length; i += 500) {
-              await supabase.from("bling_webhook_events" as any).delete().in("id", dupeIds.slice(i, i + 500));
+          let dupeCount = 0;
+          let currentBatch: string[] = [];
+          for (let i = 0, len = dupes.length; i < len; i++) {
+            const row = dupes[i];
+            if (seen.has(row.event_id)) {
+              dupeCount++;
+              if (!isDryRun) {
+                currentBatch.push(row.id);
+                if (currentBatch.length === 500) {
+                  await supabase.from("bling_webhook_events" as any).delete().in("id", currentBatch);
+                  currentBatch = [];
+                }
+              }
+            } else {
+              seen.add(row.event_id);
             }
-            totalDeleted += dupeIds.length;
           }
-          results.push({ table: "bling_webhook_events_dedup", deleted: dupeIds.length, consolidated: 0 });
+          if (currentBatch.length > 0 && !isDryRun) {
+            await supabase.from("bling_webhook_events" as any).delete().in("id", currentBatch);
+          }
+          if (!isDryRun) {
+            totalDeleted += dupeCount;
+          }
+          results.push({ table: "bling_webhook_events_dedup", deleted: dupeCount, consolidated: 0 });
         }
       } catch (err: any) {
         errors.push(`Weekly optimize: ${err.message}`);
