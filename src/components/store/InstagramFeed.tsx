@@ -82,16 +82,13 @@ export function InstagramFeed() {
     },
   });
 
-  // Auto-play active video, pause others - set src when needed and play only when video is ready
+  // Auto-play active video, pause others
   useEffect(() => {
     if (!videos) return;
     const cleanups: (() => void)[] = [];
     videoRefs.current.forEach((video, id) => {
       const idx = videos.findIndex(v => v.id === id);
       if (idx === activeIndex) {
-        if (!video.src && video.dataset.src) {
-          video.src = video.dataset.src;
-        }
         const playWhenReady = () => {
           video.play().catch(() => {});
         };
@@ -197,34 +194,28 @@ export function InstagramFeed() {
                 <div className={`relative rounded-2xl overflow-hidden bg-black ${
                   isActive ? 'aspect-[9/16] shadow-2xl' : 'aspect-[9/16]'
                 }`}>
-                  {/* Thumbnail configurado ou primeiro frame do vídeo (estático) */}
-                  {hasThumbnail ? (
+                  {/* Thumbnail configurado */}
+                  {hasThumbnail && (
                     <img
                       src={video.thumbnail_url!}
                       alt={video.username ? `@${video.username}` : 'Video'}
-                      className="absolute inset-0 w-full h-full object-cover"
+                      className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${isActive ? 'opacity-0' : 'opacity-100'}`}
                       loading="lazy"
-                    />
-                  ) : (
-                    <FirstFramePlaceholder
-                      videoUrl={video.video_url}
-                      activeOpacity={isActive}
                     />
                   )}
                   <video
                     ref={(el) => {
                       if (el) videoRefs.current.set(video.id, el);
                     }}
-                    src={isActive ? video.video_url : undefined}
-                    data-src={video.video_url}
-                    className={`absolute inset-0 w-full h-full object-cover ${isActive ? 'opacity-100' : 'opacity-0'}`}
+                    src={video.video_url}
+                    className="absolute inset-0 w-full h-full object-cover"
                     loop
                     muted
                     playsInline
-                    preload={isActive ? 'auto' : 'none'}
+                    preload={isActive ? 'auto' : 'metadata'}
                     onError={(e) => {
                       const target = e.currentTarget;
-                      if (target.error?.code === 4) return; // MEDIA_ERR_SRC_NOT_SUPPORTED - log only in dev
+                      if (target.error?.code === 4) return;
                       console.warn('[InstagramFeed] Video load error:', video.video_url, target.error?.message);
                     }}
                   />
