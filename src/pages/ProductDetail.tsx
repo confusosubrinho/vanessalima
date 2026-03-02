@@ -4,6 +4,7 @@ import { ChevronRight, Minus, Plus, ShoppingBag, Heart, MessageCircle, Truck, Be
 import { useIsMobile } from '@/hooks/use-mobile';
 import { StoreLayout } from '@/components/store/StoreLayout';
 import { Button } from '@/components/ui/button';
+import { Pressable } from '@/components/ui/Pressable';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useProduct, useStoreSettings } from '@/hooks/useProducts';
@@ -841,10 +842,12 @@ export default function ProductDetail() {
 
             <div ref={addToCartRef} className="flex gap-2 sm:gap-4">
               {isInStock ? (
-                <Button size="lg" className="flex-1 rounded-full text-sm sm:text-base h-12" onClick={handleAddToCart}>
-                  <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
-                  Adicionar ao Carrinho
-                </Button>
+                <Pressable asChild feedbackPattern="light">
+                  <Button size="lg" className="flex-1 rounded-full text-sm sm:text-base h-12" onClick={handleAddToCart}>
+                    <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
+                    Adicionar ao Carrinho
+                  </Button>
+                </Pressable>
               ) : (
                 <Button
                   size="lg"

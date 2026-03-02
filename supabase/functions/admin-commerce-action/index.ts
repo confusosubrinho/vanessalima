@@ -64,6 +64,26 @@ Deno.serve(async (req) => {
 
   const action = body?.action;
 
+  // PR6: listar eventos Stripe com erro para reprocessamento
+  if (action === "list_failed_webhook_events") {
+    const { data: rows, error: listError } = await supabase
+      .from("stripe_webhook_events")
+      .select("event_id, event_type, created_at, error_message, processed_at")
+      .not("error_message", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (listError) {
+      return new Response(JSON.stringify({ error: listError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    return new Response(
+      JSON.stringify({ ok: true, action: "list_failed_webhook_events", events: rows ?? [] }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   if (action === "release_reservations") {
     const TTL_MIN = 15;
     const cutoff = new Date(Date.now() - TTL_MIN * 60 * 1000).toISOString();
@@ -200,7 +220,7 @@ Deno.serve(async (req) => {
     );
   }
 
-  return new Response(JSON.stringify({ error: "Ação inválida. Use action: release_reservations, reconcile_stale ou delete_order_test" }), {
+  return new Response(JSON.stringify({ error: "Ação inválida. Use action: release_reservations, reconcile_stale, list_failed_webhook_events ou delete_order_test" }), {
     status: 400,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

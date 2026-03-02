@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, Minus, Plus, ShoppingBag, ArrowLeft, Truck, AlertTriangle } from 'lucide-react';
 import { StoreLayout } from '@/components/store/StoreLayout';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,12 @@ import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentDisplay, formatCurrency } from '@/lib/pricingEngine';
 import { HelpHint } from '@/components/HelpHint';
 import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
+import { Pressable } from '@/components/ui/Pressable';
+
+const checkoutHref = '/checkout/start';
 
 export default function Cart() {
+  const navigate = useNavigate();
   const { items, subtotal, removeItem, updateQuantity, clearCart, discount, selectedShipping, total } = useCart();
   const { data: pricingConfig } = usePricingConfig();
 
@@ -137,14 +141,19 @@ export default function Cart() {
                         </p>
                       )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground hover:text-destructive"
+                    <Pressable
+                      asChild
+                      feedbackPattern="selection"
                       onClick={() => removeItem(item.variant.id)}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </Pressable>
                   </div>
 
                   <div className="flex items-center justify-between mt-4">
@@ -237,11 +246,17 @@ export default function Cart() {
                 })()}
               </div>
 
-              <Button asChild className="w-full" size="lg" disabled={!selectedShipping}>
-                <Link to={selectedShipping ? "/checkout/start" : "#"} onClick={(e) => { if (!selectedShipping) e.preventDefault(); }}>
-                  {selectedShipping ? 'Finalizar Compra' : 'Calcule o frete primeiro'}
-                </Link>
-              </Button>
+              <Pressable
+                asChild
+                feedbackPattern="selection"
+                onClick={() => { if (selectedShipping) navigate(checkoutHref); }}
+              >
+                <Button className="w-full" size="lg" disabled={!selectedShipping} asChild>
+                  <Link to={selectedShipping ? checkoutHref : '#'} onClick={(e) => { if (!selectedShipping) e.preventDefault(); }}>
+                    {selectedShipping ? 'Finalizar Compra' : 'Calcule o frete primeiro'}
+                  </Link>
+                </Button>
+              </Pressable>
 
               <Button asChild variant="outline" className="w-full">
                 <Link to="/">Continuar Comprando</Link>

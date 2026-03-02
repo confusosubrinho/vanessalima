@@ -5,6 +5,7 @@ import { useCart } from "@/contexts/CartContext";
 import { StoreLayout } from "@/components/store/StoreLayout";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, Clock, Package, Loader2 } from "lucide-react";
+import { feedback } from "@/lib/feedback";
 
 interface OrderInfo {
   id: string;
@@ -28,6 +29,19 @@ export default function CheckoutReturn() {
     clearCart();
     localStorage.removeItem("checkout_session_id");
   }, []);
+
+  // Success feedback once per return (when order is confirmed)
+  useEffect(() => {
+    if (!order?.id) return;
+    const key = "mobile_feedback_success_return_done";
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+      feedback("success");
+    } catch {
+      // ignore
+    }
+  }, [order?.id]);
 
   useEffect(() => {
     if (!sessionId || order) return;

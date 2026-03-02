@@ -1,7 +1,8 @@
 /**
- * P0-3: Testes de segurança de webhooks — assinatura obrigatória.
+ * P0-3 / PR7: Testes de segurança de webhooks — assinatura obrigatória.
  * Stripe: sem assinatura ou inválida → 400/401.
  * Reconcile: sem Bearer → 401.
+ * Reprocess webhook (PR6): sem Bearer → 401.
  */
 import { describe, it, expect } from 'vitest';
 
@@ -57,5 +58,16 @@ describe('Webhook security', () => {
       body: JSON.stringify({ order_id: '00000000-0000-0000-0000-000000000000' }),
     });
     expect(res.status).not.toBe(401);
+  });
+
+  it('reprocess-stripe-webhook sem Authorization retorna 401 (PR6/PR7)', async () => {
+    if (!url) return;
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/reprocess-stripe-webhook';
+    const res = await fetch(functionsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: 'evt_00000000000000' }),
+    });
+    expect(res.status).toBe(401);
   });
 });

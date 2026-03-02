@@ -3,7 +3,7 @@ import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-request-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -16,10 +16,43 @@ Deno.serve(async (req) => {
     );
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const requestId = (body?.request_id as string) || req.headers.get("x-request-id") || null;
+    console.log(JSON.stringify({ scope: "checkout-create-session", request_id: requestId, action: body?.action }));
+
     const action = body?.action as string | undefined;
 
-    // ─── Action: resolve ─── (fonte única: qual fluxo usar — transparente vs gateway)
+    // ─── Action: resolve ─── (PR8: tenta tabela checkout_settings primeiro; fallback para config antiga)
     if (action === "resolve") {
+      const { data: newSettings } = await supabase
+        .from("checkout_settings")
+        .select("enabled, active_provider, channel, experience")
+        .eq("id", "00000000-0000-0000-0000-000000000001")
+        .maybeSingle();
+
+      if (newSettings) {
+        if (!newSettings.enabled) {
+          return jsonRes({
+            flow: "transparent",
+            redirect_url: "/checkout",
+            provider: newSettings.active_provider,
+            channel: newSettings.channel,
+            experience: newSettings.experience,
+          });
+        }
+        const flow = newSettings.channel === "external" ? "gateway" : "transparent";
+        const redirect_url = flow === "transparent" ? "/checkout" : undefined;
+        return jsonRes({
+          flow,
+          redirect_url,
+          provider: newSettings.active_provider,
+          channel: newSettings.channel,
+          experience: newSettings.experience,
+          ...(newSettings.channel === "external" && newSettings.active_provider === "stripe" && { checkout_mode: "external" }),
+          ...(newSettings.channel === "internal" && newSettings.active_provider === "stripe" && { checkout_mode: "embedded" }),
+        });
+      }
+
+      // Fallback: config antiga (integrations_checkout + integrations_checkout_providers)
       const { data: checkoutConfig } = await supabase.from("integrations_checkout").select("*").limit(1).maybeSingle();
       if (!checkoutConfig?.enabled) {
         return jsonRes({ flow: "transparent", redirect_url: "/checkout" });

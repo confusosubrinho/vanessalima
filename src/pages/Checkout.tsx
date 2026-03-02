@@ -21,7 +21,10 @@ import { CouponInput } from '@/components/store/CouponInput';
 import logo from '@/assets/logo.png';
 import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
 import { isCouponValidForLocation } from '@/lib/couponDiscount';
+import { generateRequestId, invokeCheckoutFunction } from '@/lib/checkoutClient';
 import { StripePaymentForm, useStripeConfig } from '@/components/store/StripePaymentForm';
+import { Pressable } from '@/components/ui/Pressable';
+import { useFeedback } from '@/hooks/useFeedback';
 
 type Step = 'identification' | 'shipping' | 'payment';
 
@@ -82,6 +85,7 @@ export default function Checkout() {
   const navigate = useNavigate();
   const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
   const { toast } = useToast();
+  const { feedback: triggerFeedback } = useFeedback();
   const [currentStep, setCurrentStep] = useState<Step>('identification');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -261,26 +265,31 @@ export default function Checkout() {
     if (currentStep === 'identification') {
       if (!formData.email || !formData.name || !formData.phone || !formData.cpf) {
         toast({ title: 'Preencha todos os campos obrigatórios', variant: 'destructive' });
+        triggerFeedback('error');
         return;
       }
       if (!validateEmail(formData.email)) {
         setEmailError('Email inválido');
         toast({ title: 'Email inválido. Verifique e tente novamente.', variant: 'destructive' });
+        triggerFeedback('error');
         return;
       }
       if (!validateCPF(formData.cpf)) {
         setCpfError('CPF inválido');
         toast({ title: 'CPF inválido. Verifique e tente novamente.', variant: 'destructive' });
+        triggerFeedback('error');
         return;
       }
       setCurrentStep('shipping');
     } else if (currentStep === 'shipping') {
       if (!formData.cep || !formData.address || !formData.number || !formData.neighborhood || !formData.city || !formData.state) {
         toast({ title: 'Preencha o endereço completo', variant: 'destructive' });
+        triggerFeedback('error');
         return;
       }
       if (!selectedShipping) {
         toast({ title: 'Selecione um método de envio', description: 'Calcule o frete pelo CEP para continuar.', variant: 'destructive' });
+        triggerFeedback('error');
         return;
       }
       setCurrentStep('payment');
@@ -341,13 +350,13 @@ export default function Checkout() {
     // Card validation (only for Appmax flow, Stripe handles its own)
     if (!isStripeActive && formData.paymentMethod === 'card') {
       const cardDigits = formData.cardNumber.replace(/\s/g, '');
-      if (cardDigits.length < 15) { toast({ title: 'Número de cartão inválido', variant: 'destructive' }); return; }
-      if (!luhnCheck(cardDigits)) { toast({ title: 'Número de cartão inválido', description: 'Verifique os dados digitados.', variant: 'destructive' }); return; }
+      if (cardDigits.length < 15) { toast({ title: 'Número de cartão inválido', variant: 'destructive' }); triggerFeedback('error'); return; }
+      if (!luhnCheck(cardDigits)) { toast({ title: 'Número de cartão inválido', description: 'Verifique os dados digitados.', variant: 'destructive' }); triggerFeedback('error'); return; }
       const [expMonth, expYear] = formData.cardExpiry.split('/');
       const expDate = new Date(2000 + parseInt(expYear || '0'), parseInt(expMonth || '0') - 1);
-      if (expDate < new Date()) { toast({ title: 'Cartão expirado', variant: 'destructive' }); return; }
-      if (!formData.cardHolder || formData.cardHolder.trim().length < 3) { toast({ title: 'Nome do titular inválido', variant: 'destructive' }); return; }
-      if (formData.cardCvv.length < 3) { toast({ title: 'CVV inválido', variant: 'destructive' }); return; }
+      if (expDate < new Date()) { toast({ title: 'Cartão expirado', variant: 'destructive' }); triggerFeedback('error'); return; }
+      if (!formData.cardHolder || formData.cardHolder.trim().length < 3) { toast({ title: 'Nome do titular inválido', variant: 'destructive' }); triggerFeedback('error'); return; }
+      if (formData.cardCvv.length < 3) { toast({ title: 'CVV inválido', variant: 'destructive' }); triggerFeedback('error'); return; }
     }
 
     submitInProgressRef.current = true;
@@ -357,6 +366,7 @@ export default function Checkout() {
     const debounceTimer = setTimeout(() => { submitInProgressRef.current = false; }, debounceMs);
 
     try {
+      const requestId = generateRequestId();
       const { data: session } = await supabase.auth.getSession();
       const userId = session?.session?.user?.id || null;
       const idempotencyKey = cartId;
@@ -489,21 +499,25 @@ export default function Checkout() {
 
         // External Stripe Checkout (redirect to Stripe hosted page)
         if (stripeConfig?.checkout_mode === 'external') {
-          const { data: sessionResult, error: sessionError } = await supabase.functions.invoke('stripe-create-intent', {
-            body: {
-              action: 'create_checkout_session',
-              order_id: order.id,
-              amount: orderTotal,
-              customer_email: formData.email,
-              customer_name: formData.name,
-              products: productsForStripe,
-              coupon_code: appliedCoupon?.code || null,
-              discount_amount: discount,
-              order_access_token: guestToken,
-              success_url: `${window.location.origin}/pedido-confirmado/${order.id}?token=${guestToken}`,
-              cancel_url: `${window.location.origin}/carrinho`,
+          const { data: sessionResult, error: sessionError } = await invokeCheckoutFunction<{ error?: string; checkout_url?: string }>(
+            'stripe-create-intent',
+            {
+              body: {
+                action: 'create_checkout_session',
+                order_id: order.id,
+                amount: orderTotal,
+                customer_email: formData.email,
+                customer_name: formData.name,
+                products: productsForStripe,
+                coupon_code: appliedCoupon?.code || null,
+                discount_amount: discount,
+                order_access_token: guestToken,
+                success_url: `${window.location.origin}/pedido-confirmado/${order.id}?token=${guestToken}`,
+                cancel_url: `${window.location.origin}/carrinho`,
+              },
             },
-          });
+            requestId
+          );
 
           if (sessionError || sessionResult?.error) {
             throw new Error(sessionResult?.error || sessionError?.message || 'Erro ao criar sessão Stripe');
@@ -517,21 +531,25 @@ export default function Checkout() {
         }
 
         // Embedded Stripe Checkout (PaymentIntent + Elements on page)
-        const { data: intentResult, error: intentError } = await supabase.functions.invoke('stripe-create-intent', {
-          body: {
-            action: 'create_payment_intent',
-            order_id: order.id,
-            amount: orderTotal,
-            payment_method: formData.paymentMethod === 'card' ? 'card' : 'pix',
-            customer_email: formData.email,
-            customer_name: formData.name,
-            products: productsForStripe,
-            coupon_code: appliedCoupon?.code || null,
-            discount_amount: discount,
-            installments: selectedInstallments,
-            order_access_token: guestToken,
+        const { data: intentResult, error: intentError } = await invokeCheckoutFunction<{ error?: string; client_secret?: string; pix_qr_url?: string; pix_emv?: string; pix_expires_at?: number }>(
+          'stripe-create-intent',
+          {
+            body: {
+              action: 'create_payment_intent',
+              order_id: order.id,
+              amount: orderTotal,
+              payment_method: formData.paymentMethod === 'card' ? 'card' : 'pix',
+              customer_email: formData.email,
+              customer_name: formData.name,
+              products: productsForStripe,
+              coupon_code: appliedCoupon?.code || null,
+              discount_amount: discount,
+              installments: selectedInstallments,
+              order_access_token: guestToken,
+            },
           },
-        });
+          requestId
+        );
 
         if (intentError || intentResult?.error) {
           throw new Error(intentResult?.error || intentError?.message || 'Erro ao criar pagamento Stripe');
@@ -597,31 +615,36 @@ export default function Checkout() {
 
       if (formData.paymentMethod === 'card') {
         try {
-          const tokenizeResponse = await supabase.functions.invoke('process-payment', {
-            body: {
-              action: 'tokenize_card',
-              order_id: order.id,
-              order_access_token: guestToken,
-              card_number: formData.cardNumber.replace(/\s/g, ''),
-              card_holder: formData.cardHolder,
-              expiration_month: expiryMonth,
-              expiration_year: expiryYear,
-              security_code: formData.cardCvv,
+          const tokenizeResponse = await invokeCheckoutFunction<{ error?: string; token?: string }>(
+            'process-payment',
+            {
+              body: {
+                action: 'tokenize_card',
+                order_id: order.id,
+                order_access_token: guestToken,
+                card_number: formData.cardNumber.replace(/\s/g, ''),
+                card_holder: formData.cardHolder,
+                expiration_month: expiryMonth,
+                expiration_year: expiryYear,
+                security_code: formData.cardCvv,
+              },
             },
-          });
+            requestId
+          );
           if (tokenizeResponse.error || tokenizeResponse.data?.error) {
-            throw new Error(tokenizeResponse.data?.error || 'Erro ao tokenizar cartão');
+            throw new Error(tokenizeResponse.data?.error || tokenizeResponse.error?.message || 'Erro ao tokenizar cartão');
           }
-          paymentPayload.card_token = tokenizeResponse.data.token;
+          paymentPayload.card_token = tokenizeResponse.data?.token;
         } catch (tokenErr: any) {
           throw new Error(tokenErr?.message || 'Erro ao processar dados do cartão');
         }
         paymentPayload.installments = selectedInstallments;
       }
 
-      const { data: paymentResult, error: pmtError } = await supabase.functions.invoke(
+      const { data: paymentResult, error: pmtError } = await invokeCheckoutFunction<{ error?: string; appmax_order_id?: string; pay_reference?: string; pix_qrcode?: string; pix_emv?: string; pix_expiration_date?: string }>(
         'process-payment',
-        { body: paymentPayload }
+        { body: paymentPayload },
+        requestId
       );
 
       if (pmtError) {
@@ -673,10 +696,13 @@ export default function Checkout() {
         suggestion = 'Verifique os dados do cartão e tente novamente.';
       } else if (msg.includes('divergente') || msg.includes('Recarregue')) {
         suggestion = 'Os preços podem ter sido atualizados. Recarregue a página e tente novamente.';
+      } else if (msg.includes('Não conseguimos concluir')) {
+        suggestion = 'Verifique sua conexão e tente novamente.';
       }
 
       setPaymentError({ message: msg, suggestion });
       toast({ title: 'Pagamento não realizado', description: msg, variant: 'destructive' });
+      triggerFeedback('error');
     } finally {
       clearTimeout(debounceTimer);
       submitInProgressRef.current = false;
@@ -699,6 +725,7 @@ export default function Checkout() {
   const handleStripeError = (message: string) => {
     setPaymentError({ message, suggestion: 'Verifique os dados e tente novamente.' });
     toast({ title: 'Pagamento não realizado', description: message, variant: 'destructive' });
+    triggerFeedback('error');
   };
 
   // Pre-fill CEP from cart
@@ -1116,21 +1143,26 @@ export default function Checkout() {
                               <p className="text-xs text-muted-foreground break-all bg-muted/50 p-2.5 rounded-lg font-mono leading-relaxed">
                                 {stripePixData.pixEmv}
                               </p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="w-full gap-2"
+                              <Pressable
+                                asChild
+                                feedbackPattern="light"
                                 onClick={() => {
                                   if (stripePixData.pixEmv) {
                                     navigator.clipboard.writeText(stripePixData.pixEmv);
                                     toast({ title: 'Código PIX copiado!' });
                                   }
                                 }}
-                                id="btn-checkout-pix-copy"
                               >
-                                <Copy className="h-4 w-4" />
-                                Copiar código PIX
-                              </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full gap-2"
+                                  id="btn-checkout-pix-copy"
+                                >
+                                  <Copy className="h-4 w-4" />
+                                  Copiar código PIX
+                                </Button>
+                              </Pressable>
                             </div>
                           )}
                         </div>
@@ -1218,13 +1250,14 @@ export default function Checkout() {
 
                   {/* Submit button (only when not showing Stripe Elements or PIX waiting) */}
                   {!stripePixData && !(stripeClientSecret && isStripeActive) && (
-                    <Button
-                      onClick={handleSubmit}
-                      className="w-full text-base"
-                      size="lg"
-                      disabled={isLoading || isSubmitted}
-                      id="btn-checkout-finalize"
-                    >
+                    <Pressable asChild feedbackPattern="selection">
+                      <Button
+                        onClick={handleSubmit}
+                        className="w-full text-base"
+                        size="lg"
+                        disabled={isLoading || isSubmitted}
+                        id="btn-checkout-finalize"
+                      >
                       {isSubmitted && !isLoading ? (
                         'Pedido Enviado ✓'
                       ) : isLoading ? (
@@ -1233,6 +1266,7 @@ export default function Checkout() {
                         `Finalizar Pedido — ${formatPrice(displayTotal)}`
                       )}
                     </Button>
+                    </Pressable>
                   )}
 
                   {/* Payment error */}

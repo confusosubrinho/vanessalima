@@ -4,7 +4,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+    "authorization, x-client-info, apikey, content-type, x-request-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function jsonRes(body: Record<string, unknown>, status = 200) {
@@ -37,6 +37,8 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const { action } = body;
+    const requestId = body?.request_id ?? req.headers.get("x-request-id") ?? null;
+    console.log(JSON.stringify({ scope: "stripe-create-intent", request_id: requestId, action, order_id: body?.order_id ?? null }));
 
     // ─── Action: get_config ───
     if (action === "get_config") {
@@ -284,7 +286,9 @@ Deno.serve(async (req) => {
 
       let paymentIntent;
       try {
-        paymentIntent = await stripe.paymentIntents.create(intentParams);
+        paymentIntent = await stripe.paymentIntents.create(intentParams, {
+          idempotencyKey: `pi_${order_id}`,
+        });
       } catch (stripeErr: any) {
         // If PIX is not enabled in the Stripe account, return a clear message
         if (isPixMethod && stripeErr.message?.includes("pix")) {
@@ -306,6 +310,8 @@ Deno.serve(async (req) => {
         installments: isPixMethod ? null : installments,
         total_amount: authorizedAmount,
       }).eq("id", order_id);
+
+      console.log(JSON.stringify({ scope: "stripe-create-intent", request_id: requestId, provider: "stripe", order_id, payment_intent_id: paymentIntent.id, action: "create_payment_intent" }));
 
       const res: Record<string, unknown> = {
         client_secret: paymentIntent.client_secret,
@@ -487,7 +493,9 @@ Deno.serve(async (req) => {
 
       let session;
       try {
-        session = await stripe.checkout.sessions.create(sessionParams);
+        session = await stripe.checkout.sessions.create(sessionParams, {
+          idempotencyKey: `cs_${order_id}`,
+        });
       } catch (stripeErr: any) {
         for (const dec of stockDecrements) {
           await supabase.rpc("increment_stock", { p_variant_id: dec.variant_id, p_quantity: dec.quantity });
@@ -510,6 +518,8 @@ Deno.serve(async (req) => {
       }
 
       await supabase.from("orders").update(updatePayload).eq("id", order_id);
+
+      console.log(JSON.stringify({ scope: "stripe-create-intent", request_id: requestId, provider: "stripe", order_id, session_id: session.id, action: "create_checkout_session" }));
 
       return jsonRes({ checkout_url: session.url, session_id: session.id });
     }

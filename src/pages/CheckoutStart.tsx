@@ -5,11 +5,38 @@ import { useCart } from "@/contexts/CartContext";
 import { captureAttribution, getAttribution } from "@/lib/attribution";
 import { Loader2, ShieldCheck, Lock, CreditCard } from "lucide-react";
 import { getCartItemUnitPrice } from "@/lib/cartPricing";
+import { generateRequestId, invokeCheckoutFunction } from "@/lib/checkoutClient";
+import { Button } from "@/components/ui/button";
 
 export default function CheckoutStart() {
   const navigate = useNavigate();
   const { items, subtotal, discount, selectedShipping, clearCart, appliedCoupon, cartId, shippingZip } = useCart();
   const [error, setError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+  const hasStartedCheckout = useRef(false);
+
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(price);
+
+  const shippingCost = selectedShipping?.price ?? 0;
+  const totalValue = subtotal - discount + shippingCost;
+
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useCart } from "@/contexts/CartContext";
+import { captureAttribution, getAttribution } from "@/lib/attribution";
+import { Loader2, ShieldCheck, Lock, CreditCard } from "lucide-react";
+import { getCartItemUnitPrice } from "@/lib/cartPricing";
+import { generateRequestId, invokeCheckoutRouter } from "@/lib/checkoutClient";
+import type { CheckoutStartResponse } from "@/types/checkoutStart";
+import { Button } from "@/components/ui/button";
+
+export default function CheckoutStart() {
+  const navigate = useNavigate();
+  const { items, subtotal, discount, selectedShipping, clearCart, appliedCoupon, cartId, shippingZip } = useCart();
+  const [error, setError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
   const hasStartedCheckout = useRef(false);
 
   const formatPrice = (price: number) =>
@@ -21,10 +48,6 @@ export default function CheckoutStart() {
   useEffect(() => {
     captureAttribution();
 
-    // #region agent log
-    fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:effect',message:'effect run',data:{itemsLength:items.length,cartId:cartId||null},hypothesisId:'A',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     if (items.length === 0) {
       navigate("/carrinho");
       return;
@@ -32,183 +55,87 @@ export default function CheckoutStart() {
     if (hasStartedCheckout.current) return;
     hasStartedCheckout.current = true;
 
+    const requestId = generateRequestId();
+    const origin = window.location.origin;
+
     const startCheckout = async () => {
       try {
-        // Uma única fonte de verdade: qual fluxo está ativo (transparente vs gateway)
-        const { data: resolveData } = await supabase.functions.invoke("checkout-create-session", {
-          body: { action: "resolve" },
-        });
-        const flow = resolveData?.flow as string | undefined;
-        const provider = resolveData?.provider as string | undefined;
-
-        if (flow === "transparent" || !flow) {
-          navigate("/checkout", { replace: true });
-          return;
-        }
-
-        if (flow === "gateway" && provider === "yampi") {
-          const att = getAttribution();
-          const payload = {
-            items: items.map((i) => ({ variant_id: i.variant.id, quantity: i.quantity })),
-            attribution: att ? { utm_source: att.utm_source, utm_medium: att.utm_medium, utm_campaign: att.utm_campaign, utm_term: att.utm_term, utm_content: att.utm_content, referrer: att.referrer, landing_page: att.landing_page } : undefined,
-          };
-          const { data: yampiData, error: yampiInvokeError } = await supabase.functions.invoke("checkout-create-session", { body: payload });
-          if (yampiInvokeError) throw new Error(yampiInvokeError.message || "Erro ao conectar com o servidor de checkout");
-          const errMsg = yampiData?.error as string | undefined;
-          if (errMsg && !yampiData?.redirect_url) throw new Error(errMsg);
-          const redirectUrl = yampiData?.redirect_url as string | undefined;
-          if (redirectUrl && redirectUrl.startsWith("http")) {
-            clearCart();
-            window.location.href = redirectUrl;
-          } else if (yampiData?.fallback && redirectUrl) {
-            navigate(redirectUrl, { replace: true });
-          } else if (errMsg) {
-            throw new Error(errMsg);
-          } else {
-            throw new Error("Erro ao gerar link de pagamento Yampi. Tente o checkout da loja.");
-          }
-          return;
-        }
-
-        if (flow !== "gateway" || provider !== "stripe") {
-          navigate("/checkout", { replace: true });
-          return;
-        }
+        const payload = {
+          request_id: requestId,
+          cart_id: cartId!,
+          success_url: `${origin}/checkout/obrigado?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${origin}/carrinho`,
+          attribution: getAttribution() ? {
+            utm_source: getAttribution()?.utm_source,
+            utm_medium: getAttribution()?.utm_medium,
+            utm_campaign: getAttribution()?.utm_campaign,
+            utm_term: getAttribution()?.utm_term,
+            utm_content: getAttribution()?.utm_content,
+            referrer: getAttribution()?.referrer,
+            landing_page: getAttribution()?.landing_page,
+          } : undefined,
+          items: items.map((i) => ({
+            variant_id: i.variant.id,
+            quantity: i.quantity,
+            unit_price: getCartItemUnitPrice(i),
+            product_name: i.product.name,
+          })),
+          subtotal,
+          discount_amount: discount,
+          shipping_cost: shippingCost,
+          total_amount: totalValue,
+          order_access_token: null as string | null,
+          user_id: null as string | null,
+          coupon_code: appliedCoupon?.code ?? null,
+        };
 
         const { data: session } = await supabase.auth.getSession();
-        const userId = session?.session?.user?.id || null;
-        const guestToken = userId ? null : crypto.randomUUID();
-
-        const orderTotal = subtotal - discount + shippingCost;
-
-        // Create order with placeholder shipping data (Stripe will collect real address)
-        const { data: order, error: orderError } = await supabase
-          .from("orders")
-          .insert({
-            order_number: "TEMP",
-            user_id: userId,
-            cart_id: cartId,
-            subtotal: subtotal,
-            shipping_cost: shippingCost,
-            discount_amount: discount,
-            total_amount: orderTotal,
-            status: "pending",
-            shipping_name: "Aguardando Stripe",
-            shipping_address: "Aguardando Stripe",
-            shipping_city: "Aguardando",
-            shipping_state: "XX",
-            shipping_zip: shippingZip || "00000000",
-            shipping_phone: null,
-            coupon_code: appliedCoupon?.code || null,
-            customer_email: null,
-            idempotency_key: cartId,
-            access_token: guestToken,
-            provider: "stripe",
-            gateway: "stripe",
-          } as any)
-          .select()
-          .single();
-
-        // #region agent log
-        fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:afterOrderInsert',message:'order insert result',data:{orderId:order?.id||null,orderErrorCode:orderError?.code||null,orderErrorMsg:orderError?.message?.slice(0,120)||null},hypothesisId:'D',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-
-        if (orderError) {
-          // Handle duplicate cart_id
-          if (orderError.code === "23505" && orderError.message?.includes("cart_id")) {
-            const { data: existingByCart } = await (supabase.from("orders") as any)
-              .select("id, order_number")
-              .eq("cart_id", cartId)
-              .limit(1)
-              .maybeSingle();
-            if (existingByCart) {
-              navigate(`/pedido-confirmado/${existingByCart.id}`, {
-                state: { orderId: existingByCart.id, orderNumber: existingByCart.order_number },
-                replace: true,
-              });
-              return;
-            }
-          }
-          throw orderError;
-        }
-
-        // Insert order items
-        const orderItems = items.map((item) => ({
-          order_id: order.id,
-          product_id: item.product.id,
-          product_variant_id: item.variant.id,
-          product_name: item.product.name,
-          variant_info: `${item.variant.size}${item.variant.color ? " / " + item.variant.color : ""}`,
-          quantity: item.quantity,
-          unit_price: getCartItemUnitPrice(item),
-          total_price: getCartItemUnitPrice(item) * item.quantity,
-          title_snapshot: item.product.name,
-          image_snapshot: item.product.images?.[0]?.url || null,
-        }));
-
-        await supabase.from("order_items").insert(orderItems);
-
-        // Build products array for Stripe
-        const products = items.map((item) => ({
-          variant_id: item.variant.id,
-          name: item.product.name,
-          quantity: item.quantity,
-          unit_price: getCartItemUnitPrice(item),
-        }));
-
-        const origin = window.location.origin;
-
-        // Call Stripe to create checkout session
-        const { data: stripeData, error: stripeError } = await supabase.functions.invoke(
-          "stripe-create-intent",
-          {
-            body: {
-              action: "create_checkout_session",
-              order_id: order.id,
-              amount: orderTotal,
-              products,
-              coupon_code: appliedCoupon?.code || null,
-              discount_amount: discount,
-              order_access_token: guestToken,
-              success_url: `${origin}/checkout/obrigado?session_id={CHECKOUT_SESSION_ID}`,
-              cancel_url: `${origin}/carrinho`,
-            },
-          }
-        );
-
-        const backendError = stripeData?.error != null
-          ? (typeof stripeData.error === "string" ? stripeData.error : JSON.stringify(stripeData.error))
-          : null;
-        const hasCheckoutUrl = !!(stripeData?.checkout_url);
-
-        // #region agent log
-        fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:afterInvoke',message:'stripe-create-intent response',data:{hasStripeError:!!stripeError,stripeErrorMessage:stripeError?.message?.slice(0,100)||null,backendError:backendError?.slice(0,150)||null,hasCheckoutUrl,checkoutUrlHost:stripeData?.checkout_url?new URL(stripeData.checkout_url).host:null},hypothesisId:'B,C,E',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-
-        if (stripeError) throw new Error(backendError || stripeError.message);
-        if (backendError) throw new Error(backendError);
-
-        if (stripeData?.checkout_url) {
-          // #region agent log
-          fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:redirect',message:'redirecting to Stripe',data:{checkoutUrlHost:new URL(stripeData.checkout_url).host},hypothesisId:'success',timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          clearCart();
-          window.location.href = stripeData.checkout_url;
+        if (session?.data?.session?.user?.id) {
+          (payload as Record<string, unknown>).user_id = session.data.session.user.id;
         } else {
-          throw new Error("URL de checkout não retornada");
+          (payload as Record<string, unknown>).order_access_token = crypto.randomUUID();
         }
+
+        const { data, error: invokeError } = await invokeCheckoutRouter<CheckoutStartResponse>("start", payload, requestId);
+        if (invokeError) throw invokeError;
+        if (!data) throw new Error("Resposta vazia do checkout");
+
+        const errMsg = data.error;
+        if (errMsg) throw new Error(errMsg);
+
+        if (data.action === "redirect" && data.redirect_url && data.redirect_url.startsWith("http")) {
+          clearCart();
+          window.location.href = data.redirect_url;
+          return;
+        }
+        if (data.action === "redirect" && data.redirect_url) {
+          navigate(data.redirect_url, { replace: true });
+          return;
+        }
+        if (data.action === "render") {
+          navigate("/checkout", {
+            replace: true,
+            state: {
+              orderId: data.order_id,
+              provider: data.provider,
+              requestId,
+              orderAccessToken: data.order_access_token,
+              clientSecret: data.client_secret,
+            },
+          });
+          return;
+        }
+        navigate("/checkout", { replace: true });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Erro ao iniciar checkout";
-        // #region agent log
-        fetch('http://127.0.0.1:7427/ingest/6be3df10-442e-437f-9e54-2e76350dbe50',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'99eb5a'},body:JSON.stringify({sessionId:'99eb5a',location:'CheckoutStart.tsx:catch',message:'checkout error',data:{errorMessage:msg.slice(0,200)},hypothesisId:'B,C,D,E',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         console.error("Checkout start error:", msg);
         setError(msg);
+        hasStartedCheckout.current = false;
       }
     };
 
     startCheckout();
-  }, [items.length, navigate]);
+  }, [items.length, navigate, retryTrigger]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -216,12 +143,23 @@ export default function CheckoutStart() {
         {error ? (
           <div className="text-center space-y-4">
             <p className="text-destructive text-sm">{error}</p>
-            <button
-              onClick={() => navigate("/carrinho")}
-              className="text-primary underline text-sm"
-            >
-              Voltar ao carrinho
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <Button
+                onClick={() => {
+                  setError(null);
+                  setRetryTrigger((r) => r + 1);
+                }}
+                variant="default"
+              >
+                Tentar novamente
+              </Button>
+              <Button
+                onClick={() => navigate("/carrinho")}
+                variant="outline"
+              >
+                Voltar ao carrinho
+              </Button>
+            </div>
           </div>
         ) : (
           <>

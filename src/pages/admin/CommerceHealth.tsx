@@ -7,7 +7,7 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, CheckCircle, Loader2, XCircle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Loader2, XCircle, RefreshCw, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminSessionExpired } from '@/contexts/AdminAuthContext';
 import { logAudit, generateCorrelationId } from '@/lib/auditLogger';
@@ -19,6 +19,7 @@ export default function CommerceHealth() {
   const queryClient = useQueryClient();
   const onSessionExpired = useAdminSessionExpired();
   const [actionLoading, setActionLoading] = useState<'release' | 'reconcile' | null>(null);
+  const [reprocessEventId, setReprocessEventId] = useState<string | null>(null);
   const actionAbortRef = useRef<AbortController | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -53,6 +54,25 @@ export default function CommerceHealth() {
         duplicate_payment_order_ids?: string[];
         expired_reservation_order_ids?: string[];
       };
+    },
+    staleTime: 1000 * 60,
+  });
+
+  const { data: failedWebhooks, isLoading: failedWebhooksLoading, refetch: refetchFailedWebhooks } = useQuery({
+    queryKey: ['commerce-health-failed-webhooks'],
+    queryFn: async () => {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error('Não autenticado');
+      const res = await fetch(`${FUNCTIONS_URL}/admin-commerce-action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'list_failed_webhook_events' }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) throw new Error(body?.error || 'Não autorizado');
+      if (!res.ok) throw new Error(body?.error || res.statusText);
+      return (body.events ?? []) as Array<{ event_id: string; event_type: string; created_at: string; error_message: string | null; processed_at: string | null }>;
     },
     staleTime: 1000 * 60,
   });
@@ -106,6 +126,39 @@ export default function CommerceHealth() {
     } finally {
       if (!signal.aborted) setActionLoading(null);
       actionAbortRef.current = null;
+    }
+  };
+
+  const runReprocessWebhook = async (eventId: string) => {
+    setReprocessEventId(eventId);
+    const { data: session } = await supabase.auth.getSession();
+    const token = session?.session?.access_token;
+    if (!token) {
+      toast({ title: 'Erro', description: 'Sessão não encontrada.', variant: 'destructive' });
+      setReprocessEventId(null);
+      return;
+    }
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/reprocess-stripe-webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ event_id: eventId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        onSessionExpired(body?.error || 'Sessão expirada.');
+        return;
+      }
+      if (res.ok && body.ok) {
+        toast({ title: 'Reprocessado', description: `Evento ${eventId} processado com sucesso.` });
+        queryClient.invalidateQueries({ queryKey: ['commerce-health-failed-webhooks'] });
+      } else {
+        toast({ title: 'Erro ao reprocessar', description: body?.error || res.statusText, variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'Erro', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setReprocessEventId(null);
     }
   };
 
@@ -214,6 +267,52 @@ export default function CommerceHealth() {
           </CardContent>
         </Card>
       )}
+
+      {/* PR6: Webhooks Stripe com erro — listagem + Reprocessar */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Webhooks Stripe com erro
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">Eventos que falharam no processamento. Use &quot;Reprocessar&quot; para tentar novamente (busca o evento no Stripe e reexecuta a lógica).</p>
+        </CardHeader>
+        <CardContent>
+          {failedWebhooksLoading ? (
+            <p className="text-muted-foreground text-sm">Carregando...</p>
+          ) : !failedWebhooks?.length ? (
+            <p className="text-sm text-muted-foreground">Nenhum evento com erro.</p>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {failedWebhooks.map((ev) => (
+                <div key={ev.event_id} className="flex items-center justify-between gap-2 rounded border p-2 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <span className="font-mono text-xs text-muted-foreground">{ev.event_id}</span>
+                    <span className="ml-2 font-medium">{ev.event_type}</span>
+                    <p className="text-xs text-destructive truncate mt-0.5" title={ev.error_message ?? undefined}>{ev.error_message ?? '—'}</p>
+                    <p className="text-xs text-muted-foreground">{ev.created_at ? new Date(ev.created_at).toLocaleString() : ''}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => runReprocessWebhook(ev.event_id)}
+                    disabled={reprocessEventId !== null}
+                  >
+                    {reprocessEventId === ev.event_id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-1" />}
+                    Reprocessar
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {failedWebhooks && failedWebhooks.length > 0 && (
+            <Button variant="ghost" size="sm" className="mt-2" onClick={() => refetchFailedWebhooks()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Atualizar lista
+            </Button>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

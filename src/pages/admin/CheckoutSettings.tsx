@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { generateRequestId, invokeCheckoutFunction } from "@/lib/checkoutClient";
 import {
   CreditCard, Settings2, Check, AlertCircle, Loader2, RefreshCw,
   Eye, EyeOff, Save, Plug, Activity, Clock, ExternalLink,
@@ -32,6 +33,19 @@ export default function CheckoutSettings() {
     queryKey: ["integrations-checkout"],
     queryFn: async () => {
       const { data } = await supabase.from("integrations_checkout").select("*").limit(1).single();
+      return data;
+    },
+  });
+
+  // PR8: fonte canônica (tabela checkout_settings)
+  const { data: canonicalSettings } = useQuery({
+    queryKey: ["checkout-settings"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("checkout_settings")
+        .select("*")
+        .eq("id", "00000000-0000-0000-0000-000000000001")
+        .maybeSingle();
       return data;
     },
   });
@@ -88,6 +102,25 @@ export default function CheckoutSettings() {
   const stripeProvider = providers?.find((p) => p.provider === "stripe");
   const stripeConfig = (stripeProvider?.config as Record<string, unknown>) || {};
 
+  // PR8: atualizar tabela canônica checkout_settings via edge
+  const updateCanonicalSettings = useMutation({
+    mutationFn: async (payload: { active_provider: string; channel: string; experience: string; environment?: string; notes?: string; change_reason?: string }) => {
+      const { data, error } = await supabase.functions.invoke("update-checkout-settings", {
+        body: { ...payload, request_id: generateRequestId() },
+      });
+      if (error) throw error;
+      if (data?.success === false && data?.error) throw new Error(data.error as string);
+      return data?.settings;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["checkout-settings"] });
+      toast({ title: "Configuração canônica atualizada" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro ao atualizar configuração", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -113,6 +146,8 @@ export default function CheckoutSettings() {
       <GatewaysToggleCard
         providers={providers}
         checkoutConfig={checkoutConfig}
+        canonicalSettings={canonicalSettings}
+        updateCanonicalSettings={updateCanonicalSettings}
         queryClient={queryClient}
         toast={toast}
       />
@@ -123,14 +158,22 @@ export default function CheckoutSettings() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Status</p>
-              <Badge variant={checkoutConfig?.enabled ? "default" : "secondary"}>
-                {checkoutConfig?.enabled ? "Ativo" : "Desativado"}
+              <Badge variant={(canonicalSettings?.enabled ?? checkoutConfig?.enabled) ? "default" : "secondary"}>
+                {(canonicalSettings?.enabled ?? checkoutConfig?.enabled) ? "Ativo" : "Desativado"}
               </Badge>
             </div>
             <div className="space-y-1">
               <p className="text-xs text-muted-foreground">Gateway</p>
               <p className="text-sm font-semibold capitalize">
-                {checkoutConfig?.provider || "—"}
+                {canonicalSettings?.active_provider ?? checkoutConfig?.provider ?? "—"}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Canal / Experiência</p>
+              <p className="text-sm font-medium">
+                {canonicalSettings
+                  ? `${canonicalSettings.channel} / ${canonicalSettings.experience}`
+                  : checkoutConfig?.provider ?? "—"}
               </p>
             </div>
             <div className="space-y-1">
@@ -149,10 +192,15 @@ export default function CheckoutSettings() {
         </CardContent>
       </Card>
 
+      {/* PR5: Health check do checkout */}
+      <CheckoutHealthCard toast={toast} />
+
       {/* Stripe Configuration - Main Section */}
       <StripeSection
         providers={providers}
         checkoutConfig={checkoutConfig}
+        canonicalSettings={canonicalSettings}
+        updateCanonicalSettings={updateCanonicalSettings}
         queryClient={queryClient}
         toast={toast}
         updateConfig={updateConfig}
@@ -216,39 +264,137 @@ export default function CheckoutSettings() {
 // GATEWAYS TOGGLE CARD (Stripe e Yampi ativar/desativar)
 // ═══════════════════════════════════════════════════════════
 
+function CheckoutHealthCard({ toast }: { toast: ReturnType<typeof useToast>["toast"] }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; flow?: string; provider?: string; error?: string } | null>(null);
+
+  const runHealthCheck = async () => {
+    setRunning(true);
+    setResult(null);
+    const requestId = generateRequestId();
+    try {
+      const { data, error } = await invokeCheckoutFunction<{ flow?: string; provider?: string; error?: string }>(
+        "checkout-create-session",
+        { body: { action: "resolve" } },
+        requestId
+      );
+      if (error) {
+        setResult({ ok: false, error: error.message });
+        toast({ title: "Health check falhou", description: error.message, variant: "destructive" });
+        return;
+      }
+      const ok = !data?.error;
+      setResult({
+        ok,
+        flow: data?.flow,
+        provider: data?.provider,
+        error: data?.error as string | undefined,
+      });
+      toast({
+        title: ok ? "Saúde do checkout OK" : "Resposta com aviso",
+        description: ok ? `Fluxo: ${data?.flow ?? "—"}, Provider: ${data?.provider ?? "—"}` : data?.error as string,
+        variant: ok ? "default" : "destructive",
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro ao verificar";
+      setResult({ ok: false, error: msg });
+      toast({ title: "Health check falhou", description: msg, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Activity className="h-4 w-4" />
+          Saúde do checkout
+        </CardTitle>
+        <CardDescription>
+          Verifica se o resolve do checkout está respondendo (flow e provider ativos).
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={runHealthCheck}
+            disabled={running}
+          >
+            {running ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            {running ? "Verificando..." : "Verificar saúde do checkout"}
+          </Button>
+          {result && (
+            <div className="flex items-center gap-2 text-sm">
+              {result.ok ? (
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+              ) : (
+                <XCircle className="h-4 w-4 text-destructive" />
+              )}
+              <span className={result.ok ? "text-muted-foreground" : "text-destructive"}>
+                {result.ok
+                  ? `Flow: ${result.flow ?? "—"}, Provider: ${result.provider ?? "—"}`
+                  : result.error}
+              </span>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function GatewaysToggleCard({
   providers,
   checkoutConfig,
+  canonicalSettings,
+  updateCanonicalSettings,
   queryClient,
   toast,
 }: {
   providers: any[] | undefined;
   checkoutConfig: any;
+  canonicalSettings: any;
+  updateCanonicalSettings: ReturnType<typeof useMutation>;
   queryClient: ReturnType<typeof useQueryClient>;
   toast: ReturnType<typeof useToast>["toast"];
 }) {
   const stripeProvider = providers?.find((p) => p.provider === "stripe");
   const yampiProvider = providers?.find((p) => p.provider === "yampi");
+  const stripeConfig = (stripeProvider?.config as Record<string, unknown>) || {};
 
   const updateStripeActive = useMutation({
     mutationFn: async (isActive: boolean) => {
       if (!stripeProvider?.id) throw new Error("Stripe não configurado");
-      const { error } = await supabase
-        .from("integrations_checkout_providers")
-        .update({ is_active: isActive })
-        .eq("id", stripeProvider.id);
-      if (error) throw error;
-      if (checkoutConfig?.id) {
-        const nextProvider = isActive ? "stripe" : (yampiProvider?.is_active ? "yampi" : "appmax");
-        await supabase
-          .from("integrations_checkout")
-          .update({ provider: nextProvider, enabled: true })
-          .eq("id", checkoutConfig.id);
+      // Source of truth: checkout_settings canônica via edge. Espelhamento em legado é feito na edge.
+      if (isActive) {
+        const channel = stripeConfig.checkout_mode === "external" ? "external" : "internal";
+        const experience = stripeConfig.checkout_mode === "external" ? "native" : "transparent";
+        await updateCanonicalSettings.mutateAsync({
+          active_provider: "stripe",
+          channel,
+          experience,
+          change_reason: "Toggle Stripe ativado",
+        });
+      } else {
+        const nextProvider = yampiProvider?.is_active ? "yampi" : "appmax";
+        const channel = nextProvider === "yampi" ? "external" : "internal";
+        const experience = nextProvider === "yampi" ? "native" : "transparent";
+        await updateCanonicalSettings.mutateAsync({
+          active_provider: nextProvider,
+          channel,
+          experience,
+          change_reason: "Toggle Stripe desativado",
+        });
       }
     },
     onSuccess: (_, isActive) => {
       queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
       queryClient.invalidateQueries({ queryKey: ["integrations-checkout"] });
+      queryClient.invalidateQueries({ queryKey: ["checkout-settings"] });
       toast({ title: isActive ? "Stripe ativado" : "Stripe desativado" });
     },
     onError: (err: Error) => {
@@ -259,22 +405,30 @@ function GatewaysToggleCard({
   const toggleYampi = useMutation({
     mutationFn: async (isActive: boolean) => {
       if (!yampiProvider?.id) throw new Error("Yampi não configurado");
-      const { error } = await supabase
-        .from("integrations_checkout_providers")
-        .update({ is_active: isActive })
-        .eq("id", yampiProvider.id);
-      if (error) throw error;
-      if (checkoutConfig?.id) {
-        const nextProvider = isActive ? "yampi" : (stripeProvider?.is_active ? "stripe" : "appmax");
-        await supabase
-          .from("integrations_checkout")
-          .update({ provider: nextProvider, enabled: true })
-          .eq("id", checkoutConfig.id);
+      // Source of truth: checkout_settings canônica via edge. Espelhamento em legado é feito na edge.
+      if (isActive) {
+        await updateCanonicalSettings.mutateAsync({
+          active_provider: "yampi",
+          channel: "external",
+          experience: "native",
+          change_reason: "Toggle Yampi ativado",
+        });
+      } else {
+        const nextProvider = stripeProvider?.is_active ? "stripe" : "appmax";
+        const channel = nextProvider === "stripe" ? ((stripeConfig.checkout_mode === "external" ? "external" : "internal")) : "internal";
+        const experience = nextProvider === "stripe" ? ((stripeConfig.checkout_mode === "external" ? "native" : "transparent")) : "transparent";
+        await updateCanonicalSettings.mutateAsync({
+          active_provider: nextProvider,
+          channel,
+          experience,
+          change_reason: "Toggle Yampi desativado",
+        });
       }
     },
     onSuccess: (_, isActive) => {
       queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
       queryClient.invalidateQueries({ queryKey: ["integrations-checkout"] });
+      queryClient.invalidateQueries({ queryKey: ["checkout-settings"] });
       toast({ title: isActive ? "Yampi ativado" : "Yampi desativado" });
     },
     onError: (err: Error) => {
@@ -340,12 +494,16 @@ function GatewaysToggleCard({
 function StripeSection({
   providers,
   checkoutConfig,
+  canonicalSettings,
+  updateCanonicalSettings,
   queryClient,
   toast,
   updateConfig,
 }: {
   providers: any[] | undefined;
   checkoutConfig: any;
+  canonicalSettings: any;
+  updateCanonicalSettings: ReturnType<typeof useMutation>;
   queryClient: ReturnType<typeof useQueryClient>;
   toast: ReturnType<typeof useToast>["toast"];
   updateConfig: any;
@@ -374,21 +532,27 @@ function StripeSection({
   const updateStripeActive = useMutation({
     mutationFn: async (isActive: boolean) => {
       if (!stripeProvider?.id) throw new Error("Stripe não configurado");
-      const { error } = await supabase
-        .from("integrations_checkout_providers")
-        .update({ is_active: isActive })
-        .eq("id", stripeProvider.id);
-      if (error) throw error;
-      if (checkoutConfig?.id) {
+      // Source of truth: checkout_settings canônica via edge. Espelhamento em legado é feito na edge.
+      if (isActive) {
+        const channel = stripeConfig.checkout_mode === "external" ? "external" : "internal";
+        const experience = stripeConfig.checkout_mode === "external" ? "native" : "transparent";
+        await updateCanonicalSettings.mutateAsync({
+          active_provider: "stripe",
+          channel,
+          experience,
+          change_reason: "Stripe ativado",
+        });
+      } else {
         const yampiProvider = providers?.find((p: any) => p.provider === "yampi");
-        const nextProvider = isActive ? "stripe" : (yampiProvider?.is_active ? "yampi" : "appmax");
-        await supabase
-          .from("integrations_checkout")
-          .update({
-            provider: nextProvider,
-            enabled: true,
-          })
-          .eq("id", checkoutConfig.id);
+        const nextProvider = yampiProvider?.is_active ? "yampi" : "appmax";
+        const channel = nextProvider === "yampi" ? "external" : "internal";
+        const experience = nextProvider === "yampi" ? "native" : "transparent";
+        await updateCanonicalSettings.mutateAsync({
+          active_provider: nextProvider,
+          channel,
+          experience,
+          change_reason: "Stripe desativado",
+        });
       }
     },
     onSuccess: (_, isActive) => {
@@ -426,9 +590,20 @@ function StripeSection({
         });
         if (error) throw error;
       }
+      if (canonicalSettings?.active_provider === "stripe" && updateCanonicalSettings) {
+        const channel = checkoutMode === "external" ? "external" : "internal";
+        const experience = checkoutMode === "external" ? "native" : "transparent";
+        await updateCanonicalSettings.mutateAsync({
+          active_provider: "stripe",
+          channel,
+          experience,
+          change_reason: "Modo de checkout Stripe alterado",
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["integrations-checkout-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["checkout-settings"] });
       toast({ title: "Configuração Stripe salva!" });
       setSaving(false);
     },

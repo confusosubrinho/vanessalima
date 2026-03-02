@@ -87,7 +87,10 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    const { action, ...payload } = await req.json();
+    const body = await req.json();
+    const requestId = body?.request_id ?? req.headers.get("x-request-id") ?? null;
+    const { action, ...payload } = body;
+    console.log(JSON.stringify({ scope: "process-payment", request_id: requestId, provider: "appmax", action, order_id: payload?.order_id ?? null }));
 
     // ─── Action: get_payment_config ───
     if (action === "get_payment_config") {
@@ -195,6 +198,27 @@ Deno.serve(async (req) => {
         payment_method = "pix", products = [], coupon_code, discount_amount = 0,
         card_token,
       } = payload;
+
+      // ── Idempotência: não criar segunda cobrança para o mesmo pedido ──
+      if (order_id) {
+        const { data: existingOrder } = await supabase
+          .from("orders")
+          .select("id, status, appmax_order_id")
+          .eq("id", order_id)
+          .maybeSingle();
+
+        if (existingOrder) {
+          const alreadyCharged = ["processing", "paid", "shipped", "delivered"].includes(existingOrder.status) || !!existingOrder.appmax_order_id;
+          if (alreadyCharged) {
+            console.log(JSON.stringify({ scope: "process-payment", request_id: requestId, provider: "appmax", order_id, idempotent: true, reason: "order_already_charged" }));
+            return jsonResponse({
+              success: true,
+              appmax_order_id: existingOrder.appmax_order_id ?? undefined,
+              idempotent: true,
+            });
+          }
+        }
+      }
 
       // ── Server-side coupon: load and basic checks first; full validation after we have lineItems ──
       let validatedDiscount = 0;
@@ -536,6 +560,8 @@ Deno.serve(async (req) => {
           appmax_order_id: String(appmaxOrderId),
           payment_method: payment_method === "credit-card" || payment_method === "card" ? "card" : payment_method,
         }).eq("id", order_id);
+
+        console.log(JSON.stringify({ scope: "process-payment", request_id: requestId, provider: "appmax", order_id, status_previous: "pending", status_new: "processing", action: "create_transaction" }));
 
         if (customer_email) {
           const { data: existingCustomer } = await supabase

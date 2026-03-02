@@ -173,6 +173,19 @@
     @apply transition-transform duration-150 active:scale-[0.97];
   }
 
+  /* Pressable: key-action feedback (mobile pack) */
+  .pressable {
+    transition: transform 120ms ease, filter 120ms ease;
+  }
+  .pressable--pressing {
+    transform: scale(0.98);
+    filter: brightness(0.98);
+  }
+  .pressable--pressing-reduced {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
   /* Microanimation: card lift on hover (desktop) */
   .card-lift {
     @apply transition-all duration-200;

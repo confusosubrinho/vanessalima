@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, ShoppingBag, Menu, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, Truck, Heart, Star, Sparkles, Gift, Tag, Flame, Zap, Crown } from 'lucide-react';
+import { User, ShoppingBag, Menu, MessageCircle, ChevronDown, Trash2, Plus, Minus, HelpCircle, Percent, Truck, Heart, Star, Sparkles, Gift, Tag, Flame, Zap, Crown, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
@@ -14,6 +14,7 @@ import { CouponInput } from './CouponInput';
 import { SearchPreview } from './SearchPreview';
 import { CartProductSuggestions } from './CartProductSuggestions';
 import { prefetchCategoryPage, prefetchSearchPage, prefetchCartPage, prefetchCheckoutStartPage } from '@/lib/prefetch';
+import { FeedbackPreferencesDialog } from './FeedbackPreferencesDialog';
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Percent, Star, Sparkles, Heart, Gift, Tag, Flame, Zap, Crown, ShoppingBag,
@@ -210,6 +211,17 @@ export function Header() {
                       <HelpCircle className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">Perguntas Frequentes</span>
                     </Link>
+                    <FeedbackPreferencesDialog
+                      trigger={
+                        <button
+                          type="button"
+                          className="flex items-center gap-3 py-3 px-3 hover:bg-muted rounded-lg transition-colors w-full text-left text-sm"
+                        >
+                          <Settings2 className="h-4 w-4 text-muted-foreground" />
+                          Preferências
+                        </button>
+                      }
+                    />
                   </div>
                 </div>
                 <div className="border-t p-4">
@@ -420,7 +432,7 @@ export function Header() {
                       
                       {selectedShipping ? (
                         <Button asChild className="w-full" size="sm">
-                          <Link to="/checkout/start" onClick={() => setIsCartOpen(false)} onMouseEnter={prefetchCheckoutStartPage}>Finalizar Compra</Link>
+                          <Link to={checkoutHref} onClick={() => setIsCartOpen(false)} onMouseEnter={prefetchCheckoutStartPage}>Finalizar Compra</Link>
                         </Button>
                       ) : (
                         <Button asChild className="w-full" size="sm" variant="secondary">

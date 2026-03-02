@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal, ShoppingCart, Trash2 } from 'lucide-react';
+import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal, ShoppingCart, Trash2, RefreshCw, Clock } from 'lucide-react';
 import { HelpHint } from '@/components/HelpHint';
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -78,16 +78,28 @@ export default function Orders() {
   const [showFilters, setShowFilters] = useState(false);
   const isMobile = useIsMobile();
   const [orderToDeleteTest, setOrderToDeleteTest] = useState<Order | null>(null);
+  const [reconcileOrderId, setReconcileOrderId] = useState<string | null>(null);
+  const FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '') + '/functions/v1';
 
-  const { data: orders, isLoading } = useQuery({
+  const ADMIN_ORDERS_PAGE_SIZE = 50;
+  const ADMIN_ORDERS_TIMEOUT_MS = 15000;
+
+  const { data: orders, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['admin-orders'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data as Order[];
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('timeout')), ADMIN_ORDERS_TIMEOUT_MS);
+      });
+      const fetchPromise = (async () => {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(0, ADMIN_ORDERS_PAGE_SIZE - 1);
+        if (error) throw error;
+        return data as Order[];
+      })();
+      return Promise.race([fetchPromise, timeoutPromise]);
     },
   });
 
@@ -134,6 +146,40 @@ export default function Orders() {
       toast({ title: err.message || 'Erro ao atualizar status', variant: 'destructive' });
     },
   });
+
+  const runReconcile = async (orderId: string) => {
+    setReconcileOrderId(orderId);
+    const { data: session } = await supabase.auth.getSession();
+    const token = session?.session?.access_token;
+    if (!token) {
+      toast({ title: 'Erro', description: 'Sessão não encontrada.', variant: 'destructive' });
+      setReconcileOrderId(null);
+      return;
+    }
+    try {
+      const res = await fetch(`${FUNCTIONS_URL}/reconcile-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: 'Erro ao conciliar', description: body?.error || res.statusText, variant: 'destructive' });
+        return;
+      }
+      if (body.ok) {
+        toast({ title: 'Conciliação OK', description: `Status: ${body.previous_status} → ${body.new_status}` });
+        queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+        if (selectedOrder?.id === orderId) queryClient.invalidateQueries({ queryKey: ['admin-order-items', orderId] });
+      } else {
+        toast({ title: 'Nada a atualizar', description: body?.message || body?.reason || 'Stripe não está com status succeeded.', variant: 'default' });
+      }
+    } catch (e) {
+      toast({ title: 'Erro', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setReconcileOrderId(null);
+    }
+  };
 
   const deleteOrderTestMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -451,7 +497,16 @@ export default function Orders() {
       )}
 
       {/* Orders list */}
-      {isMobile ? (
+      {isError ? (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
+          <p className="text-sm text-destructive font-medium">
+            Não foi possível carregar os pedidos. {error instanceof Error && error.message === 'timeout' ? 'A requisição demorou muito.' : ''}
+          </p>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>
+            Tentar novamente
+          </Button>
+        </div>
+      ) : isMobile ? (
         /* Mobile: card layout */
         <div className="space-y-2">
           {isLoading ? (
@@ -667,6 +722,35 @@ export default function Orders() {
                 <div>
                   <h3 className="font-medium mb-2">Observações</h3>
                   <p className="text-muted-foreground">{selectedOrder.notes}</p>
+                </div>
+              )}
+              {/* PR6: Timeline do pedido */}
+              <div>
+                <h3 className="font-medium mb-2 flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Timeline
+                </h3>
+                <ul className="text-sm space-y-1 text-muted-foreground">
+                  <li>Criado em {format(new Date(selectedOrder.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</li>
+                  <li>Última atualização: {format(new Date(selectedOrder.updated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}{(selectedOrder as any).last_webhook_event ? ` (${(selectedOrder as any).last_webhook_event})` : ''}</li>
+                </ul>
+              </div>
+              {/* PR6: Conciliação — sync status com Stripe */}
+              {(selectedOrder as any).provider === 'stripe' && (selectedOrder as any).transaction_id && (
+                <div className="pt-2 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => runReconcile(selectedOrder.id)}
+                    disabled={reconcileOrderId !== null}
+                  >
+                    {reconcileOrderId === selectedOrder.id ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                    Conciliar com Stripe
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Consulta o status do pagamento no Stripe e atualiza o pedido (ex.: pagou mas webhook não chegou).
+                  </p>
                 </div>
               )}
               <div className="pt-4 border-t">

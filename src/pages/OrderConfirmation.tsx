@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { CheckCircle, Package, ArrowRight, Copy, Clock, Loader2, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Pressable } from '@/components/ui/Pressable';
 import { useToast } from '@/hooks/use-toast';
+import { useFeedback } from '@/hooks/useFeedback';
 import { supabase } from '@/integrations/supabase/client';
 import logo from '@/assets/logo.png';
 import { createClient } from '@supabase/supabase-js';
@@ -69,6 +71,7 @@ export default function OrderConfirmation() {
   const location = useLocation();
   const { orderId: urlOrderId } = useParams<{ orderId: string }>();
   const { toast } = useToast();
+  const { feedback: triggerFeedback } = useFeedback();
 
   // BUG #4: Persist state in sessionStorage
   const SESSION_KEY = `order_confirm_${urlOrderId || 'unknown'}`;
@@ -212,6 +215,20 @@ export default function OrderConfirmation() {
     return () => { supabase.removeChannel(channel); };
   }, [confirmState.orderId, urlOrderId, confirmState.guestToken]);
 
+  // Success feedback once when order becomes paid/processing/shipped/delivered
+  useEffect(() => {
+    const id = confirmState.orderId || urlOrderId;
+    if (!id || !orderStatus || !['processing', 'paid', 'shipped', 'delivered'].includes(orderStatus)) return;
+    const key = `mobile_feedback_success_order_${id}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+      triggerFeedback('success');
+    } catch {
+      // ignore
+    }
+  }, [orderStatus, confirmState.orderId, urlOrderId, triggerFeedback]);
+
   const orderNumber = confirmState.orderNumber || orderData?.order_number || (isLoading ? 'Carregando...' : 'N/A');
   const paymentMethod = confirmState.paymentMethod || orderData?.payment_method || 'pix';
   const pixQrcode = confirmState.pixQrcode;
@@ -332,10 +349,12 @@ export default function OrderConfirmation() {
                       <p className="text-xs text-muted-foreground break-all bg-muted/50 p-2 rounded text-left font-mono">
                         {pixEmv}
                       </p>
-                      <Button variant="outline" size="sm" onClick={copyPixCode} className="gap-2">
-                        <Copy className="h-3 w-3" />
-                        Copiar código PIX
-                      </Button>
+                      <Pressable asChild feedbackPattern="light" onClick={copyPixCode}>
+                        <Button variant="outline" size="sm" className="gap-2">
+                          <Copy className="h-3 w-3" />
+                          Copiar código PIX
+                        </Button>
+                      </Pressable>
                     </div>
                   )}
                 </>

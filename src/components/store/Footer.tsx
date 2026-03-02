@@ -6,6 +6,7 @@ import logo from '@/assets/logo.png';
 import { SocialIcons } from './SocialIcons';
 import { useStoreContact, formatPhone } from '@/hooks/useStoreContact';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
+import { FeedbackPreferencesDialog } from './FeedbackPreferencesDialog';
 
 interface PaymentMethod {
   id: string;
@@ -106,6 +107,9 @@ export function Footer() {
               <li><Link to="/formas-pagamento" className="hover:text-primary transition-colors">Formas de Pagamento</Link></li>
               <li><Link to="/rastreio" className="hover:text-primary transition-colors">Rastrear Pedido</Link></li>
               <li><Link to="/mais-vendidos" className="hover:text-primary transition-colors">Mais Vendidos</Link></li>
+              <li>
+                <FeedbackPreferencesDialog />
+              </li>
             </ul>
           </div>
 

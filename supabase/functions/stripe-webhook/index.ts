@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
         const orderId = pi.metadata?.order_id;
         const piId = pi.id;
 
-        console.log(`💰 payment_intent.succeeded: ${piId}, order_id=${orderId || "N/A"}`);
+        console.log(JSON.stringify({ scope: "stripe-webhook", provider: "stripe", event_id: event.id, event_type: event.type, order_id: orderId ?? null, payment_intent_id: piId }));
 
         if (orderId) {
           // Update existing order
@@ -430,6 +430,11 @@ Deno.serve(async (req) => {
         break;
     }
 
+    await supabase
+      .from("stripe_webhook_events")
+      .update({ processed_at: new Date().toISOString(), error_message: null })
+      .eq("event_id", event.id);
+
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -437,6 +442,10 @@ Deno.serve(async (req) => {
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error(`🔥 Webhook processing error for ${event.type}:`, msg);
+    await supabase
+      .from("stripe_webhook_events")
+      .update({ processed_at: new Date().toISOString(), error_message: msg })
+      .eq("event_id", event.id);
     // Return 200 even on processing errors to prevent Stripe retries for logic bugs
     return new Response(JSON.stringify({ received: true, error: msg }), {
       status: 200,
