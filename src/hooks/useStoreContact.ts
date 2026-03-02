@@ -31,7 +31,8 @@ export function useStoreSettingsPublic() {
       return (data as Database['public']['Views']['store_settings_public']['Row'] | null) || null;
     },
     staleTime: 1000 * 30,      // 30s: logo/identidade atualizados no painel aparecem em até 30s
-    refetchOnMount: true,
+    gcTime: 1000 * 60 * 5,     // 5min: não manter em cache por mais que isso (evita persistir dados velhos)
+    refetchOnMount: 'always',  // sempre refetch ao montar (ignora cache persistido)
     refetchOnWindowFocus: true, // ao voltar à aba, busca logo/header atualizados
   });
 }
