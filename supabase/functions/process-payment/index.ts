@@ -504,12 +504,12 @@ Deno.serve(async (req) => {
       // ── BUG #8: Dynamic soft_descriptor from store_settings ──
       const { data: storeSettings } = await supabase
         .from("store_settings")
-        .select("store_name")
+        .select("store_name, soft_descriptor")
         .limit(1)
         .maybeSingle();
 
-      const storeName = storeSettings?.store_name || "LOJA";
-      const softDescriptor = storeName
+      const rawDescriptor = storeSettings?.soft_descriptor || storeSettings?.store_name || "LOJA";
+      const softDescriptor = rawDescriptor
         .toUpperCase()
         .replace(/[^A-Z0-9 ]/g, "")
         .slice(0, 13)

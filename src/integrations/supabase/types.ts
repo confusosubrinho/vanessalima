@@ -2887,6 +2887,7 @@ export type Database = {
           shipping_store_pickup_enabled: boolean | null
           shipping_store_pickup_label: string | null
           show_variants_on_grid: boolean
+          soft_descriptor: string | null
           store_name: string | null
           tiktok_pixel_id: string | null
           updated_at: string
@@ -2946,6 +2947,7 @@ export type Database = {
           shipping_store_pickup_enabled?: boolean | null
           shipping_store_pickup_label?: string | null
           show_variants_on_grid?: boolean
+          soft_descriptor?: string | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string
@@ -3005,6 +3007,7 @@ export type Database = {
           shipping_store_pickup_enabled?: boolean | null
           shipping_store_pickup_label?: string | null
           show_variants_on_grid?: boolean
+          soft_descriptor?: string | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string
@@ -3207,6 +3210,7 @@ export type Database = {
           shipping_store_pickup_enabled: boolean | null
           shipping_store_pickup_label: string | null
           show_variants_on_grid: boolean | null
+          soft_descriptor: string | null
           store_name: string | null
           tiktok_pixel_id: string | null
           updated_at: string | null
@@ -3251,6 +3255,7 @@ export type Database = {
           shipping_store_pickup_enabled?: boolean | null
           shipping_store_pickup_label?: string | null
           show_variants_on_grid?: boolean | null
+          soft_descriptor?: string | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string | null
@@ -3295,6 +3300,7 @@ export type Database = {
           shipping_store_pickup_enabled?: boolean | null
           shipping_store_pickup_label?: string | null
           show_variants_on_grid?: boolean | null
+          soft_descriptor?: string | null
           store_name?: string | null
           tiktok_pixel_id?: string | null
           updated_at?: string | null
