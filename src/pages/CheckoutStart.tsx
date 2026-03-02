@@ -109,9 +109,9 @@ export default function CheckoutStart() {
         const msg = err instanceof Error ? err.message : "Erro ao iniciar checkout";
         console.error("Checkout start error:", msg);
         
-        // Detect stale variant error and show user-friendly message
-        const variantMatch = msg.match(/Variante inválida:\s*([\w-]+)/);
-        if (variantMatch) {
+        // Detect stale/missing variant errors and show user-friendly message
+        const isVariantError = /Variante inválida|Variantes não encontradas|variant/i.test(msg);
+        if (isVariantError) {
           setError("Um ou mais itens do seu carrinho não estão mais disponíveis. Por favor, volte ao carrinho e remova os itens indisponíveis.");
         } else {
           setError(msg);
