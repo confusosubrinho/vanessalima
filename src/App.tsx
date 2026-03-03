@@ -76,9 +76,24 @@ const CommerceHealth = lazy(() => import(/* webpackChunkName: "admin" */ "./page
 const CheckoutStart = lazy(() => import("./pages/CheckoutStart"));
 const CheckoutReturn = lazy(() => import("./pages/CheckoutReturn"));
 
+// Retry wrapper for lazy imports that may fail due to stale cache
+function lazyRetry<T extends { default: React.ComponentType<any> }>(
+  factory: () => Promise<T>,
+): Promise<T> {
+  return factory().catch((err) => {
+    // Force reload once to clear stale chunks
+    const key = 'lazy-retry-reloaded';
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1');
+      window.location.reload();
+    }
+    throw err;
+  });
+}
+
 // Lazy load non-critical floating components
-const WhatsAppFloat = lazy(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat })));
-const CookieConsent = lazy(() => import("./components/store/CookieConsent").then(m => ({ default: m.CookieConsent })));
+const WhatsAppFloat = lazy(() => lazyRetry(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat }))));
+const CookieConsent = lazy(() => lazyRetry(() => import("./components/store/CookieConsent").then(m => ({ default: m.CookieConsent }))));
 
 const queryClient = new QueryClient({
   defaultOptions: {
