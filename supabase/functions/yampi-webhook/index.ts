@@ -16,10 +16,12 @@ Deno.serve(async (req) => {
   try {
     // Webhook security: validate shared secret in query string (?token=...)
     const url = new URL(req.url);
-    const webhookSecret = Deno.env.get("YAMPI_WEBHOOK_SECRET");
-
+    let webhookSecret: string | undefined;
+    const { data: row } = await supabase.from("integrations_checkout_providers").select("config").eq("provider", "yampi").maybeSingle();
+    const config = (row as { config?: { webhook_secret?: string } } | null)?.config;
+    webhookSecret = config?.webhook_secret ?? Deno.env.get("YAMPI_WEBHOOK_SECRET") ?? undefined;
     if (!webhookSecret) {
-      console.error("[yampi-webhook] YAMPI_WEBHOOK_SECRET não configurado — rejeitando request");
+      console.error("[yampi-webhook] Webhook secret não configurado (nem em Configurar Yampi nem YAMPI_WEBHOOK_SECRET) — rejeitando request");
       return new Response("Webhook secret not configured", { status: 500, headers: corsHeaders });
     }
 
@@ -46,11 +48,20 @@ Deno.serve(async (req) => {
     const shippedEvents = ["order.shipped", "order.sent", "shipment.created"];
     const deliveredEvents = ["order.delivered", "shipment.delivered"];
 
-    // ===== PAYMENT APPROVED -> CREATE ORDER =====
-    if (approvedEvents.includes(event)) {
-      const yampiOrderId = resourceData?.order_id?.toString() || resourceData?.id?.toString() || null;
+    // order.status.updated: Yampi pode enviar status assim — normalizar para order.paid ou order.cancelled
+    const statusValue = (resourceData?.status || resourceData?.order_status || "").toString().toLowerCase();
+    let effectiveEvent = event;
+    if (event === "order.status.updated") {
+      if (["paid", "approved", "payment_approved"].includes(statusValue)) effectiveEvent = "order.paid";
+      else if (["cancelled", "canceled", "refused", "refunded"].includes(statusValue)) effectiveEvent = "order.cancelled";
+    }
 
-      // #5 Idempotency: check if order already exists
+    // ===== PAYMENT APPROVED -> UPDATE EXISTING (by session) OR CREATE ORDER =====
+    if (approvedEvents.includes(effectiveEvent)) {
+      const yampiOrderId = resourceData?.order_id?.toString() || resourceData?.id?.toString() || null;
+      const sessionId = resourceData?.metadata?.session_id || null;
+
+      // #5 Idempotency: check if order already exists by external_reference
       if (yampiOrderId) {
         const { data: existingOrder } = await supabase
           .from("orders")
@@ -61,6 +72,93 @@ Deno.serve(async (req) => {
         if (existingOrder) {
           console.log("[yampi-webhook] Order already exists, skipping:", existingOrder.id);
           return jsonOk({ ok: true, order_id: existingOrder.id, duplicate: true });
+        }
+      }
+
+      // Unificar com pedido criado no checkout start (evita duplicar e depois cancelar o errado)
+      if (sessionId) {
+        const { data: existingBySession } = await supabase
+          .from("orders")
+          .select("id, order_number")
+          .eq("checkout_session_id", sessionId)
+          .maybeSingle();
+
+        if (existingBySession) {
+          const customer = resourceData?.customer || resourceData?.buyer || {};
+          const customerEmail = customer?.email || resourceData?.email || null;
+          const customerName = customer?.name || customer?.first_name
+            ? `${customer?.first_name || ""} ${customer?.last_name || ""}`.trim()
+            : resourceData?.customer_name || "Cliente Yampi";
+          const customerPhone = customer?.phone?.full_number || customer?.phone || null;
+          const customerCpf = customer?.cpf || customer?.document || null;
+          const shipping = resourceData?.shipping_address || resourceData?.address || customer?.address || {};
+          const shippingCost = resourceData?.shipping_cost || resourceData?.value_shipment || 0;
+          const discountAmount = resourceData?.discount || resourceData?.value_discount || 0;
+          let subtotalOrder = totalAmount - shippingCost + discountAmount;
+          if (subtotalOrder <= 0) subtotalOrder = totalAmount;
+          const trackingCode = resourceData?.tracking_code || resourceData?.tracking?.code || null;
+
+          await supabase.from("orders").update({
+            subtotal: subtotalOrder,
+            total_amount: totalAmount,
+            shipping_cost: shippingCost,
+            discount_amount: discountAmount,
+            shipping_name: customerName,
+            shipping_address: shipping?.street || shipping?.address || "",
+            shipping_city: shipping?.city || "",
+            shipping_state: shipping?.state || "",
+            shipping_zip: shipping?.zipcode || shipping?.zip || "",
+            shipping_phone: customerPhone,
+            customer_email: customerEmail,
+            customer_cpf: customerCpf,
+            provider: "yampi",
+            gateway,
+            payment_method: paymentMethod,
+            installments,
+            transaction_id: transactionId,
+            tracking_code: trackingCode,
+            status: "processing",
+            external_reference: yampiOrderId,
+          } as Record<string, unknown>).eq("id", existingBySession.id);
+
+          const { data: existingItems } = await supabase.from("order_items").select("id, product_variant_id, quantity").eq("order_id", existingBySession.id);
+          for (const row of existingItems || []) {
+            if (!row.product_variant_id) continue;
+            const { data: alreadyDebit } = await supabase.from("inventory_movements").select("id").eq("order_id", existingBySession.id).eq("variant_id", row.product_variant_id).eq("type", "debit").maybeSingle();
+            if (!alreadyDebit) {
+              await supabase.rpc("decrement_stock", { p_variant_id: row.product_variant_id, p_quantity: row.quantity });
+              await supabase.from("inventory_movements").insert({ variant_id: row.product_variant_id, order_id: existingBySession.id, type: "debit", quantity: row.quantity });
+            }
+          }
+
+          await supabase.from("payments").insert({
+            order_id: existingBySession.id,
+            provider: "yampi",
+            status: "approved",
+            payment_method: paymentMethod,
+            gateway,
+            transaction_id: transactionId,
+            installments,
+            amount: totalAmount,
+            raw: payload,
+          });
+          await supabase.from("abandoned_carts").update({ recovered: true, recovered_at: new Date().toISOString() }).eq("session_id", sessionId);
+          if (customerEmail) {
+            const { data: existingCustomer } = await supabase.from("customers").select("id, total_orders, total_spent").eq("email", customerEmail).maybeSingle();
+            if (existingCustomer) {
+              await supabase.from("customers").update({
+                full_name: customerName,
+                phone: customerPhone,
+                total_orders: (existingCustomer.total_orders || 0) + 1,
+                total_spent: (existingCustomer.total_spent || 0) + totalAmount,
+              }).eq("id", existingCustomer.id);
+            } else {
+              await supabase.from("customers").insert({ email: customerEmail, full_name: customerName, phone: customerPhone, total_orders: 1, total_spent: totalAmount });
+            }
+          }
+          await supabase.from("email_automation_logs").insert({ recipient_email: customerEmail || "unknown", recipient_name: customerName, status: "pending" });
+          console.log("[yampi-webhook] Order updated by session_id (paid):", existingBySession.id);
+          return jsonOk({ ok: true, order_id: existingBySession.id, order_number: existingBySession.order_number, updated: true });
         }
       }
 
@@ -76,7 +174,6 @@ Deno.serve(async (req) => {
       const shippingCost = resourceData?.shipping_cost || resourceData?.value_shipment || 0;
       const discountAmount = resourceData?.discount || resourceData?.value_discount || 0;
       const yampiItems = resourceData?.items || resourceData?.products || resourceData?.skus || [];
-      const sessionId = resourceData?.metadata?.session_id || null;
       const yampiOrderNumber = resourceData?.number?.toString() || resourceData?.order_number?.toString() || yampiOrderId || "";
       const trackingCode = resourceData?.tracking_code || resourceData?.tracking?.code || null;
 
@@ -309,7 +406,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== CANCELLED/REFUSED EVENTS =====
-    if (cancelledEvents.includes(event)) {
+    if (cancelledEvents.includes(effectiveEvent)) {
       const externalRef =
         resourceData?.payment_link_id?.toString() ||
         resourceData?.order_id?.toString() ||
@@ -324,6 +421,11 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (existingOrder && existingOrder.status !== "cancelled") {
+          // Não cancelar pedido já pago/enviado/entregue (evita evento de recusa anterior sobrescrever pagamento aprovado)
+          if (["paid", "shipped", "delivered"].includes(existingOrder.status)) {
+            console.log("[yampi-webhook] Ignorando cancelamento: pedido já está", existingOrder.status, existingOrder.id);
+            return jsonOk({ ok: true, event: effectiveEvent, action: "ignored_already_fulfilled" });
+          }
           await supabase.from("orders").update({ status: "cancelled" }).eq("id", existingOrder.id);
 
           const { data: movements } = await supabase
@@ -366,10 +468,10 @@ Deno.serve(async (req) => {
           });
         }
       }
-      return jsonOk({ ok: true, event });
+      return jsonOk({ ok: true, event: effectiveEvent });
     }
 
-    console.log("[yampi-webhook] Unhandled event:", event);
+    console.log("[yampi-webhook] Unhandled event:", event, effectiveEvent !== event ? `(effective: ${effectiveEvent})` : "");
     return jsonOk({ ok: true, event, action: "ignored" });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";

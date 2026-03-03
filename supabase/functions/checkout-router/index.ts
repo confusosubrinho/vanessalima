@@ -335,6 +335,9 @@ Deno.serve(async (req) => {
       if (errMsg && !redirectUrl) {
         return jsonRes({ success: false, provider, channel, experience, action: "redirect", error: errMsg }, 400, corsHeaders);
       }
+      if (orderId && yampiData.session_id) {
+        await supabase.from("orders").update({ checkout_session_id: yampiData.session_id as string }).eq("id", orderId);
+      }
       console.log(JSON.stringify({ scope: "checkout-router", request_id: requestId, route: "start", provider, channel, duration_ms: Date.now() - t0 }));
       return jsonRes(
         {

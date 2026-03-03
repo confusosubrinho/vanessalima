@@ -6,7 +6,7 @@ import { generateRequestId, invokeCheckoutFunction } from "@/lib/checkoutClient"
 import {
   CreditCard, Settings2, Check, AlertCircle, Loader2, RefreshCw,
   Eye, EyeOff, Save, Plug, Activity, Clock, ExternalLink,
-  Upload, Database, CheckCircle2, XCircle, ChevronDown, ChevronUp, Package, AlertTriangle, Globe
+  Upload, Database, CheckCircle2, XCircle, ChevronDown, ChevronUp, Package, AlertTriangle, Globe, Copy
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -986,6 +986,7 @@ function YampiSection({
         sync_enabled: yampiForm.sync_enabled === "true",
         stock_mode: yampiForm.stock_mode,
         default_brand_id: yampiForm.default_brand_id ? Number(yampiForm.default_brand_id) : null,
+        webhook_secret: yampiForm.webhook_secret || undefined,
       };
       const { error } = await supabase
         .from("integrations_checkout_providers")
@@ -1012,6 +1013,7 @@ function YampiSection({
       sync_enabled: String(yampiConfig.sync_enabled ?? true),
       stock_mode: (yampiConfig.stock_mode as string) || "reserve",
       default_brand_id: String(yampiConfig.default_brand_id || ""),
+      webhook_secret: (yampiConfig.webhook_secret as string) || "",
     });
     setShowYampiModal(true);
   };
@@ -1216,26 +1218,41 @@ function YampiSection({
                 </Button>
               </div>
 
-              {/* Webhook URL */}
+              {/* Webhook (Yampi) — URL, chave e copiar */}
               {webhookUrl && (
-                <div className="p-3 rounded-lg bg-muted/50 space-y-1">
-                  <p className="text-xs font-medium">Webhook URL</p>
-                  <div className="flex items-center gap-2">
-                    <code className="text-[10px] font-mono bg-background px-2 py-1 rounded flex-1 overflow-x-auto border">
-                      {webhookUrl}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 shrink-0"
-                      onClick={() => {
-                        navigator.clipboard.writeText(webhookUrl);
-                        toast({ title: "URL copiada!" });
-                      }}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                    </Button>
+                <div className="p-3 rounded-lg bg-muted/50 space-y-3">
+                  <div>
+                    <p className="text-xs font-medium flex items-center gap-1">
+                      <Plug className="h-3 w-3" /> Webhook Yampi
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Cadastre esta URL no painel da Yampi (Webhooks). A chave secreta você define em &quot;Configurar&quot; e deve ser a mesma na URL (?token=...).
+                    </p>
                   </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground">URL do endpoint:</span>
+                    <div className="flex items-center gap-2">
+                      <code className="text-[10px] font-mono bg-background px-2 py-1.5 rounded flex-1 overflow-x-auto border break-all">
+                        {webhookUrl}{(yampiConfig as { webhook_secret?: string }).webhook_secret ? "?token=••••••••" : "?token=SUA_CHAVE"}
+                      </code>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0"
+                        onClick={() => {
+                          const secret = (yampiConfig as { webhook_secret?: string }).webhook_secret;
+                          const full = secret ? `${webhookUrl}?token=${secret}` : webhookUrl;
+                          navigator.clipboard.writeText(full);
+                          toast({ title: secret ? "URL completa copiada!" : "URL copiada (adicione ?token=SUA_CHAVE na Yampi)" });
+                        }}
+                      >
+                        <Copy className="h-3 w-3 mr-1" /> Copiar URL
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Chave secreta: configure no botão &quot;Configurar&quot; (campo &quot;Chave secreta do webhook&quot;) e use o mesmo valor na URL na Yampi.
+                  </p>
                 </div>
               )}
 
@@ -1411,6 +1428,18 @@ function YampiSection({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <Separator />
+            <div className="space-y-1">
+              <Label className="text-xs">Chave secreta do webhook</Label>
+              <p className="text-[10px] text-muted-foreground">Mesma chave que você coloca na URL ao cadastrar o webhook na Yampi (?token=...)</p>
+              <Input
+                type="password"
+                value={yampiForm.webhook_secret || ""}
+                onChange={(e) => setYampiForm((p) => ({ ...p, webhook_secret: e.target.value }))}
+                placeholder="Chave secreta"
+                className="text-xs h-8"
+              />
             </div>
             <div className="flex items-center justify-between">
               <div>
