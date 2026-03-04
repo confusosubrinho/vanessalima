@@ -385,9 +385,9 @@ Deno.serve(async (req) => {
       case "checkout.session.completed": {
         const session = event.data.object as any;
         const orderId = session.metadata?.order_id;
-        const piId = typeof session.payment_intent === "string" ? session.payment_intent : null;
+        const piId = typeof session.payment_intent === "string" ? session.payment_intent : (session.payment_intent as any)?.id ?? null;
 
-        console.log(`🛒 checkout.session.completed: session=${session.id}, order_id=${orderId || "N/A"}`);
+        console.log(`🛒 checkout.session.completed: session=${session.id}, order_id=${orderId || "N/A"}, payment_status=${session.payment_status}`);
 
         if (orderId) {
           const updateData: Record<string, unknown> = {
@@ -395,6 +395,15 @@ Deno.serve(async (req) => {
             last_webhook_event: "checkout.session.completed",
             external_reference: session.id,
           };
+
+          // When payment is completed, mark order as paid so the thank-you page shows correct status immediately (aligned with stripe-samples/checkout-one-time-payments)
+          if (session.payment_status === "paid") {
+            updateData.status = "paid";
+            updateData.transaction_id = piId || updateData.transaction_id;
+            updateData.payment_method = session.payment_method_types?.[0] || "card";
+            updateData.provider = "stripe";
+            updateData.gateway = "stripe";
+          }
 
           // Update shipping info from Stripe-collected address
           const shipping = session.shipping_details || session.customer_details;
@@ -413,7 +422,7 @@ Deno.serve(async (req) => {
             updateData.shipping_phone = session.customer_details.phone;
           }
 
-          if (piId) {
+          if (piId && !updateData.transaction_id) {
             updateData.transaction_id = piId;
           }
 
@@ -421,6 +430,32 @@ Deno.serve(async (req) => {
             ...updateData,
             updated_at: new Date().toISOString(),
           }).eq("id", orderId);
+
+          // Idempotent payment record when paid (same as payment_intent.succeeded; avoids duplicate if both events are processed)
+          if (session.payment_status === "paid" && (piId || session.id)) {
+            const txnId = piId || session.id;
+            const { data: existingPayment } = await supabase
+              .from("payments")
+              .select("id")
+              .eq("provider", "stripe")
+              .eq("transaction_id", txnId)
+              .maybeSingle();
+
+            if (!existingPayment) {
+              const amountCents = Number(session.amount_total) || 0;
+              await supabase.from("payments").insert({
+                order_id: orderId,
+                provider: "stripe",
+                gateway: "stripe",
+                amount: amountCents / 100,
+                status: "approved",
+                payment_method: session.payment_method_types?.[0] || "card",
+                transaction_id: txnId,
+                installments: 1,
+                raw: session as unknown as Record<string, unknown>,
+              });
+            }
+          }
         }
         break;
       }
