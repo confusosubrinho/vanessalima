@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { fetchWithTimeout } from "../../_shared/fetchWithTimeout.ts";
-import { getCorsHeaders } from "../../_shared/cors.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // ─── In-memory rate limiting ───
 const rateLimitMap = new Map<string, number[]>();
