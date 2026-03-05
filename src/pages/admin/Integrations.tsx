@@ -1754,7 +1754,7 @@ function BlingPanel() {
         setSyncProgress(null);
         toast({ title: `${label} concluída!`, description: isNewOnly ? `${totalImported} novos importados, ${totalVariants} variantes` : `${totalImported} importados, ${totalUpdated} atualizados, ${totalVariants} variantes, ${totalErrors} erros` });
       } else {
-        const { data, error } = await supabase.functions.invoke('bling/sync', {
+        const { data, error } = await supabase.functions.invoke('bling-sync', {
           body: { action, ...extraBody },
         });
         if (error) throw error;
