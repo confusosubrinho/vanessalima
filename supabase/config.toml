@@ -1,109 +1,109 @@
 project_id = "sojrvsbqkrbxoymlwtii"
 
-[functions."bling/oauth"]
+[functions.bling-oauth]
 verify_jwt = false
 
-[functions."checkout/calculate-shipping"]
+[functions.checkout-calculate-shipping]
 verify_jwt = false
 
-[functions."checkout/process-payment"]
+[functions.checkout-process-payment]
 verify_jwt = false
 
-[functions."bling/sync"]
+[functions.bling-sync]
 verify_jwt = false
 
-[functions."bling/webhook"]
+[functions.bling-webhook]
 verify_jwt = false
 
-[functions."appmax/webhook"]
+[functions.appmax-webhook]
 verify_jwt = false
 
-[functions."bling/sync-single-stock"]
+[functions.bling-sync-single-stock]
 verify_jwt = false
 
-[functions."appmax/get-app-token"]
+[functions.appmax-get-app-token]
 verify_jwt = false
 
-[functions."appmax/authorize"]
+[functions.appmax-authorize]
 verify_jwt = false
 
-[functions."appmax/generate-merchant-keys"]
+[functions.appmax-generate-merchant-keys]
 verify_jwt = false
 
-[functions."appmax/healthcheck"]
+[functions.appmax-healthcheck]
 verify_jwt = false
 
-[functions."cron/cleanup-logs"]
+[functions.cron-cleanup-logs]
 verify_jwt = false
 
-[functions."admin/repair-images"]
+[functions.admin-repair-images]
 verify_jwt = false
 
-[functions."seo/sitemap"]
+[functions.seo-sitemap]
 verify_jwt = false
 
-[functions."seo/robots"]
+[functions.seo-robots]
 verify_jwt = false
 
-[functions."appmax/healthcheck-ping"]
+[functions.appmax-healthcheck-ping]
 verify_jwt = false
 
-[functions."checkout/create-session"]
+[functions.checkout-create-session]
 verify_jwt = false
 
-[functions."integrations/test"]
+[functions.integrations-test]
 verify_jwt = false
 
-[functions."yampi/webhook"]
+[functions.yampi-webhook]
 verify_jwt = false
 
-[functions."yampi/sync-sku"]
+[functions.yampi-sync-sku]
 verify_jwt = false
 
-[functions."yampi/catalog-sync"]
+[functions.yampi-catalog-sync]
 verify_jwt = false
 
-[functions."yampi/sync-categories"]
+[functions.yampi-sync-categories]
 verify_jwt = false
 
-[functions."yampi/sync-variation-values"]
+[functions.yampi-sync-variation-values]
 verify_jwt = false
 
-[functions."checkout/stripe-create-intent"]
+[functions.checkout-stripe-create-intent]
 verify_jwt = false
 
-[functions."checkout/stripe-webhook"]
+[functions.checkout-stripe-webhook]
 verify_jwt = false
 
-[functions."checkout/reconcile-order"]
+[functions.checkout-reconcile-order]
 verify_jwt = false
 
-[functions."checkout/release-expired-reservations"]
+[functions.checkout-release-expired-reservations]
 verify_jwt = false
 
-[functions."admin/commerce-action"]
+[functions.admin-commerce-action]
 verify_jwt = false
 
-[functions."checkout/router"]
+[functions.checkout-router]
 verify_jwt = false
 
-[functions."checkout/update-settings"]
+[functions.checkout-update-settings]
 verify_jwt = false
 
-[functions."checkout/reprocess-stripe-webhook"]
+[functions.checkout-reprocess-stripe-webhook]
 verify_jwt = false
 
-[functions."checkout/stripe-catalog-sync"]
+[functions.checkout-stripe-catalog-sync]
 verify_jwt = false
 
-[functions."seo/generate"]
+[functions.seo-generate]
 verify_jwt = false
 
-[functions."integrations/tray-import"]
+[functions.integrations-tray-import]
 verify_jwt = false
 
-[functions."yampi/sync-images"]
+[functions.yampi-sync-images]
 verify_jwt = false
 
-[functions."yampi/import-order"]
+[functions.yampi-import-order]
 verify_jwt = false
