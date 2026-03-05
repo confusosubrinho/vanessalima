@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
       channel = settings.channel as "internal" | "external";
       experience = settings.experience as "transparent" | "native";
     } else {
-      const resolveUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/checkout/create-session`;
+      const resolveUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/checkout-create-session`;
       const resolveRes = await fetchWithTimeout(
         resolveUrl,
         {
