@@ -1631,7 +1631,7 @@ function BlingPanel() {
 
     setIsConnecting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('bling/oauth', {
+      const { data, error } = await supabase.functions.invoke('bling-oauth', {
         body: { action: 'get_auth_url' },
       });
 
