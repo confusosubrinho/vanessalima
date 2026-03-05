@@ -64,7 +64,7 @@ export default function CommerceHealth() {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
       if (!token) throw new Error('Não autenticado');
-      const res = await fetch(`${FUNCTIONS_URL}/admin-commerce-action`, {
+      const res = await fetch(`${FUNCTIONS_URL}/admin/commerce-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action: 'list_failed_webhook_events' }),
@@ -99,7 +99,7 @@ export default function CommerceHealth() {
       return;
     }
     try {
-      const res = await fetch(`${FUNCTIONS_URL}/admin-commerce-action`, {
+      const res = await fetch(`${FUNCTIONS_URL}/admin/commerce-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action }),
