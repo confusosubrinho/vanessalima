@@ -663,7 +663,7 @@ export default function Checkout() {
         }).eq('id', order.id);
       }
 
-      supabase.functions.invoke('bling/sync', {
+      supabase.functions.invoke('bling-sync', {
         body: { action: 'order_to_nfe', order_id: order.id },
       }).catch(() => {});
 

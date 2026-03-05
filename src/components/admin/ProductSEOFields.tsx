@@ -107,7 +107,7 @@ export function ProductSEOFields({ productData, seoData, onChange }: ProductSEOF
     }
     setIsGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('seo/generate', {
+      const { data, error } = await supabase.functions.invoke('seo-generate', {
         body: {
           name: productData.name,
           description: productData.description,
