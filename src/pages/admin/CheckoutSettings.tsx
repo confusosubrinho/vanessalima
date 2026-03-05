@@ -1021,7 +1021,7 @@ function YampiSection({
   const testConnection = async () => {
     setTesting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("integrations/test", {
+      const { data, error } = await supabase.functions.invoke("integrations-test", {
         body: { provider: "yampi" },
       });
       if (error) throw error;
