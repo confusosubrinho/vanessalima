@@ -230,6 +230,11 @@
     animation: fadeInUp 0.45s ease-out;
   }
 
+  /* Transição da imagem principal do produto (troca de miniatura/setas) */
+  .animate-image-carousel {
+    animation: fadeIn 0.4s ease-out;
+  }
+
   /* Fade-in ao rolar: estado inicial (oculto) */
   .fade-in-on-scroll {
     opacity: 0;

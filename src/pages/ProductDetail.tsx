@@ -671,14 +671,16 @@ export default function ProductDetail() {
                   setLightboxIndex(selectedImage);
                   setLightboxOpen(true);
                 }}
-                className="w-full h-full block focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-lg"
+                className="w-full h-full block focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-lg overflow-hidden"
                 aria-label="Ampliar imagem"
               >
-                <img
-                  src={resolveImageUrl(images[selectedImage]?.url)}
-                  alt={product.name}
-                  className="w-full h-full object-cover cursor-zoom-in"
-                />
+                <div key={selectedImage} className="w-full h-full animate-image-carousel">
+                  <img
+                    src={resolveImageUrl(images[selectedImage]?.url)}
+                    alt={product.name}
+                    className="w-full h-full object-cover cursor-zoom-in"
+                  />
+                </div>
               </button>
             </div>
             {images.length > 1 && (

@@ -130,11 +130,29 @@ export function ProductCarousel({
             >
               <ChevronRight className="h-5 w-5" />
             </Button>
+            {/* Gradientes nas bordas para transição visual suave */}
+            <div
+              className="absolute left-0 top-0 bottom-4 w-8 z-[1] pointer-events-none hidden md:block"
+              style={{
+                background: `linear-gradient(to right, ${isDark ? 'hsl(var(--secondary))' : 'hsl(var(--background))'}, transparent)`,
+              }}
+            />
+            <div
+              className="absolute right-0 top-0 bottom-4 w-8 z-[1] pointer-events-none hidden md:block"
+              style={{
+                background: `linear-gradient(to left, ${isDark ? 'hsl(var(--secondary))' : 'hsl(var(--background))'}, transparent)`,
+              }}
+            />
 
             <div
               ref={scrollRef}
-              className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 snap-x snap-mandatory touch-pan-x cursor-grab active:cursor-grabbing"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+              className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 snap-x snap-mandatory touch-pan-x cursor-grab active:cursor-grabbing scroll-smooth"
+              style={{
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+                WebkitOverflowScrolling: 'touch',
+                scrollBehavior: 'smooth',
+              }}
             >
               {products.map((product) => {
                 const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
@@ -149,13 +167,13 @@ export function ProductCarousel({
                   <Link
                     key={product.id}
                     to={`/produto/${product.slug}`}
-                    className={`flex-shrink-0 w-[200px] sm:w-[240px] md:w-[280px] lg:w-[300px] snap-start group block ${cardBg ? 'bg-background rounded-xl shadow-sm hover:shadow-md transition-shadow border p-2 sm:p-3' : ''}`}
+                    className={`flex-shrink-0 w-[200px] sm:w-[240px] md:w-[280px] lg:w-[300px] snap-start group block transition-transform duration-300 ease-out ${cardBg ? 'bg-background rounded-xl shadow-sm hover:shadow-md transition-shadow border p-2 sm:p-3' : ''}`}
                   >
                     <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-4">
                       <img
                         src={resolveImageUrl(primaryImage?.url)}
                         alt={primaryImage?.alt_text || product.name}
-                        className={`w-full h-full object-cover transition-all duration-500 ${
+                        className={`w-full h-full object-cover transition-all duration-500 ease-out ${
                           secondaryImage ? 'group-hover:opacity-0' : 'group-hover:scale-110'
                         }`}
                         loading="lazy"
@@ -167,7 +185,7 @@ export function ProductCarousel({
                         <img
                           src={resolveImageUrl(secondaryImage.url)}
                           alt={secondaryImage.alt_text || product.name}
-                          className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                          className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
                           loading="lazy"
                           decoding="async"
                           width={300}
