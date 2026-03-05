@@ -62,7 +62,7 @@ describe('Webhook security', () => {
 
   it('reprocess-stripe-webhook sem Authorization retorna 401 (PR6/PR7)', async () => {
     if (!url) return;
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/reprocess-stripe-webhook';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-reprocess-stripe-webhook';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

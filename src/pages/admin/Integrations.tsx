@@ -2439,7 +2439,7 @@ function StripeGatewayPanel() {
         <div className="bg-muted/60 border rounded-md p-2.5 text-xs text-muted-foreground space-y-1">
           <p><strong>Webhook URL:</strong> Configure no Stripe Dashboard:</p>
           <code className="block bg-muted px-2 py-1 rounded font-mono text-[10px] break-all">
-            https://{import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/checkout/stripe-webhook
+            https://{import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/checkout-stripe-webhook
           </code>
           <p className="text-[10px]">Eventos: <code>payment_intent.succeeded</code>, <code>payment_intent.payment_failed</code></p>
         </div>
