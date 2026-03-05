@@ -376,7 +376,7 @@ export default function Products() {
     }
     setSyncingProductId(product.id);
     try {
-      const { data, error } = await supabase.functions.invoke('bling/sync-single-stock', {
+      const { data, error } = await supabase.functions.invoke('bling-sync-single-stock', {
         body: { product_id: product.id },
       });
       if (error) throw new Error(error.message || 'Erro na sincronização');
