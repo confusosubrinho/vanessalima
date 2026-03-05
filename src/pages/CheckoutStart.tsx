@@ -107,8 +107,8 @@ export default function CheckoutStart() {
         navigate("/checkout", { replace: true });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Erro ao iniciar checkout";
-        console.error("Checkout start error:", msg);
-        
+        console.error("Checkout start error:", msg, err);
+
         // Detect stale/missing variant errors and show user-friendly message
         const isVariantError = /Variante inválida|Variantes não encontradas|variant/i.test(msg);
         if (isVariantError) {
