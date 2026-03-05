@@ -53,11 +53,16 @@ Deno.serve(async (req) => {
 
       const product = (variant as any).products;
       const unitPrice = variant.sale_price ?? variant.base_price ?? product?.sale_price ?? product?.base_price;
+      const yampiProductId = product?.yampi_product_id;
+      if (!yampiProductId) {
+        return new Response(JSON.stringify({ error: "Produto sem yampi_product_id mapeado" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
       const res = await fetch(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
         method: "PUT",
         headers: yampiHeaders,
         body: JSON.stringify({
+          product_id: yampiProductId,
           price_cost: unitPrice,
           price_sale: unitPrice,
           quantity: variant.stock_quantity,
@@ -82,9 +87,13 @@ Deno.serve(async (req) => {
 
       const { data: product } = await supabase
         .from("products")
-        .select("base_price, sale_price")
+        .select("base_price, sale_price, yampi_product_id")
         .eq("id", product_id)
         .single();
+
+      if (!product?.yampi_product_id) {
+        return new Response(JSON.stringify({ error: "Produto sem yampi_product_id mapeado" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
       for (const variant of variants || []) {
         const unitPrice = variant.sale_price ?? variant.base_price ?? product?.sale_price ?? product?.base_price;
@@ -92,6 +101,7 @@ Deno.serve(async (req) => {
           method: "PUT",
           headers: yampiHeaders,
           body: JSON.stringify({
+            product_id: product.yampi_product_id,
             price_cost: unitPrice,
             price_sale: unitPrice,
             quantity: variant.stock_quantity,

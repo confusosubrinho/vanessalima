@@ -383,8 +383,9 @@ Deno.serve(async (req) => {
                 }
                 counters.created_skus++;
               } else {
-                // ── UPDATE existing SKU ──
+                // ── UPDATE existing SKU ── (Yampi exige product_id no PUT)
                 const updatePayload: Record<string, unknown> = {
+                  product_id: yampiProductId,
                   sku: variantSku,
                   price_cost: unitCost,
                   price_sale: unitPrice,
