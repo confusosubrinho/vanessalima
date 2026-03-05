@@ -23,13 +23,11 @@ export type Database = {
           customer_name: string | null
           email: string | null
           id: string
-          is_test: boolean
           page_url: string | null
           phone: string | null
           recovered: boolean | null
           recovered_at: string | null
           session_id: string
-          status: string
           subtotal: number
           updated_at: string
           user_id: string | null
@@ -47,13 +45,11 @@ export type Database = {
           customer_name?: string | null
           email?: string | null
           id?: string
-          is_test?: boolean
           page_url?: string | null
           phone?: string | null
           recovered?: boolean | null
           recovered_at?: string | null
           session_id: string
-          status?: string
           subtotal?: number
           updated_at?: string
           user_id?: string | null
@@ -71,13 +67,11 @@ export type Database = {
           customer_name?: string | null
           email?: string | null
           id?: string
-          is_test?: boolean
           page_url?: string | null
           phone?: string | null
           recovered?: boolean | null
           recovered_at?: string | null
           session_id?: string
-          status?: string
           subtotal?: number
           updated_at?: string
           user_id?: string | null
