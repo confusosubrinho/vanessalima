@@ -37,7 +37,7 @@ describe('Webhook security', () => {
 
   it('reconcile-order sem Authorization retorna 401 ou 404', async () => {
     if (!url) return;
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/reconcile-order';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-reconcile-order';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
