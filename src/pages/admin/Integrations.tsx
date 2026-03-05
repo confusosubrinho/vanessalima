@@ -1417,7 +1417,7 @@ function BlingMonitoringPanel() {
   const handleTestWebhook = async () => {
     setTestingWebhook(true);
     try {
-      const res = await supabase.functions.invoke('bling/webhook', {
+      const res = await supabase.functions.invoke('bling-webhook', {
         body: { action: 'test', event: 'test_ping', eventId: `test_${Date.now()}` },
       });
       toast({ title: 'Teste enviado!', description: 'Webhook processou com sucesso.' });
