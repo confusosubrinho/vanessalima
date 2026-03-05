@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
       item.sku_id ??
       (item.sku as Record<string, unknown>)?.id ??
       (item.product as Record<string, unknown>)?.sku_id ??
-      ((item.product as Record<string, unknown>)?.skus as unknown[])?.[0]?.id ??
+      ((item.product as Record<string, unknown>)?.skus as Record<string, unknown>[])?.[0]?.id ??
       item.id;
     if (raw == null || raw === "") return null;
     const n = Number(raw);

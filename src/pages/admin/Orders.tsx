@@ -727,7 +727,7 @@ export default function Orders() {
                 <div>
                   <p className="text-muted-foreground text-xs font-medium">Valor pago</p>
                   <p className="font-medium">
-                    {selectedOrder.total_amount != null && selectedOrder.total_amount !== ''
+                    {selectedOrder.total_amount != null && String(selectedOrder.total_amount) !== ''
                       ? formatPrice(Number(selectedOrder.total_amount))
                       : '—'}
                   </p>
