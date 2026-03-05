@@ -1661,7 +1661,7 @@ function BlingPanel() {
     if (!isConnected) return;
     setLoadingStores(true);
     try {
-      const { data, error } = await supabase.functions.invoke('bling/sync', {
+      const { data, error } = await supabase.functions.invoke('bling-sync', {
         body: { action: 'list_stores' },
       });
       if (error) throw error;
