@@ -12,7 +12,7 @@ const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 describe('Webhook security', () => {
   it('Stripe webhook sem stripe-signature retorna 400', async () => {
     if (!url) return;
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/stripe-webhook';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-stripe-webhook';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -23,7 +23,7 @@ describe('Webhook security', () => {
 
   it('Stripe webhook com assinatura inválida retorna 400', async () => {
     if (!url) return;
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/stripe-webhook';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-stripe-webhook';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: {
@@ -37,7 +37,7 @@ describe('Webhook security', () => {
 
   it('reconcile-order sem Authorization retorna 401 ou 404', async () => {
     if (!url) return;
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/reconcile-order';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-reconcile-order';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,7 +48,7 @@ describe('Webhook security', () => {
 
   it('reconcile-order com Bearer válido não retorna 401', async () => {
     if (!url || !key) return;
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/reconcile-order';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-reconcile-order';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: {
@@ -62,7 +62,7 @@ describe('Webhook security', () => {
 
   it('reprocess-stripe-webhook sem Authorization retorna 401 (PR6/PR7)', async () => {
     if (!url) return;
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/reprocess-stripe-webhook';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-reprocess-stripe-webhook';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

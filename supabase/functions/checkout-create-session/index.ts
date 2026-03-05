@@ -344,6 +344,6 @@ Deno.serve(async (req) => {
 function jsonRes(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...getCorsHeaders(), "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(null), "Content-Type": "application/json" },
   });
 }

@@ -63,7 +63,7 @@ describe('release_expired_reservations', () => {
       .update({ created_at: new Date(Date.now() - 20 * 60 * 1000).toISOString() })
       .eq('id', order.id);
 
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/release-expired-reservations';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-release-expired-reservations';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },

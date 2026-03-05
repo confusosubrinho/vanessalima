@@ -29,13 +29,13 @@ export async function invokeCheckoutRouter(
   body: Record<string, unknown>,
   requestId?: string | null
 ): Promise<{ status: number; data: unknown }> {
-  const res = await invokeEdgeFunction('checkout/router', body, requestId);
+  const res = await invokeEdgeFunction('checkout-router', body, requestId);
   const data = await res.json().catch(() => ({}));
   return { status: res.status, data };
 }
 
 export async function invokeResolve(requestId?: string | null): Promise<{ status: number; data: unknown }> {
-  const res = await invokeEdgeFunction('checkout/create-session', { action: 'resolve' }, requestId);
+  const res = await invokeEdgeFunction('checkout-create-session', { action: 'resolve' }, requestId);
   const data = await res.json().catch(() => ({}));
   return { status: res.status, data };
 }
