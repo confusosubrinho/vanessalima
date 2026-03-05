@@ -1,5 +1,7 @@
 const ALLOWED_ORIGINS = [
   "https://vanessalima.lovable.app",
+  "https://vanessalimashoes.com.br",
+  "https://www.vanessalimashoes.com.br",
   "http://localhost:8080",
   "http://127.0.0.1:8080",
   "http://localhost:54321",
