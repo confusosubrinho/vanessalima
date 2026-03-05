@@ -202,7 +202,8 @@ export default function Orders() {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: 'Erro ao sincronizar', description: body?.error || res.statusText, variant: 'destructive' });
+        const desc = body?.hint ? `${body?.error || res.statusText} — ${body.hint}` : (body?.error || res.statusText);
+        toast({ title: 'Erro ao sincronizar', description: desc, variant: 'destructive' });
         return;
       }
       if (body.ok) {

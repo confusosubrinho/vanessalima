@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
 
   const { data: order, error: orderErr } = await supabase
     .from("orders")
-    .select("id, order_number, external_reference, provider")
+    .select("id, order_number, external_reference, yampi_order_number, provider")
     .eq("id", orderId)
     .single();
 
@@ -82,34 +82,52 @@ Deno.serve(async (req) => {
   }
 
   const baseUrl = `https://api.dooki.com.br/v2/${alias}`;
-  const searchUrl = `${baseUrl}/orders?include=items,customer,shipping_address,transactions&q=${encodeURIComponent(order.external_reference)}&limit=5`;
+  const includeQuery = "include=items,customer,shipping_address,transactions";
+  const headers = {
+    "User-Token": userToken,
+    "User-Secret-Key": userSecretKey,
+    Accept: "application/json",
+  };
+
+  async function fetchYampiOrder(q: string): Promise<Record<string, unknown> | null> {
+    const searchUrl = `${baseUrl}/orders?${includeQuery}&q=${encodeURIComponent(q)}&limit=5`;
+    const res = await fetch(searchUrl, { headers });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const orders = json?.data || [];
+    return orders.find((o: Record<string, unknown>) =>
+      String(o.id) === q || String(o.number) === q || String(o.order_number) === q
+    ) || orders[0] || null;
+  }
 
   let yampiOrder: Record<string, unknown> | null = null;
   try {
-    const res = await fetch(searchUrl, {
-      headers: {
-        "User-Token": userToken,
-        "User-Secret-Key": userSecretKey,
-        Accept: "application/json",
-      },
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("[yampi-sync] API error:", res.status, errText);
-      return jsonRes({ ok: false, error: `Yampi API retornou ${res.status}` }, 502);
+    // 1) Busca pelo ID externo (id interno na Yampi)
+    yampiOrder = await fetchYampiOrder(order.external_reference);
+    // 2) Se não achou e temos número do pedido, tenta pelo número (ex.: 1491772375818422)
+    if (!yampiOrder && order.yampi_order_number) {
+      yampiOrder = await fetchYampiOrder(order.yampi_order_number);
     }
-    const json = await res.json();
-    const orders = json?.data || [];
-    yampiOrder = orders.find((o: Record<string, unknown>) =>
-      String(o.id) === order.external_reference || String(o.number) === order.external_reference
-    ) || orders[0] || null;
+    // 3) Se ainda não achou, tenta GET direto por ID (algumas APIs suportam)
+    if (!yampiOrder) {
+      const directUrl = `${baseUrl}/orders/${order.external_reference}?${includeQuery}`;
+      const res = await fetch(directUrl, { headers });
+      if (res.ok) {
+        const json = await res.json();
+        yampiOrder = (json?.data as Record<string, unknown>) || (json as Record<string, unknown>) || null;
+      }
+    }
   } catch (err) {
     console.error("[yampi-sync] Fetch error:", err);
     return jsonRes({ ok: false, error: "Erro ao conectar com a API Yampi" }, 502);
   }
 
   if (!yampiOrder) {
-    return jsonRes({ ok: false, error: "Pedido não encontrado na Yampi" }, 404);
+    return jsonRes({
+      ok: false,
+      error: "Pedido não encontrado na Yampi",
+      hint: "Se importou pelo ID interno, tente importar de novo pelo número do pedido (ex.: 1491772375818422) que aparece no painel da Yampi.",
+    }, 404);
   }
 
   const yampiStatus = String((yampiOrder.status as any)?.data?.alias || yampiOrder.status_alias || yampiOrder.status || "");
@@ -136,10 +154,11 @@ Deno.serve(async (req) => {
     (shippingOption.name as string) ||
     ((yampiOrder.delivery_option as Record<string, unknown>)?.name as string) ||
     (yampiOrder.shipping_method as string) ||
- null;
+    null;
 
   const yampiOrderDate = (yampiOrder.created_at as string) || (yampiOrder.date as string) || (yampiOrder.order_date as string) || (yampiOrder.updated_at as string) || null;
   const yampiCreatedAt = yampiOrderDate ? new Date(yampiOrderDate).toISOString() : null;
+  const yampiOrderNumber = (yampiOrder.number != null ? String(yampiOrder.number) : null) || (yampiOrder.order_number != null ? String(yampiOrder.order_number) : null) || null;
 
   const updatePayload: Record<string, unknown> = {
     status: localStatus,
@@ -147,6 +166,7 @@ Deno.serve(async (req) => {
     tracking_code: trackingCode,
     shipping_method: shippingMethodName,
     yampi_created_at: yampiCreatedAt,
+    yampi_order_number: yampiOrderNumber,
   };
 
   const { error: updateErr } = await supabase
@@ -167,5 +187,6 @@ Deno.serve(async (req) => {
     status: localStatus,
     payment_status: paymentStatus,
     yampi_created_at: yampiCreatedAt,
+    yampi_order_number: yampiOrderNumber,
   });
 });
