@@ -253,12 +253,12 @@ Deno.serve(async (req) => {
           item.sku_id ??
           (item.sku as Record<string, unknown>)?.id ??
           (item.product as Record<string, unknown>)?.sku_id ??
-          ((item.product as Record<string, unknown>)?.skus as unknown[])?.[0]?.id ??
+          ((item.product as Record<string, unknown>)?.skus as Record<string, unknown>[])?.[0]?.id ??
           item.id ??
           item.yampi_sku_id;
         const skuId = rawSkuId != null && rawSkuId !== "" ? Number(rawSkuId) : null;
-        const quantity = item?.quantity || 1;
-        const unitPrice = item?.price || item?.price_sale || item?.unit_price || 0;
+        const quantity = Number(item?.quantity) || 1;
+        const unitPrice = Number(item?.price || item?.price_sale || item?.unit_price) || 0;
         const itemName = item?.name || item?.product_name || "Produto";
         const itemSku = (item?.sku as string) || (item?.sku_code as string) || (item?.code as string) || ((item?.sku as Record<string, unknown>)?.sku as string) || null;
         const itemImage = (item?.image as Record<string, unknown>) || (item?.product as Record<string, unknown>)?.image as Record<string, unknown> || {};
