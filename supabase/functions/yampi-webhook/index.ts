@@ -248,17 +248,36 @@ Deno.serve(async (req) => {
 
       // Insert order items and debit stock
       for (const yampiItem of yampiItems) {
-        const skuId = yampiItem?.sku_id || yampiItem?.id || yampiItem?.yampi_sku_id;
-        const quantity = yampiItem?.quantity || 1;
-        const unitPrice = yampiItem?.price || yampiItem?.price_sale || yampiItem?.unit_price || 0;
-        const itemName = yampiItem?.name || yampiItem?.product_name || "Produto";
+        const item = yampiItem as Record<string, unknown>;
+        const rawSkuId =
+          item.sku_id ??
+          (item.sku as Record<string, unknown>)?.id ??
+          (item.product as Record<string, unknown>)?.sku_id ??
+          ((item.product as Record<string, unknown>)?.skus as unknown[])?.[0]?.id ??
+          item.id ??
+          item.yampi_sku_id;
+        const skuId = rawSkuId != null && rawSkuId !== "" ? Number(rawSkuId) : null;
+        const quantity = item?.quantity || 1;
+        const unitPrice = item?.price || item?.price_sale || item?.unit_price || 0;
+        const itemName = item?.name || item?.product_name || "Produto";
+        const itemSku = (item?.sku as string) || (item?.sku_code as string) || (item?.code as string) || ((item?.sku as Record<string, unknown>)?.sku as string) || null;
+        const itemImage = (item?.image as Record<string, unknown>) || (item?.product as Record<string, unknown>)?.image as Record<string, unknown> || {};
+        const itemImageUrl = (itemImage?.url as string) || (itemImage?.src as string) || (item?.image_url as string) || null;
 
         let localVariant = null;
-        if (skuId) {
+        if (skuId != null && !Number.isNaN(skuId)) {
           const { data: v } = await supabase
             .from("product_variants")
-            .select("id, product_id, size, color")
+            .select("id, product_id, size, color, sku")
             .eq("yampi_sku_id", skuId)
+            .maybeSingle();
+          localVariant = v;
+        }
+        if (!localVariant && itemSku && String(itemSku).trim()) {
+          const { data: v } = await supabase
+            .from("product_variants")
+            .select("id, product_id, size, color, sku")
+            .eq("sku", String(itemSku).trim())
             .maybeSingle();
           localVariant = v;
         }
@@ -270,8 +289,8 @@ Deno.serve(async (req) => {
           if (p) productName = p.name;
         }
 
-        let imageSnapshot: string | null = null;
-        if (productId) {
+        let imageSnapshot: string | null = itemImageUrl || null;
+        if (productId && !imageSnapshot) {
           const { data: img } = await supabase
             .from("product_images")
             .select("url")
@@ -281,19 +300,25 @@ Deno.serve(async (req) => {
             .maybeSingle();
           imageSnapshot = img?.url || null;
         }
+        if (!imageSnapshot && itemImageUrl) imageSnapshot = itemImageUrl;
+
+        const variantDisplay = localVariant ? [localVariant.size, localVariant.color].filter(Boolean).join(" / ") : "";
+        const skuDisplay = itemSku || (localVariant?.sku as string) || "";
+        const variantInfo = [variantDisplay, skuDisplay].filter(Boolean).join(" • ") || (itemSku || "");
 
         await supabase.from("order_items").insert({
           order_id: order.id,
           product_id: productId,
           product_variant_id: localVariant?.id || null,
           product_name: productName,
-          variant_info: localVariant ? [localVariant.size, localVariant.color].filter(Boolean).join(" / ") : "",
+          variant_info: variantInfo || null,
           quantity,
           unit_price: unitPrice,
           total_price: unitPrice * quantity,
           title_snapshot: productName,
           image_snapshot: imageSnapshot,
-          yampi_sku_id: skuId != null ? Number(skuId) : null,
+          sku_snapshot: itemSku || (localVariant?.sku as string) || null,
+          yampi_sku_id: skuId != null ? skuId : null,
         });
 
         if (localVariant?.id) {

@@ -141,12 +141,14 @@ export interface Banner {
    tracking_code: string | null;
    coupon_code: string | null;
    notes: string | null;
-   payment_method?: string | null;
-   payment_status?: string | null;
+  payment_method?: string | null;
+  gateway?: string | null;
+  payment_status?: string | null;
   installments?: number | null;
   created_at: string;
   updated_at: string;
   yampi_created_at?: string | null;
+  yampi_order_number?: string | null;
   items?: OrderItem[];
   customer?: Customer;
 }

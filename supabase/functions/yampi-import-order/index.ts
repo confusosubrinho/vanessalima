@@ -123,6 +123,7 @@ Deno.serve(async (req) => {
 
   // ── Normalize Yampi data ──
   const yId = String(yampiOrder.id || yampiOrderId);
+  const yampiOrderNumber = (yampiOrder.number != null ? String(yampiOrder.number) : null) || (yampiOrder.order_number != null ? String(yampiOrder.order_number) : null) || null;
   const customer = (yampiOrder.customer as Record<string, unknown>) || {};
   const customerData = (customer.data as Record<string, unknown>) || customer;
   const customerEmail = (customerData.email as string) || null;
@@ -154,20 +155,45 @@ Deno.serve(async (req) => {
   const yampiItems = ((yampiOrder.items as Record<string, unknown>)?.data as unknown[]) ||
     (yampiOrder.items as unknown[]) || [];
 
+  // Helper: extrai o ID do SKU do item (API pode vir em sku_id, sku.id, product.sku_id, etc.)
+  function getSkuIdFromYampiItem(item: Record<string, unknown>): number | null {
+    const raw =
+      item.sku_id ??
+      (item.sku as Record<string, unknown>)?.id ??
+      (item.product as Record<string, unknown>)?.sku_id ??
+      ((item.product as Record<string, unknown>)?.skus as unknown[])?.[0]?.id ??
+      item.id;
+    if (raw == null || raw === "") return null;
+    const n = Number(raw);
+    return Number.isNaN(n) ? null : n;
+  }
+
   const transactions = ((yampiOrder.transactions as Record<string, unknown>)?.data as unknown[]) ||
     (yampiOrder.transactions as unknown[]) || [];
   const firstTx = (transactions[0] as Record<string, unknown>) || {};
-  const paymentMethod = (firstTx.payment_method as string) || (yampiOrder.payment_method as string) || null;
+  const paymentMethod =
+    (firstTx.payment_method as string) ||
+    (firstTx.payment_method_name as string) ||
+    (firstTx.method as string) ||
+    (firstTx.type as string) ||
+    (yampiOrder.payment_method as string) ||
+    (yampiOrder.payment_method_name as string) ||
+    null;
   const gateway = (firstTx.gateway as string) || (yampiOrder.gateway as string) || null;
   const installments = Number(firstTx.installments || yampiOrder.installments || 1);
   const transactionId = (firstTx.transaction_id as string) || (yampiOrder.transaction_id as string) || null;
   const trackingCode = (yampiOrder.tracking_code as string) || null;
 
   const shippingOption = (yampiOrder.shipping_option as Record<string, unknown>) || {};
-  const shippingMethodName = (yampiOrder.shipping_option_name as string) ||
+  const shippingOptionData = (shippingOption.data as Record<string, unknown>) || shippingOption;
+  const shippingMethodName =
+    (yampiOrder.shipping_option_name as string) ||
     (shippingOption.name as string) ||
+    (shippingOptionData.name as string) ||
     ((yampiOrder.delivery_option as Record<string, unknown>)?.name as string) ||
     (yampiOrder.shipping_method as string) ||
+    (yampiOrder.delivery_method as string) ||
+    (yampiOrder.shipping_option_name as string) ||
     null;
 
   // Map yampi status to local status
@@ -218,7 +244,10 @@ Deno.serve(async (req) => {
       status: localStatus,
       external_reference: yId,
       yampi_created_at: yampiCreatedAt,
-      notes: `Importado manualmente da Yampi (ID ${yId})`,
+      yampi_order_number: yampiOrderNumber,
+      notes: yampiOrderNumber
+        ? `Importado da Yampi (Nº ${yampiOrderNumber}, ID ${yId})`
+        : `Importado manualmente da Yampi (ID ${yId})`,
     } as Record<string, unknown>)
     .select("id, order_number")
     .single();
@@ -229,9 +258,13 @@ Deno.serve(async (req) => {
   }
 
   // ── Insert items + debit stock ──
+  let itemsMatched = 0;
+  let itemsWithoutMatch = 0;
+  let itemsStockDebited = 0;
+
   for (const rawItem of yampiItems) {
     const yampiItem = rawItem as Record<string, unknown>;
-    const skuId = yampiItem.sku_id || yampiItem.id;
+    const skuId = getSkuIdFromYampiItem(yampiItem);
     const quantity = Number(yampiItem.quantity || 1);
     const unitPrice = Number(yampiItem.price || yampiItem.price_sale || yampiItem.unit_price || 0);
     const yampiProduct = (yampiItem.product as Record<string, unknown>) || {};
@@ -241,14 +274,26 @@ Deno.serve(async (req) => {
     const itemImageUrl = (yampiItemImage.url as string) || (yampiItemImage.src as string) || (yampiItem.image_url as string) || null;
 
     let localVariant: Record<string, unknown> | null = null;
-    if (skuId) {
+    if (skuId != null) {
       const { data: v } = await supabase
         .from("product_variants")
         .select("id, product_id, size, color, sku")
-        .eq("yampi_sku_id", Number(skuId))
+        .eq("yampi_sku_id", skuId)
         .maybeSingle();
       localVariant = v;
     }
+    // Fallback: vincular pelo código SKU quando não houver yampi_sku_id na variante
+    if (!localVariant && itemSku && String(itemSku).trim()) {
+      const { data: v } = await supabase
+        .from("product_variants")
+        .select("id, product_id, size, color, sku")
+        .eq("sku", String(itemSku).trim())
+        .maybeSingle();
+      localVariant = v;
+    }
+
+    if (localVariant) itemsMatched += 1;
+    else itemsWithoutMatch += 1;
 
     let productName = itemName;
     let productId = (localVariant?.product_id as string) || null;
@@ -286,7 +331,7 @@ Deno.serve(async (req) => {
       title_snapshot: productName,
       image_snapshot: imageSnapshot,
       sku_snapshot: itemSku || (localVariant?.sku as string) || null,
-      yampi_sku_id: skuId != null ? Number(skuId) : null,
+      yampi_sku_id: skuId != null ? skuId : null,
     });
 
     if (localVariant?.id && localStatus !== "cancelled") {
@@ -297,6 +342,7 @@ Deno.serve(async (req) => {
         type: "debit",
         quantity,
       });
+      itemsStockDebited += 1;
     }
   }
 
@@ -348,5 +394,8 @@ Deno.serve(async (req) => {
     order_number: order.order_number,
     status: localStatus,
     items_count: yampiItems.length,
+    items_matched: itemsMatched,
+    items_without_match: itemsWithoutMatch,
+    items_stock_debited: itemsStockDebited,
   });
 });

@@ -696,6 +696,15 @@ export default function Orders() {
                   <span>Email: {(selectedOrder as any).customer_email}</span>
                 )}
                 <Badge variant="outline" className="text-xs">{getProviderLabel((selectedOrder as any).provider)}</Badge>
+                {(selectedOrder as any).provider === 'yampi' && ((selectedOrder as any).yampi_order_number || (selectedOrder as any).external_reference) && (
+                  <span className="text-muted-foreground text-xs block mt-1">
+                    {(selectedOrder as any).yampi_order_number ? (
+                      <>Número do pedido na Yampi: <strong className="text-foreground">{(selectedOrder as any).yampi_order_number}</strong> (é o que aparece no painel da Yampi)</>
+                    ) : (
+                      <>ID Yampi (interno): {(selectedOrder as any).external_reference} — use &quot;Sincronizar com Yampi&quot; para preencher o número do pedido.</>
+                    )}
+                  </span>
+                )}
                 {(() => {
                   const ps = (selectedOrder as any).payment_status;
                   const st = selectedOrder.status;
@@ -713,28 +722,37 @@ export default function Orders() {
                   return label ? <Badge className={style}>{label}</Badge> : null;
                 })()}
               </div>
-              {((selectedOrder as any).payment_method || (selectedOrder as any).installments != null || (selectedOrder as any).shipping_method) && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                  {(selectedOrder as any).payment_method && (
-                    <div>
-                      <p className="text-muted-foreground text-xs font-medium">Método de pagamento</p>
-                      <p className="font-medium">{(selectedOrder as any).payment_method}</p>
-                    </div>
-                  )}
-                  {(selectedOrder as any).installments != null && (selectedOrder as any).installments > 0 && (
-                    <div>
-                      <p className="text-muted-foreground text-xs font-medium">Parcelas</p>
-                      <p className="font-medium">{(selectedOrder as any).installments}x</p>
-                    </div>
-                  )}
-                  {(selectedOrder as any).shipping_method && (
-                    <div>
-                      <p className="text-muted-foreground text-xs font-medium">Método de envio</p>
-                      <p className="font-medium">{(selectedOrder as any).shipping_method}</p>
-                    </div>
-                  )}
+              {/* Pagamento e envio: sempre exibido, com — quando vazio */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium">Valor pago</p>
+                  <p className="font-medium">
+                    {selectedOrder.total_amount != null && selectedOrder.total_amount !== ''
+                      ? formatPrice(Number(selectedOrder.total_amount))
+                      : '—'}
+                  </p>
                 </div>
-              )}
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium">Método de pagamento</p>
+                  <p className="font-medium">{(selectedOrder as any).payment_method || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium">Gateway</p>
+                  <p className="font-medium">{(selectedOrder as any).gateway || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs font-medium">Parcelas</p>
+                  <p className="font-medium">
+                    {(selectedOrder as any).installments != null && (selectedOrder as any).installments > 0
+                      ? `${(selectedOrder as any).installments}x`
+                      : '—'}
+                  </p>
+                </div>
+                <div className="sm:col-span-2 lg:col-span-4">
+                  <p className="text-muted-foreground text-xs font-medium">Método de envio</p>
+                  <p className="font-medium">{(selectedOrder as any).shipping_method || '—'}</p>
+                </div>
+              </div>
               {orderItemsLoading ? (
                 <p className="text-sm text-muted-foreground">Carregando itens...</p>
               ) : orderItems && orderItems.length > 0 ? (
@@ -770,10 +788,13 @@ export default function Orders() {
                             <TableCell className="text-sm">
                               <span className="font-medium">{(item as any).title_snapshot || item.product_name}</span>
                               {((item as any).variant_info || (item as any).sku_snapshot) && (
-                                <span className="text-muted-foreground block text-xs">
-                                  {(item as any).variant_info}
-                                  {(item as any).sku_snapshot && !(item as any).variant_info && `SKU: ${(item as any).sku_snapshot}`}
-                                  {(item as any).sku_snapshot && (item as any).variant_info && ` • SKU: ${(item as any).sku_snapshot}`}
+                                <span className="text-muted-foreground block text-xs mt-0.5">
+                                  {(item as any).variant_info && (
+                                    <span className="block">Variante: {(item as any).variant_info}</span>
+                                  )}
+                                  {(item as any).sku_snapshot && (
+                                    <span className="block">SKU: {(item as any).sku_snapshot}</span>
+                                  )}
                                 </span>
                               )}
                             </TableCell>
