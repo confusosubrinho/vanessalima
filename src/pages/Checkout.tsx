@@ -532,7 +532,7 @@ export default function Checkout() {
 
         // Embedded Stripe Checkout (PaymentIntent + Elements on page)
         const { data: intentResult, error: intentError } = await invokeCheckoutFunction<{ error?: string; client_secret?: string; pix_qr_url?: string; pix_emv?: string; pix_expires_at?: number }>(
-          'checkout/stripe-create-intent',
+          'checkout-stripe-create-intent',
           {
             body: {
               action: 'create_payment_intent',
