@@ -99,7 +99,7 @@ export default function CommerceHealth() {
       return;
     }
     try {
-      const res = await fetch(`${FUNCTIONS_URL}/admin-commerce-action`, {
+      const res = await fetch(`${FUNCTIONS_URL}/admin/commerce-action`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ action }),
