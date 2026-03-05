@@ -90,12 +90,16 @@ export async function invokeCheckoutFunction<T = unknown>(
       !backendError && /failed to send a request to the edge function|fetch failed|network error|load failed/i.test(rawMessage);
 
     const friendlyConnectionMsg = "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes.";
+    const edgeFunctionFailed = /failed to send a request to the edge function/i.test(rawMessage);
+    const hint = edgeFunctionFailed
+      ? " Geralmente é CORS ou função não deployada: (1) Faça deploy da função checkout-router no mesmo projeto cuja URL está em VITE_SUPABASE_URL. (2) No Supabase → Edge Functions → Secrets, adicione CORS_ALLOWED_ORIGINS com a URL exata do seu site (ex.: https://seu-site.lovable.app) ou use * para testar."
+      : "";
     const err = backendError
       ? new Error(backendError)
       : result.error
         ? new Error(
             isEdgeFunctionUnreachable
-              ? (rawMessage ? `${friendlyConnectionMsg} Detalhes: ${rawMessage}` : friendlyConnectionMsg)
+              ? (rawMessage ? `${friendlyConnectionMsg} Detalhes: ${rawMessage}.${hint}` : friendlyConnectionMsg + hint)
               : rawMessage || "Erro ao processar"
           )
         : null;
@@ -103,8 +107,11 @@ export async function invokeCheckoutFunction<T = unknown>(
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Não conseguimos concluir. Tente novamente.";
     const isConnectionError = /failed to send a request to the edge function|fetch failed|network error|load failed/i.test(msg);
+    const edgeHint = /failed to send a request to the edge function/i.test(msg)
+      ? " Geralmente é CORS ou função não deployada: faça deploy da checkout-router e no Supabase → Edge Functions → Secrets adicione CORS_ALLOWED_ORIGINS com a URL do seu site (ou * para testar)."
+      : "";
     const friendly = isConnectionError
-      ? (msg ? `Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes. Detalhes: ${msg}` : "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes.")
+      ? (msg ? `Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes. Detalhes: ${msg}.${edgeHint}` : "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes." + edgeHint)
       : msg;
     return { data: null as T, error: new Error(friendly) };
   }

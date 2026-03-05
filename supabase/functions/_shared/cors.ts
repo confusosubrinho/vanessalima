@@ -13,17 +13,21 @@ const ALLOWED_ORIGIN_PATTERNS = [
   /^https:\/\/.*\.netlify\.app$/,
 ];
 
-/** Origens extras via env (ex.: CORS_ALLOWED_ORIGINS=https://meu-app.com,https://outro.com) */
+/** Origens extras via env (ex.: CORS_ALLOWED_ORIGINS=https://meu-app.com ou * para permitir qualquer origem) */
 function getExtraOrigins(): string[] {
   const raw = Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "";
-  return raw.split(",").map((o) => o.trim()).filter(Boolean);
+  const trimmed = raw.trim();
+  if (trimmed === "*") return ["*"];
+  return trimmed.split(",").map((o) => o.trim()).filter(Boolean);
 }
 
 export const getCorsHeaders = (origin: string | null) => {
   let allowedOrigin = "";
   const extra = getExtraOrigins();
 
-  if (origin) {
+  if (extra.includes("*")) {
+    allowedOrigin = origin || "*";
+  } else if (origin) {
     if (ALLOWED_ORIGINS.includes(origin) || extra.includes(origin)) {
       allowedOrigin = origin;
     } else if (ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin))) {
