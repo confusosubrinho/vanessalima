@@ -12,7 +12,7 @@ const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 describe('Webhook security', () => {
   it('Stripe webhook sem stripe-signature retorna 400', async () => {
     if (!url) return;
-    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout/stripe-webhook';
+    const functionsUrl = url.replace(/\/$/, '') + '/functions/v1/checkout-stripe-webhook';
     const res = await fetch(functionsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
