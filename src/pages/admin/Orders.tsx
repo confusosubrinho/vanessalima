@@ -341,7 +341,7 @@ export default function Orders() {
       const token = session?.session?.access_token;
       if (!token) throw new Error('Sessão não encontrada');
 
-      const res = await fetch(`${FUNCTIONS_URL}/yampi-import-order`, {
+      const res = await fetch(`${FUNCTIONS_URL}/yampi/import-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ yampi_order_id: importYampiId.trim() }),
