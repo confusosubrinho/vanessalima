@@ -315,7 +315,7 @@ Deno.serve(async (req) => {
     const productsForStripe = items.map((i) => ({ variant_id: i.variant_id, name: i.product_name, quantity: i.quantity, unit_price: i.unit_price }));
 
     if (channel === "external" && provider === "yampi") {
-      const targetUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/checkout/create-session`;
+      const targetUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/checkout-create-session`;
       const yampiRes = await fetchWithTimeout(
         targetUrl,
         {
