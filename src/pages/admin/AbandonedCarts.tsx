@@ -161,7 +161,7 @@ export default function AbandonedCarts() {
 
   const clearTestMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('abandoned_carts').delete().eq('is_test', true);
+      const { error } = await (supabase.from('abandoned_carts').delete() as any).eq('is_test', true);
       if (error) throw error;
     },
     onSuccess: () => {
