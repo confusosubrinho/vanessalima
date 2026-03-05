@@ -50,6 +50,16 @@ export async function invokeCheckoutFunction<T = unknown>(
   requestId?: string | null,
   timeoutMs: number = DEFAULT_CHECKOUT_TIMEOUT_MS
 ): Promise<{ data: T; error: Error | null }> {
+  const supabaseUrl = typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL;
+  if (!supabaseUrl || supabaseUrl === "https://placeholder.supabase.co") {
+    return {
+      data: null as T,
+      error: new Error(
+        "Servidor de pagamento não configurado. Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no ambiente de publicação (ex.: variáveis de ambiente do deploy)."
+      ),
+    };
+  }
+
   const rid = requestId ?? generateRequestId();
   const body = options.body ?? {};
   const bodyWithRequestId = { ...body, request_id: rid };
@@ -79,22 +89,23 @@ export async function invokeCheckoutFunction<T = unknown>(
     const isEdgeFunctionUnreachable =
       !backendError && /failed to send a request to the edge function|fetch failed|network error|load failed/i.test(rawMessage);
 
+    const friendlyConnectionMsg = "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes.";
     const err = backendError
       ? new Error(backendError)
       : result.error
         ? new Error(
             isEdgeFunctionUnreachable
-              ? "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes."
+              ? (rawMessage ? `${friendlyConnectionMsg} Detalhes: ${rawMessage}` : friendlyConnectionMsg)
               : rawMessage || "Erro ao processar"
           )
         : null;
     return { data: result.data as T, error: err };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Não conseguimos concluir. Tente novamente.";
-    const friendly =
-      /failed to send a request to the edge function|fetch failed|network error|load failed/i.test(msg)
-        ? "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes."
-        : msg;
+    const isConnectionError = /failed to send a request to the edge function|fetch failed|network error|load failed/i.test(msg);
+    const friendly = isConnectionError
+      ? (msg ? `Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes. Detalhes: ${msg}` : "Não foi possível conectar ao servidor de pagamento. Verifique sua conexão ou tente novamente em instantes.")
+      : msg;
     return { data: null as T, error: new Error(friendly) };
   }
 }

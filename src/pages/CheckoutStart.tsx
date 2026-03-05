@@ -130,9 +130,10 @@ export default function CheckoutStart() {
           <div className="text-center space-y-4">
             <p className="text-destructive text-sm">{error}</p>
             {error.includes("conectar ao servidor") && (
-              <p className="text-muted-foreground text-xs max-w-sm mx-auto">
-                Verifique sua conexão com a internet e tente novamente.
-              </p>
+              <div className="text-muted-foreground text-xs max-w-sm mx-auto space-y-1">
+                <p>Verifique sua conexão com a internet e tente novamente.</p>
+                <p>Se persistir: confira se as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY estão configuradas no ambiente de publicação e se a função checkout-router está em deploy no Supabase. Abra o Console (F12) para ver mais detalhes.</p>
+              </div>
             )}
             <div className="flex flex-col sm:flex-row gap-2 justify-center">
               <Button
