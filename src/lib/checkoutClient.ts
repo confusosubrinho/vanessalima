@@ -33,7 +33,7 @@ export async function invokeCheckoutRouter<T = Record<string, unknown>>(
   timeoutMs: number = DEFAULT_CHECKOUT_TIMEOUT_MS
 ): Promise<{ data: CheckoutRouterResponse<T> | null; error: Error | null }> {
   return invokeCheckoutFunction<CheckoutRouterResponse<T>>(
-    "checkout/router",
+    "checkout-router",
     { body: { ...payload, route } },
     requestId,
     timeoutMs

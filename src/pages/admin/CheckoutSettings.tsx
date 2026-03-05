@@ -274,7 +274,7 @@ function CheckoutHealthCard({ toast }: { toast: ReturnType<typeof useToast>["toa
     const requestId = generateRequestId();
     try {
       const { data, error } = await invokeCheckoutFunction<{ flow?: string; provider?: string; error?: string }>(
-        "checkout/create-session",
+        "checkout-create-session",
         { body: { action: "resolve" } },
         requestId
       );

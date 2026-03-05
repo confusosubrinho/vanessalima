@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
   const trackingCode = (yampiOrder.tracking_code as string) || null;
 
   // Map yampi status to local status
-  const yampiStatus = String(yampiOrder.status?.data?.alias || yampiOrder.status_alias || yampiOrder.status || "");
+  const yampiStatus = String((yampiOrder.status as any)?.data?.alias || yampiOrder.status_alias || yampiOrder.status || "");
   let localStatus: string = "processing";
   if (["paid", "approved", "payment_approved"].includes(yampiStatus)) localStatus = "processing";
   else if (["shipped", "sent"].includes(yampiStatus)) localStatus = "shipped";

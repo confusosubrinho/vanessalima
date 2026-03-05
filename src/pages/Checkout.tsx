@@ -500,7 +500,7 @@ export default function Checkout() {
         // External Stripe Checkout (redirect to Stripe hosted page)
         if (stripeConfig?.checkout_mode === 'external') {
           const { data: sessionResult, error: sessionError } = await invokeCheckoutFunction<{ error?: string; checkout_url?: string }>(
-            'checkout/stripe-create-intent',
+            'checkout-stripe-create-intent',
             {
               body: {
                 action: 'create_checkout_session',
@@ -532,7 +532,7 @@ export default function Checkout() {
 
         // Embedded Stripe Checkout (PaymentIntent + Elements on page)
         const { data: intentResult, error: intentError } = await invokeCheckoutFunction<{ error?: string; client_secret?: string; pix_qr_url?: string; pix_emv?: string; pix_expires_at?: number }>(
-          'checkout/stripe-create-intent',
+          'checkout-stripe-create-intent',
           {
             body: {
               action: 'create_payment_intent',
@@ -616,7 +616,7 @@ export default function Checkout() {
       if (formData.paymentMethod === 'card') {
         try {
           const tokenizeResponse = await invokeCheckoutFunction<{ error?: string; token?: string }>(
-            'checkout/process-payment',
+            'checkout-process-payment',
             {
               body: {
                 action: 'tokenize_card',
@@ -642,7 +642,7 @@ export default function Checkout() {
       }
 
       const { data: paymentResult, error: pmtError } = await invokeCheckoutFunction<{ error?: string; appmax_order_id?: string; pay_reference?: string; pix_qrcode?: string; pix_emv?: string; pix_expiration_date?: string }>(
-        'checkout/process-payment',
+        'checkout-process-payment',
         { body: paymentPayload },
         requestId
       );
