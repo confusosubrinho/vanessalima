@@ -4,7 +4,7 @@
  * Requer Authorization: Bearer <user_jwt>. Apenas admin. Valida combinações provider/channel/experience.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders } from "../../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SINGLETON_ID = "00000000-0000-0000-0000-000000000001";
 

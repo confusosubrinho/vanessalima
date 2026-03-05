@@ -4,8 +4,8 @@
  */
 import { z } from "https://esm.sh/zod@3.23.8";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { fetchWithTimeout } from "../../_shared/fetchWithTimeout.ts";
-import { getCorsHeaders } from "../../_shared/cors.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SINGLETON_ID = "00000000-0000-0000-0000-000000000001";
 

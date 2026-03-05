@@ -6,8 +6,8 @@ import {
   logAppmax,
   errorResponse,
   jsonResponse,
-} from "../../_shared/appmax.ts";
-import { fetchWithTimeout } from "../../_shared/fetchWithTimeout.ts";
+} from "../_shared/appmax.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ─── In-memory rate limiting ───

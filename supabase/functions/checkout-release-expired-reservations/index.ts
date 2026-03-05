@@ -6,7 +6,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { getCorsHeaders } from "../../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const RESERVATION_TTL_MINUTES = 15;
 
