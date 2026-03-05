@@ -186,7 +186,7 @@ export default function Orders() {
 
   const deleteOrderTestMutation = useMutation({
     mutationFn: async (orderId: string) => {
-      const { data, error } = await supabase.functions.invoke('admin/commerce-action', {
+      const { data, error } = await supabase.functions.invoke('admin-commerce-action', {
         body: { action: 'delete_order_test', order_id: orderId },
       });
       if (error) throw error;
