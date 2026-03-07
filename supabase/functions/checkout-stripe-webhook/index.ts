@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
     return error;
   }
 
-  /** Restore stock for an order */
+  /** Restore stock for an order with audit trail */
   async function restoreStock(orderId: string) {
     const { data: items } = await supabase
       .from("order_items")
@@ -117,10 +117,27 @@ Deno.serve(async (req) => {
 
     for (const item of items || []) {
       if (item.product_variant_id) {
-        await supabase.rpc("increment_stock", {
-          p_variant_id: item.product_variant_id,
-          p_quantity: item.quantity,
-        });
+        // Check if already released/refunded to avoid double restore
+        const { data: alreadyReleased } = await supabase
+          .from("inventory_movements")
+          .select("id")
+          .eq("order_id", orderId)
+          .eq("variant_id", item.product_variant_id)
+          .in("type", ["release", "refund"])
+          .maybeSingle();
+
+        if (!alreadyReleased) {
+          await supabase.rpc("increment_stock", {
+            p_variant_id: item.product_variant_id,
+            p_quantity: item.quantity,
+          });
+          await supabase.from("inventory_movements").insert({
+            variant_id: item.product_variant_id,
+            order_id: orderId,
+            type: "refund",
+            quantity: item.quantity,
+          });
+        }
       }
     }
   }
