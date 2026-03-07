@@ -1813,10 +1813,12 @@ export type Database = {
           product_name: string
           product_variant_id: string | null
           quantity: number
+          sku_snapshot: string | null
           title_snapshot: string | null
           total_price: number
           unit_price: number
           variant_info: string | null
+          yampi_sku_id: number | null
         }
         Insert: {
           created_at?: string
@@ -1827,10 +1829,12 @@ export type Database = {
           product_name: string
           product_variant_id?: string | null
           quantity: number
+          sku_snapshot?: string | null
           title_snapshot?: string | null
           total_price: number
           unit_price: number
           variant_info?: string | null
+          yampi_sku_id?: number | null
         }
         Update: {
           created_at?: string
@@ -1841,10 +1845,12 @@ export type Database = {
           product_name?: string
           product_variant_id?: string | null
           quantity?: number
+          sku_snapshot?: string | null
           title_snapshot?: string | null
           total_price?: number
           unit_price?: number
           variant_info?: string | null
+          yampi_sku_id?: number | null
         }
         Relationships: [
           {
@@ -1876,6 +1882,7 @@ export type Database = {
           appmax_customer_id: string | null
           appmax_order_id: string | null
           cart_id: string | null
+          checkout_session_id: string | null
           coupon_code: string | null
           created_at: string
           customer_cpf: string | null
@@ -1892,11 +1899,13 @@ export type Database = {
           notes: string | null
           order_number: string
           payment_method: string | null
+          payment_status: string | null
           provider: string | null
           referrer: string | null
           shipping_address: string
           shipping_city: string
           shipping_cost: number | null
+          shipping_method: string | null
           shipping_name: string
           shipping_phone: string | null
           shipping_state: string
@@ -1914,12 +1923,15 @@ export type Database = {
           utm_medium: string | null
           utm_source: string | null
           utm_term: string | null
+          yampi_created_at: string | null
+          yampi_order_number: string | null
         }
         Insert: {
           access_token?: string | null
           appmax_customer_id?: string | null
           appmax_order_id?: string | null
           cart_id?: string | null
+          checkout_session_id?: string | null
           coupon_code?: string | null
           created_at?: string
           customer_cpf?: string | null
@@ -1936,11 +1948,13 @@ export type Database = {
           notes?: string | null
           order_number: string
           payment_method?: string | null
+          payment_status?: string | null
           provider?: string | null
           referrer?: string | null
           shipping_address: string
           shipping_city: string
           shipping_cost?: number | null
+          shipping_method?: string | null
           shipping_name: string
           shipping_phone?: string | null
           shipping_state: string
@@ -1958,12 +1972,15 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           utm_term?: string | null
+          yampi_created_at?: string | null
+          yampi_order_number?: string | null
         }
         Update: {
           access_token?: string | null
           appmax_customer_id?: string | null
           appmax_order_id?: string | null
           cart_id?: string | null
+          checkout_session_id?: string | null
           coupon_code?: string | null
           created_at?: string
           customer_cpf?: string | null
@@ -1980,11 +1997,13 @@ export type Database = {
           notes?: string | null
           order_number?: string
           payment_method?: string | null
+          payment_status?: string | null
           provider?: string | null
           referrer?: string | null
           shipping_address?: string
           shipping_city?: string
           shipping_cost?: number | null
+          shipping_method?: string | null
           shipping_name?: string
           shipping_phone?: string | null
           shipping_state?: string
@@ -2002,6 +2021,8 @@ export type Database = {
           utm_medium?: string | null
           utm_source?: string | null
           utm_term?: string | null
+          yampi_created_at?: string | null
+          yampi_order_number?: string | null
         }
         Relationships: [
           {
