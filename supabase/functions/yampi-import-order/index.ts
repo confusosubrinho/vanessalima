@@ -48,37 +48,6 @@ Deno.serve(async (req) => {
     return jsonRes({ ok: false, error: "JSON inválido" }, 400);
   }
 
-  // Support batch import (up to 10)
-  const yampiOrderIds: string[] = [];
-  if (Array.isArray(body.yampi_order_ids)) {
-    for (const id of (body.yampi_order_ids as unknown[]).slice(0, 10)) {
-      const s = String(id || "").trim();
-      if (s) yampiOrderIds.push(s);
-    }
-  }
-  const singleId = String(body.yampi_order_id || body.yampi_order_number || "").trim();
-  if (singleId) yampiOrderIds.push(singleId);
-
-  if (!yampiOrderIds.length) {
-    return jsonRes({ ok: false, error: "Informe yampi_order_id, yampi_order_number ou yampi_order_ids[]" }, 400);
-  }
-
-  // If batch, process each and return results array
-  if (yampiOrderIds.length > 1) {
-    const results: Record<string, unknown>[] = [];
-    for (const yid of yampiOrderIds) {
-      try {
-        const result = await importSingleOrder(supabase, yid, config as any, alias as any, userToken as any, userSecretKey as any);
-        results.push(result);
-      } catch (err: unknown) {
-        results.push({ ok: false, yampi_order_id: yid, error: err instanceof Error ? err.message : "Erro" });
-      }
-    }
-    return jsonRes({ ok: true, batch: true, results });
-  }
-
-  const yampiOrderId = yampiOrderIds[0];
-
   // ── Load Yampi credentials from integrations_checkout_providers ──
   const { data: yampiProvider } = await supabase
     .from("integrations_checkout_providers")
@@ -92,12 +61,43 @@ Deno.serve(async (req) => {
 
   const config = yampiProvider.config as Record<string, unknown>;
   const alias = config?.alias as string;
-  const userToken = config?.user_token as string;
-  const userSecretKey = config?.user_secret_key as string;
+  const userToken2 = config?.user_token as string;
+  const userSecretKey2 = config?.user_secret_key as string;
 
-  if (!alias || !userToken || !userSecretKey) {
+  if (!alias || !userToken2 || !userSecretKey2) {
     return jsonRes({ ok: false, error: "Credenciais Yampi incompletas (alias, user_token, user_secret_key)" }, 400);
   }
+
+  // Support batch import (up to 10)
+  const yampiOrderIds: string[] = [];
+  if (Array.isArray(body.yampi_order_ids)) {
+    for (const id of (body.yampi_order_ids as unknown[]).slice(0, 10)) {
+      const s = String(id || "").trim();
+      if (s) yampiOrderIds.push(s);
+    }
+  }
+  const singleId = String(body.yampi_order_id || body.yampi_order_number || "").trim();
+  if (singleId && !yampiOrderIds.includes(singleId)) yampiOrderIds.push(singleId);
+
+  if (!yampiOrderIds.length) {
+    return jsonRes({ ok: false, error: "Informe yampi_order_id, yampi_order_number ou yampi_order_ids[]" }, 400);
+  }
+
+  // If batch, process each and return results array
+  if (yampiOrderIds.length > 1) {
+    const results: Record<string, unknown>[] = [];
+    for (const yid of yampiOrderIds) {
+      try {
+        const result = await importSingleOrder(supabase, yid, alias, userToken2, userSecretKey2);
+        results.push(result);
+      } catch (err: unknown) {
+        results.push({ ok: false, yampi_order_id: yid, error: err instanceof Error ? err.message : "Erro" });
+      }
+    }
+    return jsonRes({ ok: true, batch: true, results });
+  }
+
+  const yampiOrderId = yampiOrderIds[0];
 
   // ── Check if already imported (by external_reference or checkout_session_id) ──
   const { data: existingByRef } = await supabase
