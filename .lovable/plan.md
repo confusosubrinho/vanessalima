@@ -1,71 +1,67 @@
 
 
-## Auditoria do Painel Admin — Bugs e Melhorias
+## Diagnosis: RLS Policy on `orders` Table Blocking Inserts
+
+The current INSERT policy on `orders` has a logic gap. It checks:
+- Branch 1: `auth.uid() IS NOT NULL AND user_id = auth.uid()` (logged-in user)
+- Branch 2: `auth.uid() IS NULL AND user_id IS NULL AND access_token IS NOT NULL` (guest)
+
+**The gap**: If the browser has a stale/partial Supabase auth session (e.g. expired token still in localStorage), `auth.uid()` may evaluate as NOT NULL but `user_id` is set to NULL in the code (because `getSession()` returns null). This fails both branches.
+
+## Plan
+
+### 1. Replace the INSERT RLS policy with a simpler, robust version
+
+Drop the current policy and create a new one that covers all cases:
+
+```sql
+DROP POLICY "Anyone can create orders" ON public.orders;
+
+CREATE POLICY "Anyone can create orders" ON public.orders
+FOR INSERT WITH CHECK (
+  -- Logged-in: user_id must match auth
+  (user_id IS NOT NULL AND user_id = auth.uid())
+  OR
+  -- Guest: no user_id, must have access_token
+  (user_id IS NULL AND access_token IS NOT NULL)
+);
+```
+
+Key change: Remove the `auth.uid() IS NULL` check from the guest branch. A guest order just needs `user_id IS NULL AND access_token IS NOT NULL` — we don't need to verify the JWT state.
+
+### 2. Also fix the UPDATE policy for guests
+
+The current guest update policy also checks `auth.uid() IS NULL`, which has the same vulnerability:
+
+```sql
+DROP POLICY "Guest users can update own orders" ON public.orders;
+
+CREATE POLICY "Guest users can update own orders" ON public.orders
+FOR UPDATE USING (
+  user_id IS NULL AND access_token IS NOT NULL
+) WITH CHECK (
+  user_id IS NULL AND access_token IS NOT NULL
+);
+```
+
+### 3. Add a logged-in user UPDATE policy
+
+Currently only admins and guests can update orders. Logged-in users should also be able to update their own orders (e.g. during payment processing):
+
+```sql
+CREATE POLICY "Users can update own orders" ON public.orders
+FOR UPDATE USING (
+  user_id IS NOT NULL AND user_id = auth.uid()
+) WITH CHECK (
+  user_id IS NOT NULL AND user_id = auth.uid()
+);
+```
+
+### 4. Verify end-to-end via browser test
+
+After applying the migration, navigate through the full checkout flow (product → cart → checkout → payment) to confirm orders are created successfully without RLS errors.
 
 ---
 
-### Bug 1 (Alto): Console warning — ProductCarousel "cannot be given refs"
-
-O `ProductCarousel` é um componente funcional regular que recebe ref via `useHorizontalScrollAxisLock` internamente, mas quando usado em `ProductDetail.tsx` com `ref`, gera o warning "Function components cannot be given refs". Isso é o mesmo padrão que corrigimos no WhatsAppFloat/CookieConsent.
-
-**Fix**: Não é necessário `forwardRef` aqui — o problema está no chamador. Verificar se `ProductDetail.tsx` passa `ref` ao `ProductCarousel` e remover essa passagem, já que o componente gerencia seu próprio ref internamente.
-
----
-
-### Bug 2 (Alto): Pedidos carregam apenas 50 registros sem paginação
-
-`Orders.tsx` faz `.range(0, 49)` e filtra/ordena **client-side**. Se há mais de 50 pedidos, o admin só vê os 50 mais recentes. Não há botões de paginação nem indicação de que existem mais pedidos. Os filtros de data e valor atuam apenas sobre esses 50.
-
-**Fix**: Adicionar paginação no componente de pedidos (similar ao que `Products.tsx` já tem com `currentPage` e `totalPages`). Manter a query limitada mas adicionar navegação entre páginas.
-
----
-
-### Bug 3 (Médio): Clientes carregam TODOS os registros sem limite
-
-`Customers.tsx` faz `select('*')` sem `.limit()`. Com milhares de clientes, isso vai causar lentidão e possivelmente timeout. Diferente de Pedidos que limita a 50, Clientes não tem nenhum limite.
-
-**Fix**: Adicionar `.limit(200)` e paginação client-side, ou implementar paginação server-side.
-
----
-
-### Bug 4 (Médio): Exclusão de produto sem confirmação
-
-Em `Products.tsx` (linhas 735, 837), `deleteMutation.mutate(product.id)` é chamado diretamente no `DropdownMenuItem` sem `AlertDialog` de confirmação. Um clique acidental exclui o produto permanentemente.
-
-**Fix**: Adicionar state `productToDelete` e um `AlertDialog` de confirmação antes de executar a exclusão, similar ao padrão já usado em `Orders.tsx` para `orderToDeleteTest`.
-
----
-
-### Bug 5 (Médio): Dashboard KPIs incluem pedidos cancelados na receita
-
-Em `Dashboard.tsx` (linha 169), a receita é calculada somando `total_amount` de **todos** os pedidos no período, incluindo `cancelled`. Isso infla os números de receita e ticket médio.
-
-**Fix**: Filtrar pedidos com status `cancelled` ao calcular receita: `currentOrders.data?.filter(o => o.status !== 'cancelled')`.
-
----
-
-### Bug 6 (Baixo): AdminErrorIndicator não aparece no mobile
-
-Em `AdminLayout.tsx` (linha 619), o `<AdminErrorIndicator />` só é renderizado no layout desktop. No layout mobile (linha 564-591), não há referência ao componente. Admins usando mobile não veem erros do sistema.
-
-**Fix**: Adicionar `<AdminErrorIndicator />` no layout mobile, antes do `<MobileBottomBar />`.
-
----
-
-### Bug 7 (Baixo): Página de Clientes sem layout mobile responsivo
-
-`Customers.tsx` renderiza a tabela desktop em todas as resoluções (não usa `useIsMobile`). No mobile, a tabela fica com scroll horizontal e difícil de usar. Pedidos e Produtos já têm layouts mobile separados.
-
-**Fix**: Adicionar layout de cards para mobile, similar ao que `Orders.tsx` já faz com `isMobile ? cards : table`.
-
----
-
-### Arquivos a Modificar
-
-1. **`src/pages/ProductDetail.tsx`** — Remover ref passado ao ProductCarousel
-2. **`src/pages/admin/Orders.tsx`** — Adicionar paginação client-side
-3. **`src/pages/admin/Customers.tsx`** — Adicionar limite na query, paginação e layout mobile
-4. **`src/pages/admin/Products.tsx`** — Adicionar AlertDialog de confirmação antes de excluir
-5. **`src/pages/admin/Dashboard.tsx`** — Filtrar pedidos cancelados dos KPIs
-6. **`src/pages/admin/AdminLayout.tsx`** — Adicionar AdminErrorIndicator no mobile
+**Technical note**: These are database migration changes only — no frontend code changes needed. The root cause is purely the overly strict RLS conditions.
 

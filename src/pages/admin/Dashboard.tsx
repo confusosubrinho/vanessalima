@@ -162,14 +162,16 @@ export default function Dashboard() {
     queryFn: async () => {
       const [currentOrders, prevOrders, currentCustomers, prevCustomers] = await Promise.all([
         supabase.from('orders').select('id, total_amount, status').gte('created_at', periodStart.toISOString()),
-        supabase.from('orders').select('id, total_amount').gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
+        supabase.from('orders').select('id, total_amount, status').gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
         supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', periodStart.toISOString()),
         supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
       ]);
-      const curRevenue = currentOrders.data?.reduce((s, o) => s + Number(o.total_amount || 0), 0) || 0;
-      const prevRevenue = prevOrders.data?.reduce((s, o) => s + Number(o.total_amount || 0), 0) || 0;
-      const curCount = currentOrders.data?.length || 0;
-      const prevCount = prevOrders.data?.length || 0;
+      const activeCurrentOrders = currentOrders.data?.filter(o => o.status !== 'cancelled') || [];
+      const activePrevOrders = prevOrders.data?.filter(o => (o as any).status !== 'cancelled') || [];
+      const curRevenue = activeCurrentOrders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+      const prevRevenue = activePrevOrders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+      const curCount = activeCurrentOrders.length;
+      const prevCount = activePrevOrders.length;
       const curTicket = curCount > 0 ? curRevenue / curCount : 0;
       const prevTicket = prevCount > 0 ? prevRevenue / prevCount : 0;
       const pct = (cur: number, prev: number) => prev === 0 ? (cur > 0 ? 100 : 0) : Math.round(((cur - prev) / prev) * 100);

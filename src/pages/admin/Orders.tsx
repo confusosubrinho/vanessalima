@@ -126,29 +126,36 @@ export default function Orders() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importYampiId, setImportYampiId] = useState('');
   const [importLoading, setImportLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const FUNCTIONS_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '') + '/functions/v1';
 
   const ADMIN_ORDERS_PAGE_SIZE = 50;
   const ADMIN_ORDERS_TIMEOUT_MS = 15000;
 
-  const { data: orders, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['admin-orders'],
+  const { data: ordersResult, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['admin-orders', currentPage],
     queryFn: async () => {
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('timeout')), ADMIN_ORDERS_TIMEOUT_MS);
       });
       const fetchPromise = (async () => {
-        const { data, error } = await supabase
+        const from = (currentPage - 1) * ADMIN_ORDERS_PAGE_SIZE;
+        const to = from + ADMIN_ORDERS_PAGE_SIZE - 1;
+        const { data, error, count } = await supabase
           .from('orders')
-          .select('*')
+          .select('*', { count: 'exact' })
           .order('created_at', { ascending: false })
-          .range(0, ADMIN_ORDERS_PAGE_SIZE - 1);
+          .range(from, to);
         if (error) throw error;
-        return data as Order[];
+        return { data: data as Order[], count: count || 0 };
       })();
       return Promise.race([fetchPromise, timeoutPromise]);
     },
   });
+
+  const orders = ordersResult?.data;
+  const totalOrderCount = ordersResult?.count || 0;
+  const totalPages = Math.ceil(totalOrderCount / ADMIN_ORDERS_PAGE_SIZE);
 
   const { data: orderItems, isLoading: orderItemsLoading } = useQuery({
     queryKey: ['admin-order-items', selectedOrder?.id],
@@ -1000,6 +1007,17 @@ export default function Orders() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Orders pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button variant="outline" size="sm" className="h-8 px-3" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>‹</Button>
+          <span className="text-sm text-muted-foreground">
+            Página {currentPage} de {totalPages} ({totalOrderCount} pedidos)
+          </span>
+          <Button variant="outline" size="sm" className="h-8 px-3" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>›</Button>
+        </div>
+      )}
 
       {/* Import from Yampi dialog */}
       <Dialog open={showImportDialog} onOpenChange={(open) => { if (!importLoading) { setShowImportDialog(open); if (!open) setImportYampiId(''); } }}>
