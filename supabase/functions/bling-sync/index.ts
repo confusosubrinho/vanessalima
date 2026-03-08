@@ -393,7 +393,15 @@ async function upsertParentWithVariants(
       if (existingVar) {
         // Update existing variant: stock always if enabled, other fields per config
         const varUpdate: any = {};
-        if (config.sync_stock || imported) varUpdate.stock_quantity = varStock;
+        if (config.sync_stock || imported) {
+          // Check for recent local movements before overwriting stock
+          const hasRecent = await hasRecentLocalMovements(supabase, existingVar.id, 10);
+          if (!hasRecent) {
+            varUpdate.stock_quantity = varStock;
+          } else {
+            console.log(`[sync] Skipping stock overwrite for variant ${existingVar.id} — recent local movements`);
+          }
+        }
         if (config.sync_variant_active) varUpdate.is_active = v.situacao !== "I";
         // NEVER update is_active unless toggle is on
         if (Object.keys(varUpdate).length > 0) {
