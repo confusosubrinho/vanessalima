@@ -84,7 +84,7 @@ function luhnCheck(num: string): boolean {
 export default function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
+  const { items, subtotal, clearCart, updateQuantity, selectedShipping, setSelectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
   const { toast } = useToast();
   const { feedback: triggerFeedback } = useFeedback();
   const [currentStep, setCurrentStep] = useState<Step>('identification');
