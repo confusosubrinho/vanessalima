@@ -200,16 +200,6 @@ export default function Settings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Nome na Fatura (Soft Descriptor)</Label>
-                  <p className="text-xs text-muted-foreground">Nome que aparecerá na fatura do cartão de crédito (máximo 13 caracteres)</p>
-                  <Input
-                    value={formData.soft_descriptor || ''}
-                    onChange={(e) => setFormData({ ...formData, soft_descriptor: e.target.value })}
-                    placeholder="MINHALOJA"
-                    maxLength={13}
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label>Logo da Loja</Label>
                   <div className="flex items-start gap-4">
                     {formData.logo_url && (
