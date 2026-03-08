@@ -242,12 +242,16 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
   }
 
   if (newStock === undefined && token) {
+    if (depth >= 1) {
+      console.log(`[webhook] Max recursion depth reached for bling_id=${blingProductId}, skipping stock fetch`);
+      return "max_depth";
+    }
     try {
       const res = await fetchWithTimeout(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${blingProductId}`, { headers: blingHeaders(token) });
       const json = await res.json();
       const stock = json?.data?.[0]?.saldoVirtualTotal ?? null;
       if (stock !== null) {
-        return await updateStockForBlingId(supabase, blingProductId, stock, token);
+        return await updateStockForBlingId(supabase, blingProductId, stock, token, depth + 1);
       }
     } catch (err) {
       console.error(`[webhook] Error fetching stock for ${blingProductId}:`, err);
