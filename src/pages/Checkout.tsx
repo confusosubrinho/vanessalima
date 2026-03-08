@@ -84,7 +84,7 @@ function luhnCheck(num: string): boolean {
 export default function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
+  const { items, subtotal, clearCart, updateQuantity, selectedShipping, setSelectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
   const { toast } = useToast();
   const { feedback: triggerFeedback } = useFeedback();
   const [currentStep, setCurrentStep] = useState<Step>('identification');
@@ -823,6 +823,15 @@ export default function Checkout() {
       setFormData(prev => ({ ...prev, cep: shippingZip }));
     }
   }, [shippingZip]);
+
+  // Clear selected shipping when checkout CEP diverges from cart CEP
+  useEffect(() => {
+    const formCepClean = formData.cep.replace(/\D/g, '');
+    const cartCepClean = (shippingZip || '').replace(/\D/g, '');
+    if (formCepClean.length === 8 && cartCepClean.length === 8 && formCepClean !== cartCepClean) {
+      setSelectedShipping(null);
+    }
+  }, [formData.cep, shippingZip]);
 
   // PIX on checkout: poll or Realtime until payment confirmed, then redirect
   useEffect(() => {

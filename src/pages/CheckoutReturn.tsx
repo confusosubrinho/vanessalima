@@ -25,10 +25,16 @@ export default function CheckoutReturn() {
   const MAX_ATTEMPTS = 10;
 
   useEffect(() => {
-    // Clear cart on return from payment
-    clearCart();
     localStorage.removeItem("checkout_session_id");
   }, []);
+
+  // Only clear cart when order is confirmed (not cancelled/failed)
+  useEffect(() => {
+    if (!order) return;
+    if (!['cancelled', 'failed'].includes(order.status)) {
+      clearCart();
+    }
+  }, [order]);
 
   // Success feedback once per return (when order is confirmed)
   useEffect(() => {

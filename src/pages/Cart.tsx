@@ -246,17 +246,17 @@ export default function Cart() {
                 })()}
               </div>
 
-              <Pressable
-                asChild
-                feedbackPattern="selection"
-                onClick={() => { if (selectedShipping) navigate(checkoutHref); }}
-              >
-                <Button className="w-full" size="lg" disabled={!selectedShipping} asChild>
-                  <Link to={selectedShipping ? checkoutHref : '#'} onClick={(e) => { if (!selectedShipping) e.preventDefault(); }}>
-                    {selectedShipping ? 'Finalizar Compra' : 'Calcule o frete primeiro'}
-                  </Link>
+              {selectedShipping ? (
+                <Pressable asChild feedbackPattern="selection">
+                  <Button className="w-full" size="lg" asChild>
+                    <Link to={checkoutHref}>Finalizar Compra</Link>
+                  </Button>
+                </Pressable>
+              ) : (
+                <Button className="w-full" size="lg" disabled>
+                  Calcule o frete primeiro
                 </Button>
-              </Pressable>
+              )}
 
               <Button asChild variant="outline" className="w-full">
                 <Link to="/">Continuar Comprando</Link>
