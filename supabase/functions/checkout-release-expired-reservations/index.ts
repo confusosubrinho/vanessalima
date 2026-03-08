@@ -96,6 +96,14 @@ Deno.serve(async (req) => {
           p_variant_id: item.product_variant_id,
           p_quantity: item.quantity,
         });
+
+        // Y24: Record inventory_movement of type "release" for audit trail
+        await supabase.from("inventory_movements").insert({
+          variant_id: item.product_variant_id,
+          order_id: order.id,
+          type: "release",
+          quantity: item.quantity,
+        });
       }
     }
 
