@@ -509,6 +509,12 @@ Deno.serve(async (req) => {
       }
 
       if (existingOrder) {
+        // Y27: Prevent status regression — don't overwrite "delivered" with "shipped"
+        if (existingOrder.status === "delivered") {
+          console.log("[yampi-webhook] Ignoring shipped event: order already delivered", existingOrder.id);
+          await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: effectiveEvent, event_hash: shippedHash, payload });
+          return jsonOk({ ok: true, event, action: "ignored_already_delivered" });
+        }
         const updateData: Record<string, unknown> = { status: "shipped" };
         if (trackingCode) updateData.tracking_code = trackingCode;
         if (eventShippingCost != null && Number(eventShippingCost) > 0) updateData.shipping_cost = Number(eventShippingCost);
