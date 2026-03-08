@@ -13,76 +13,16 @@ import { ScrollToTop } from "@/components/store/ScrollToTop";
 import { VersionChecker } from "@/components/store/VersionChecker";
 import { ThemeProvider } from "@/components/store/ThemeProvider";
 import { AppmaxScriptLoader } from "@/components/store/AppmaxScriptLoader";
+import { APP_VERSION } from "@/lib/appVersion";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
-
-// Lazy load non-critical pages
-const ProductDetail = lazy(() => import("./pages/ProductDetail"));
-const CategoryPage = lazy(() => import("./pages/CategoryPage"));
-const SizePage = lazy(() => import("./pages/SizePage"));
-const Auth = lazy(() => import("./pages/Auth"));
-const Cart = lazy(() => import("./pages/Cart"));
-const Checkout = lazy(() => import("./pages/Checkout"));
-const MyAccount = lazy(() => import("./pages/MyAccount"));
-const RastreioPage = lazy(() => import("./pages/RastreioPage"));
-const OrderConfirmation = lazy(() => import("./pages/OrderConfirmation"));
-const FavoritesPage = lazy(() => import("./pages/FavoritesPage"));
-const SearchPage = lazy(() => import("./pages/SearchPage"));
-
-// Consolidated pages (replaces 5 individual institutional + 3 listing pages = 8 → 2 modules)
-const InstitutionalPageRoute = lazy(() => import("./pages/InstitutionalPageRoute"));
-const ProductListingPage = lazy(() => import("./pages/ProductListingPage"));
-
-// Standalone institutional pages with custom content (not CMS-driven)
-const ComoComprarPage = lazy(() => import("./pages/ComoComprarPage"));
-const FormasPagamentoPage = lazy(() => import("./pages/FormasPagamentoPage"));
-const AtendimentoPage = lazy(() => import("./pages/AtendimentoPage"));
-
-// Lazy load ALL admin routes via single dynamic import boundary
-// Vite will group these into an "admin" chunk automatically
-const AdminLayout = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/AdminLayout"));
-const AdminLogin = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/AdminLogin"));
-const Dashboard = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Dashboard"));
-const Products = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Products"));
-const Categories = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Categories"));
-const Orders = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Orders"));
-const Customers = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Customers"));
-const Coupons = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Coupons"));
-const Banners = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Banners"));
-const Personalization = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Personalization"));
-const HighlightBanners = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/HighlightBanners"));
-const Settings = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Settings"));
-const CodeSettings = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/CodeSettings"));
-const Integrations = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Integrations"));
-const SalesDashboard = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/SalesDashboard"));
-const ManualRegistration = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/ManualRegistration"));
-const ConversionManual = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/ConversionManual"));
-const AbandonedCarts = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/AbandonedCarts"));
-const EmailAutomations = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/EmailAutomations"));
-const TrafficDashboard = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/TrafficDashboard"));
-const MediaGallery = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/MediaGallery"));
-const PricingSettings = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/PricingSettings"));
-const HelpEditor = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/HelpEditor"));
-const SocialLinks = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/SocialLinks"));
-const PagesAdmin = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/PagesAdmin"));
-const SystemAndLogs = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/SystemAndLogs"));
-const ThemeEditor = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/ThemeEditor"));
-const AppmaxCallback = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/AppmaxCallback"));
-const Notifications = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Notifications"));
-const Reviews = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Reviews"));
-const Team = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/Team"));
-const CheckoutSettings = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/CheckoutSettings"));
-const CommerceHealth = lazy(() => import(/* webpackChunkName: "admin" */ "./pages/admin/CommerceHealth"));
-const CheckoutStart = lazy(() => import("./pages/CheckoutStart"));
-const CheckoutReturn = lazy(() => import("./pages/CheckoutReturn"));
 
 // Retry wrapper for lazy imports that may fail due to stale cache
 function lazyRetry<T extends { default: React.ComponentType<any> }>(
   factory: () => Promise<T>,
 ): Promise<T> {
   return factory().catch((err) => {
-    // Force reload once to clear stale chunks
-    const key = 'lazy-retry-reloaded';
+    const key = `lazy-retry-reloaded-${APP_VERSION}`;
     if (!sessionStorage.getItem(key)) {
       sessionStorage.setItem(key, '1');
       window.location.reload();
@@ -90,6 +30,65 @@ function lazyRetry<T extends { default: React.ComponentType<any> }>(
     throw err;
   });
 }
+
+// Lazy load non-critical pages — all wrapped with lazyRetry
+const ProductDetail = lazy(() => lazyRetry(() => import("./pages/ProductDetail")));
+const CategoryPage = lazy(() => lazyRetry(() => import("./pages/CategoryPage")));
+const SizePage = lazy(() => lazyRetry(() => import("./pages/SizePage")));
+const Auth = lazy(() => lazyRetry(() => import("./pages/Auth")));
+const Cart = lazy(() => lazyRetry(() => import("./pages/Cart")));
+const Checkout = lazy(() => lazyRetry(() => import("./pages/Checkout")));
+const MyAccount = lazy(() => lazyRetry(() => import("./pages/MyAccount")));
+const RastreioPage = lazy(() => lazyRetry(() => import("./pages/RastreioPage")));
+const OrderConfirmation = lazy(() => lazyRetry(() => import("./pages/OrderConfirmation")));
+const FavoritesPage = lazy(() => lazyRetry(() => import("./pages/FavoritesPage")));
+const SearchPage = lazy(() => lazyRetry(() => import("./pages/SearchPage")));
+
+// Consolidated pages
+const InstitutionalPageRoute = lazy(() => lazyRetry(() => import("./pages/InstitutionalPageRoute")));
+const ProductListingPage = lazy(() => lazyRetry(() => import("./pages/ProductListingPage")));
+
+// Standalone institutional pages
+const ComoComprarPage = lazy(() => lazyRetry(() => import("./pages/ComoComprarPage")));
+const FormasPagamentoPage = lazy(() => lazyRetry(() => import("./pages/FormasPagamentoPage")));
+const AtendimentoPage = lazy(() => lazyRetry(() => import("./pages/AtendimentoPage")));
+
+// Admin routes
+const AdminLayout = lazy(() => lazyRetry(() => import("./pages/admin/AdminLayout")));
+const AdminLogin = lazy(() => lazyRetry(() => import("./pages/admin/AdminLogin")));
+const Dashboard = lazy(() => lazyRetry(() => import("./pages/admin/Dashboard")));
+const Products = lazy(() => lazyRetry(() => import("./pages/admin/Products")));
+const Categories = lazy(() => lazyRetry(() => import("./pages/admin/Categories")));
+const Orders = lazy(() => lazyRetry(() => import("./pages/admin/Orders")));
+const Customers = lazy(() => lazyRetry(() => import("./pages/admin/Customers")));
+const Coupons = lazy(() => lazyRetry(() => import("./pages/admin/Coupons")));
+const Banners = lazy(() => lazyRetry(() => import("./pages/admin/Banners")));
+const Personalization = lazy(() => lazyRetry(() => import("./pages/admin/Personalization")));
+const HighlightBanners = lazy(() => lazyRetry(() => import("./pages/admin/HighlightBanners")));
+const Settings = lazy(() => lazyRetry(() => import("./pages/admin/Settings")));
+const CodeSettings = lazy(() => lazyRetry(() => import("./pages/admin/CodeSettings")));
+const Integrations = lazy(() => lazyRetry(() => import("./pages/admin/Integrations")));
+const SalesDashboard = lazy(() => lazyRetry(() => import("./pages/admin/SalesDashboard")));
+const ManualRegistration = lazy(() => lazyRetry(() => import("./pages/admin/ManualRegistration")));
+const ConversionManual = lazy(() => lazyRetry(() => import("./pages/admin/ConversionManual")));
+const AbandonedCarts = lazy(() => lazyRetry(() => import("./pages/admin/AbandonedCarts")));
+const EmailAutomations = lazy(() => lazyRetry(() => import("./pages/admin/EmailAutomations")));
+const TrafficDashboard = lazy(() => lazyRetry(() => import("./pages/admin/TrafficDashboard")));
+const MediaGallery = lazy(() => lazyRetry(() => import("./pages/admin/MediaGallery")));
+const PricingSettings = lazy(() => lazyRetry(() => import("./pages/admin/PricingSettings")));
+const HelpEditor = lazy(() => lazyRetry(() => import("./pages/admin/HelpEditor")));
+const SocialLinks = lazy(() => lazyRetry(() => import("./pages/admin/SocialLinks")));
+const PagesAdmin = lazy(() => lazyRetry(() => import("./pages/admin/PagesAdmin")));
+const SystemAndLogs = lazy(() => lazyRetry(() => import("./pages/admin/SystemAndLogs")));
+const ThemeEditor = lazy(() => lazyRetry(() => import("./pages/admin/ThemeEditor")));
+const AppmaxCallback = lazy(() => lazyRetry(() => import("./pages/admin/AppmaxCallback")));
+const Notifications = lazy(() => lazyRetry(() => import("./pages/admin/Notifications")));
+const Reviews = lazy(() => lazyRetry(() => import("./pages/admin/Reviews")));
+const Team = lazy(() => lazyRetry(() => import("./pages/admin/Team")));
+const CheckoutSettings = lazy(() => lazyRetry(() => import("./pages/admin/CheckoutSettings")));
+const CommerceHealth = lazy(() => lazyRetry(() => import("./pages/admin/CommerceHealth")));
+const CheckoutStart = lazy(() => lazyRetry(() => import("./pages/CheckoutStart")));
+const CheckoutReturn = lazy(() => lazyRetry(() => import("./pages/CheckoutReturn")));
 
 // Lazy load non-critical floating components
 const WhatsAppFloat = lazy(() => lazyRetry(() => import("./components/store/WhatsAppFloat").then(m => ({ default: m.WhatsAppFloat }))));
@@ -102,15 +101,30 @@ const queryClient = new QueryClient({
         if (error?.message?.includes('JWT expired')) return false;
         return failureCount < 2;
       },
-      staleTime: 1000 * 60 * 5, // 5 min stale for better caching
-      gcTime: 1000 * 60 * 60 * 24, // 24h para persistência não ser descartada
-      refetchOnWindowFocus: false, // Reduce unnecessary refetches
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 60 * 24,
+      refetchOnWindowFocus: false,
     },
   },
 });
 
-const PERSIST_CACHE_KEY = 'VANESSA_LIMA_QUERY_CACHE';
+// Versioned persist key — automatically invalidates on new deploys
+const PERSIST_CACHE_KEY = `VANESSA_LIMA_QUERY_CACHE_v${APP_VERSION}`;
 const STORE_SETTINGS_PUBLIC_KEY = 'store-settings-public';
+
+/** Clean up old persist cache keys from previous versions */
+function cleanupOldPersistKeys() {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('VANESSA_LIMA_QUERY_CACHE') && key !== PERSIST_CACHE_KEY) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+  } catch { /* localStorage unavailable */ }
+}
 
 /** Deserialize do cache: remove store-settings-public para não sobrescrever com dados antigos após reidratação. */
 function deserializePersistedClient(cacheString: string) {
@@ -143,7 +157,14 @@ function PageFallback() {
 }
 
 const App = () => {
-  useEffect(() => { captureAttribution(); }, []);
+  useEffect(() => {
+    captureAttribution();
+    // Clean up persist cache from old versions & stale retry flags
+    cleanupOldPersistKeys();
+    // Clean old retry flags (non-versioned legacy)
+    try { sessionStorage.removeItem('lazy-retry-reloaded'); } catch {}
+  }, []);
+
   const Provider = persister ? PersistQueryClientProvider : QueryClientProvider;
   const providerProps = persister
     ? {
