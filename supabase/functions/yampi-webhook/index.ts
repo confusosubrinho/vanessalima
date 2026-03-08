@@ -648,13 +648,14 @@ Deno.serve(async (req) => {
     const stack = err instanceof Error ? err.stack : undefined;
     console.error("yampi-webhook error:", msg, stack);
 
-    // P3: Log failure body to app_logs for debugging
+    // Log failure to error_logs for debugging
     try {
-      await supabase.from("app_logs").insert({
-        level: "error",
-        scope: "yampi-webhook",
-        message: `Webhook processing failed: ${msg}`,
-        meta: { stack, url: req.url },
+      await supabase.from("error_logs").insert({
+        error_type: "yampi-webhook",
+        error_message: `Webhook processing failed: ${msg}`,
+        error_stack: stack || null,
+        page_url: req.url,
+        severity: "error",
       });
     } catch (_) { /* best-effort */ }
 

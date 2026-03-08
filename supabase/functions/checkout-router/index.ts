@@ -322,15 +322,16 @@ Deno.serve(async (req) => {
         for (const i of itemsInput) {
           const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: i.variant_id, p_quantity: i.quantity });
           const stockData = stockResult.data as { success: boolean; error?: string } | null;
-          if (stockData && !stockData.success) {
-            console.warn(`[checkout-router] Stock reserve failed for variant ${i.variant_id}: ${stockData.error}`);
+          if (stockData?.success) {
+            await supabase.from("inventory_movements").insert({
+              variant_id: i.variant_id,
+              order_id: orderId,
+              type: "reserve",
+              quantity: i.quantity,
+            });
+          } else {
+            console.warn(`[checkout-router] Stock reserve failed for variant ${i.variant_id}: ${stockData?.error || "unknown"}`);
           }
-          await supabase.from("inventory_movements").insert({
-            variant_id: i.variant_id,
-            order_id: orderId,
-            type: "reserve",
-            quantity: i.quantity,
-          });
         }
       }
 

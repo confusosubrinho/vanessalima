@@ -356,6 +356,7 @@ Deno.serve(async (req) => {
                   width: Number(product.width) || 15,
                   length: Number(product.depth) || 20,
                   quantity_managed: true,
+                  quantity: variant.stock_quantity ?? 0,
                   availability: 0,
                   availability_soldout: 0,
                   blocked_sale: false,

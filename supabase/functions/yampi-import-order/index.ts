@@ -481,10 +481,13 @@ async function importSingleOrder(
 
   const shippingAddr = (yampiOrder.shipping_address as Record<string, unknown>) || {};
   const addr = (shippingAddr.data as Record<string, unknown>) || shippingAddr;
-  const street = String(addr.street || addr.address || "").trim();
-  const city = String(addr.city || shippingAddr.city || "").trim();
-  const state = String(addr.state || addr.uf || shippingAddr.state || "").trim();
-  const zip = String(addr.zipcode || addr.zip || shippingAddr.zipcode || "").trim();
+  const street = String(addr.street || addr.address || addr.address_line1 || addr.line1 || "").trim();
+  const number = String(addr.number || addr.address_number || "").trim();
+  const neighborhood = String(addr.neighborhood || addr.district || addr.bairro || "").trim();
+  const complement = String(addr.complement || addr.address_line2 || addr.line2 || "").trim();
+  const city = String(addr.city || addr.city_name || shippingAddr.city || "").trim();
+  const state = String(addr.state || addr.state_short || addr.uf || shippingAddr.state || "").trim();
+  const zip = String(addr.zipcode || addr.zip || addr.postal_code || shippingAddr.zipcode || shippingAddr.zip || "").trim();
 
   const shippingCost = Number(yampiOrder.value_shipment || yampiOrder.shipping_cost || 0);
   const discountAmount = Number(yampiOrder.value_discount || yampiOrder.discount || 0);
