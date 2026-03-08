@@ -133,17 +133,23 @@ Deno.serve(async (req) => {
             }
           }
 
-          await supabase.from("payments").insert({
-            order_id: existingBySession.id,
-            provider: "yampi",
-            status: "approved",
-            payment_method: paymentMethod,
-            gateway,
-            transaction_id: transactionId,
-            installments,
-            amount: totalAmount,
-            raw: payload,
-          });
+          // Idempotency: skip if payment with same transaction_id already exists
+          const existingPaymentCheck = transactionId
+            ? await supabase.from("payments").select("id").eq("order_id", existingBySession.id).eq("transaction_id", transactionId).maybeSingle()
+            : { data: null };
+          if (!existingPaymentCheck.data) {
+            await supabase.from("payments").insert({
+              order_id: existingBySession.id,
+              provider: "yampi",
+              status: "approved",
+              payment_method: paymentMethod,
+              gateway,
+              transaction_id: transactionId,
+              installments,
+              amount: totalAmount,
+              raw: payload,
+            });
+          }
           await supabase.from("abandoned_carts").update({ recovered: true, recovered_at: new Date().toISOString() }).eq("session_id", sessionId);
           if (customerEmail) {
             const { data: existingCustomer } = await supabase.from("customers").select("id, total_orders, total_spent").eq("email", customerEmail).maybeSingle();
