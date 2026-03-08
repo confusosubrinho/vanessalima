@@ -1008,6 +1008,17 @@ export default function Orders() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Orders pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button variant="outline" size="sm" className="h-8 px-3" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>‹</Button>
+          <span className="text-sm text-muted-foreground">
+            Página {currentPage} de {totalPages} ({totalOrderCount} pedidos)
+          </span>
+          <Button variant="outline" size="sm" className="h-8 px-3" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>›</Button>
+        </div>
+      )}
+
       {/* Import from Yampi dialog */}
       <Dialog open={showImportDialog} onOpenChange={(open) => { if (!importLoading) { setShowImportDialog(open); if (!open) setImportYampiId(''); } }}>
         <DialogContent className="max-w-md">

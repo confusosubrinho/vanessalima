@@ -505,58 +505,111 @@ export default function Customers() {
         </div>
       )}
 
-      <div className="bg-background rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead>Pedidos</TableHead>
-              <TableHead>Total Gasto</TableHead>
-              <TableHead>Desde</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell>
-              </TableRow>
-            ) : filteredCustomers?.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="p-0">
+      {(() => {
+        const totalCustomerPages = Math.ceil(filteredCustomers.length / CUSTOMERS_PER_PAGE);
+        const paginatedCustomers = filteredCustomers.slice((currentPage - 1) * CUSTOMERS_PER_PAGE, currentPage * CUSTOMERS_PER_PAGE);
+
+        return (
+          <>
+            {isMobile ? (
+              /* Mobile card layout */
+              <div className="space-y-2">
+                {isLoading ? (
+                  <p className="text-center py-8 text-muted-foreground">Carregando...</p>
+                ) : paginatedCustomers.length === 0 ? (
                   <AdminEmptyState
                     icon={Users}
                     title="Nenhum cliente"
-                    description={hasActiveFilters ? 'Nenhum cliente corresponde aos filtros. Tente alterar os critérios.' : 'Ainda não há clientes cadastrados.'}
+                    description={hasActiveFilters ? 'Nenhum cliente corresponde aos filtros.' : 'Ainda não há clientes cadastrados.'}
                     action={hasActiveFilters ? { label: 'Limpar filtros', onClick: clearFilters } : undefined}
                   />
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredCustomers?.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{customer.full_name}</p>
-                      <p className="text-sm text-muted-foreground">{customer.email}</p>
+                ) : (
+                  paginatedCustomers.map((customer) => (
+                    <div key={customer.id} className="bg-background border rounded-lg p-3 flex items-center gap-3" onClick={() => setSelectedCustomer(customer)}>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{customer.full_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{customer.email}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-xs text-muted-foreground">{customer.total_orders} pedidos</span>
+                          <span className="text-xs font-medium text-primary">{formatPrice(Number(customer.total_spent))}</span>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon" className="shrink-0">
+                        <Eye className="h-4 w-4" />
+                      </Button>
                     </div>
-                  </TableCell>
-                  <TableCell>{customer.phone || '-'}</TableCell>
-                  <TableCell>{customer.total_orders}</TableCell>
-                  <TableCell className="font-medium">{formatPrice(Number(customer.total_spent))}</TableCell>
-                  <TableCell>{formatDate(customer.created_at)}</TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => setSelectedCustomer(customer)}>
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+                  ))
+                )}
+              </div>
+            ) : (
+              /* Desktop table layout */
+              <div className="bg-background rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead>Pedidos</TableHead>
+                      <TableHead>Total Gasto</TableHead>
+                      <TableHead>Desde</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell>
+                      </TableRow>
+                    ) : paginatedCustomers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="p-0">
+                          <AdminEmptyState
+                            icon={Users}
+                            title="Nenhum cliente"
+                            description={hasActiveFilters ? 'Nenhum cliente corresponde aos filtros. Tente alterar os critérios.' : 'Ainda não há clientes cadastrados.'}
+                            action={hasActiveFilters ? { label: 'Limpar filtros', onClick: clearFilters } : undefined}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedCustomers.map((customer) => (
+                        <TableRow key={customer.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{customer.full_name}</p>
+                              <p className="text-sm text-muted-foreground">{customer.email}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>{customer.phone || '-'}</TableCell>
+                          <TableCell>{customer.total_orders}</TableCell>
+                          <TableCell className="font-medium">{formatPrice(Number(customer.total_spent))}</TableCell>
+                          <TableCell>{formatDate(customer.created_at)}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="icon" onClick={() => setSelectedCustomer(customer)}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             )}
-          </TableBody>
-        </Table>
-      </div>
+
+            {/* Pagination */}
+            {totalCustomerPages > 1 && (
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <Button variant="outline" size="sm" className="h-8 px-3" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>‹</Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {currentPage} de {totalCustomerPages} ({filteredCustomers.length} clientes)
+                </span>
+                <Button variant="outline" size="sm" className="h-8 px-3" onClick={() => setCurrentPage(p => Math.min(totalCustomerPages, p + 1))} disabled={currentPage === totalCustomerPages}>›</Button>
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Customer details dialog */}
       <Dialog open={!!selectedCustomer} onOpenChange={() => setSelectedCustomer(null)}>
