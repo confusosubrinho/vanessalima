@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 function jsonRes(body: Record<string, unknown>, status = 200) {
@@ -372,14 +372,19 @@ Deno.serve(async (req) => {
     });
 
     if (localVariant?.id && localStatus !== "cancelled") {
-      await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
-      await supabase.from("inventory_movements").insert({
-        variant_id: localVariant.id,
-        order_id: order.id,
-        type: "debit",
-        quantity,
-      });
-      itemsStockDebited += 1;
+      const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
+      const stockData = stockResult.data as { success: boolean; error?: string } | null;
+      if (stockData && !stockData.success) {
+        console.warn(`[yampi-import] decrement_stock failed for variant ${localVariant.id}: ${stockData.error} — skipping inventory_movement`);
+      } else {
+        await supabase.from("inventory_movements").insert({
+          variant_id: localVariant.id,
+          order_id: order.id,
+          type: "debit",
+          quantity,
+        });
+        itemsStockDebited += 1;
+      }
     }
   }
 
@@ -468,7 +473,9 @@ async function importSingleOrder(
   const customer = (yampiOrder.customer as Record<string, unknown>) || {};
   const customerData = (customer.data as Record<string, unknown>) || customer;
   const customerEmail = (customerData.email as string) || null;
-  const customerName = `${customerData.first_name || ""} ${customerData.last_name || ""}`.trim() || "Cliente Yampi";
+  const customerName = (customerData.name as string)
+    || ((customerData.first_name as string) ? `${customerData.first_name} ${customerData.last_name || ""}`.trim() : null)
+    || "Cliente Yampi";
   const customerPhone = ((customerData.phone as Record<string, unknown>)?.full_number as string) || (customerData.phone as string) || null;
   const customerCpf = (customerData.cpf as string) || (customerData.cnpj as string) || null;
 
@@ -537,8 +544,13 @@ async function importSingleOrder(
     });
 
     if (localVariant?.id && localStatus !== "cancelled") {
-      await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
-      await supabase.from("inventory_movements").insert({ variant_id: localVariant.id, order_id: order.id, type: "debit", quantity });
+      const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
+      const stockData = stockResult.data as { success: boolean; error?: string } | null;
+      if (stockData && !stockData.success) {
+        console.warn(`[yampi-import-batch] decrement_stock failed for variant ${localVariant.id}: ${stockData.error} — skipping inventory_movement`);
+      } else {
+        await supabase.from("inventory_movements").insert({ variant_id: localVariant.id, order_id: order.id, type: "debit", quantity });
+      }
     }
   }
 

@@ -1,5 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -165,9 +164,10 @@ Deno.serve(async (req) => {
                 const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: row.product_variant_id, p_quantity: row.quantity });
                 const stockData = stockResult.data as { success: boolean; error?: string } | null;
                 if (stockData && !stockData.success) {
-                  console.warn(`[yampi-webhook] decrement_stock failed for variant ${row.product_variant_id}: ${stockData.error} — continuing anyway`);
+                  console.warn(`[yampi-webhook] decrement_stock failed for variant ${row.product_variant_id}: ${stockData.error} — skipping inventory_movement`);
+                } else {
+                  await supabase.from("inventory_movements").insert({ variant_id: row.product_variant_id, order_id: existingBySession.id, type: "debit", quantity: row.quantity });
                 }
-                await supabase.from("inventory_movements").insert({ variant_id: row.product_variant_id, order_id: existingBySession.id, type: "debit", quantity: row.quantity });
               }
             }
           }
@@ -383,18 +383,18 @@ Deno.serve(async (req) => {
         });
 
         if (localVariant?.id) {
-          // Bug fix: check decrement_stock result before inserting inventory_movement
           const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
           const stockData = stockResult.data as { success: boolean; error?: string } | null;
           if (stockData && !stockData.success) {
-            console.warn(`[yampi-webhook] decrement_stock failed for variant ${localVariant.id}: ${stockData.error} — continuing order processing`);
+            console.warn(`[yampi-webhook] decrement_stock failed for variant ${localVariant.id}: ${stockData.error} — skipping inventory_movement`);
+          } else {
+            await supabase.from("inventory_movements").insert({
+              variant_id: localVariant.id,
+              order_id: order.id,
+              type: "debit",
+              quantity,
+            });
           }
-          await supabase.from("inventory_movements").insert({
-            variant_id: localVariant.id,
-            order_id: order.id,
-            type: "debit",
-            quantity,
-          });
         }
       }
 

@@ -214,34 +214,25 @@ Deno.serve(async (req) => {
       "Content-Type": "application/json",
     };
 
-    // Get products with synced SKUs
-    const { data: distinctProducts, error: dpErr } = await supabase
-      .rpc("get_distinct_synced_products", {}) as any;
+    // Get products with synced SKUs (direct query, no RPC dependency)
+    const { data: allVariants } = await supabase
+      .from("product_variants")
+      .select("product_id, yampi_sku_id, products(name)")
+      .not("yampi_sku_id", "is", null)
+      .eq("is_active", true)
+      .order("product_id");
 
-    let productList: Array<{ product_id: string; yampi_sku_id: number; product_name: string }>;
-
-    if (dpErr || !distinctProducts) {
-      const { data: allVariants } = await supabase
-        .from("product_variants")
-        .select("product_id, yampi_sku_id, products(name)")
-        .not("yampi_sku_id", "is", null)
-        .eq("is_active", true)
-        .order("product_id");
-
-      const seen = new Map<string, { product_id: string; yampi_sku_id: number; product_name: string }>();
-      for (const v of allVariants || []) {
-        if (!seen.has(v.product_id)) {
-          seen.set(v.product_id, {
-            product_id: v.product_id,
-            yampi_sku_id: v.yampi_sku_id,
-            product_name: (v as any).products?.name || "",
-          });
-        }
+    const seen = new Map<string, { product_id: string; yampi_sku_id: number; product_name: string }>();
+    for (const v of allVariants || []) {
+      if (!seen.has(v.product_id)) {
+        seen.set(v.product_id, {
+          product_id: v.product_id,
+          yampi_sku_id: v.yampi_sku_id,
+          product_name: (v as any).products?.name || "",
+        });
       }
-      productList = Array.from(seen.values());
-    } else {
-      productList = distinctProducts;
     }
+    const productList = Array.from(seen.values());
 
     const total = productList.length;
     const batch = productList.slice(batchOffset, batchOffset + batchLimit);
