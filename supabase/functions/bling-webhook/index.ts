@@ -187,6 +187,14 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
       }
     }
     if (variantCount === 1 && newStock !== undefined) {
+      // Check for recent local movements
+      const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
+      const singleVariantId = variants[0].id;
+      const hasRecent = await hasRecentLocalMovements(supabase, singleVariantId, 10);
+      if (hasRecent) {
+        console.log(`[webhook] Skipping stock overwrite for single-variant product (bling_id=${blingProductId}) — recent local movements detected`);
+        return "skipped_recent_movement";
+      }
       await supabase.from("product_variants").update({ stock_quantity: newStock }).eq("product_id", product.id);
       await supabase.from("products").update({
         bling_sync_status: "synced",
