@@ -384,7 +384,6 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
         const match = await findVariantByBlingIdOrSku(supabase, varBlingId, tokenFromHeaders);
         if (match) {
           // Check for recent local movements before overwriting
-          const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
           const hasRecent = await hasRecentLocalMovements(supabase, match.variantId, 10);
           if (hasRecent) {
             console.log(`[webhook] Skipping stock overwrite in syncStockOnly for variant ${match.variantId} — recent local movements`);
