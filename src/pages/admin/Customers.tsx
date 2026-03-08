@@ -301,26 +301,48 @@ export default function Customers() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Clientes</h1>
-          <p className="text-muted-foreground">Visualize os clientes da sua loja</p>
+          <h1 className="text-xl md:text-3xl font-bold">Clientes</h1>
+          <p className="text-sm text-muted-foreground">Visualize os clientes da sua loja</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
-          <label>
-            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
-            <Button variant="outline" size="sm" asChild disabled={importing}>
-              <span>
+        {isMobile ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <MoreHorizontal className="h-4 w-4 mr-2" />
+                Ações
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExport}>
+                <Download className="h-4 w-4 mr-2" />
+                Exportar CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => importRef.current?.click()} disabled={importing}>
                 {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
                 {importing ? 'Importando...' : 'Importar Tray'}
-              </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="h-4 w-4 mr-2" />
+              Exportar
             </Button>
-          </label>
-        </div>
+            <label>
+              <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
+              <Button variant="outline" size="sm" asChild disabled={importing}>
+                <span>
+                  {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                  {importing ? 'Importando...' : 'Importar Tray'}
+                </span>
+              </Button>
+            </label>
+          </div>
+        )}
+        <input ref={isMobile ? importRef : undefined} type="file" accept=".csv" className="hidden" onChange={handleImport} disabled={importing} />
       </div>
 
       {/* Import result */}
