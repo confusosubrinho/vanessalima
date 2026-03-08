@@ -704,10 +704,27 @@ async function syncProducts(supabase: any, token: string, config: BlingSyncConfi
     if (blingProducts?.length) {
       for (const prod of blingProducts) {
         if (variationBlingIds.has(prod.bling_product_id)) {
-          await supabase.from("product_images").delete().eq("product_id", prod.id);
-          await supabase.from("product_variants").delete().eq("product_id", prod.id);
-          await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
-          await supabase.from("products").delete().eq("id", prod.id);
+          // Check if any variant of this product is referenced in order_items
+          const { data: variantsWithOrders } = await supabase
+            .from("product_variants")
+            .select("id")
+            .eq("product_id", prod.id);
+          let hasOrderRefs = false;
+          for (const v of (variantsWithOrders || [])) {
+            const { data: orderRef } = await supabase.from("order_items").select("id").eq("product_variant_id", v.id).limit(1);
+            if (orderRef?.length) { hasOrderRefs = true; break; }
+          }
+          if (hasOrderRefs) {
+            // Deactivate instead of deleting to preserve order history
+            await supabase.from("product_variants").update({ is_active: false }).eq("product_id", prod.id);
+            await supabase.from("products").update({ is_active: false }).eq("id", prod.id);
+            console.log(`[sync] Deactivated standalone variation product ${prod.id} (referenced in orders)`);
+          } else {
+            await supabase.from("product_images").delete().eq("product_id", prod.id);
+            await supabase.from("product_variants").delete().eq("product_id", prod.id);
+            await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
+            await supabase.from("products").delete().eq("id", prod.id);
+          }
           cleaned++;
         }
       }
