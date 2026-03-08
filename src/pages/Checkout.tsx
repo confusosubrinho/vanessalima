@@ -390,6 +390,17 @@ export default function Checkout() {
         return;
       }
 
+      // Compute order total early (needed for both new and reused orders)
+      let orderTotal: number;
+      if (formData.paymentMethod === 'pix') {
+        orderTotal = finalTotal;
+      } else if (formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree) {
+        const selected = installmentOptions.find(o => o.value === selectedInstallments);
+        orderTotal = selected ? selected.total : finalTotal;
+      } else {
+        orderTotal = finalTotal;
+      }
+
       const { data: existingOrder } = await supabase
         .from('orders')
         .select('id, order_number, status')
@@ -408,9 +419,7 @@ export default function Checkout() {
         }
         // For pending/processing orders, reuse the existing order for payment
         if (['pending', 'processing'].includes(existingOrder.status)) {
-          // If Stripe is active, create a PaymentIntent for the existing order
           if (isStripeActive) {
-            // Reuse existing pending order for Stripe payment
             const reusedOrderId = existingOrder.id;
             const reusedGuestToken = userId ? null : crypto.randomUUID();
 
@@ -465,7 +474,6 @@ export default function Checkout() {
             setIsLoading(false);
             return;
           } else {
-            // For other providers, redirect to confirmation
             toast({
               title: 'Checkout já iniciado',
               description: 'Redirecionando para o pedido em andamento.',
@@ -482,16 +490,6 @@ export default function Checkout() {
       }
 
       const guestToken = userId ? null : crypto.randomUUID();
-
-      let orderTotal: number;
-      if (formData.paymentMethod === 'pix') {
-        orderTotal = finalTotal;
-      } else if (formData.paymentMethod === 'card' && selectedInstallments > effectiveInterestFree) {
-        const selected = installmentOptions.find(o => o.value === selectedInstallments);
-        orderTotal = selected ? selected.total : finalTotal;
-      } else {
-        orderTotal = finalTotal;
-      }
 
       // Determine provider name
       const providerName = isStripeActive ? 'stripe' : (activeProvider || 'appmax');
