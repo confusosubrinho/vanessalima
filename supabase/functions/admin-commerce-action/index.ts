@@ -218,7 +218,57 @@ Deno.serve(async (req) => {
     );
   }
 
-  return new Response(JSON.stringify({ error: "Ação inválida. Use action: release_reservations, reconcile_stale, list_failed_webhook_events ou delete_order_test" }), {
+  // ── Cancel order (with Bling notification) ──
+  if (action === "cancel_order") {
+    const orderId = (body as Record<string, unknown>)?.order_id as string | undefined;
+    if (!orderId) {
+      return new Response(JSON.stringify({ error: "order_id obrigatório" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Use the RPC to cancel and restore stock
+    const { data: cancelResult, error: cancelError } = await supabase.rpc("cancel_order_return_stock", { p_order_id: orderId });
+
+    if (cancelError) {
+      return new Response(JSON.stringify({ error: cancelError.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const result = typeof cancelResult === "string" ? JSON.parse(cancelResult) : cancelResult;
+    if (!result?.success) {
+      return new Response(JSON.stringify({ error: result?.error || "Falha ao cancelar pedido" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Notify Bling about the cancellation (non-blocking)
+    let blingCancelResult: any = null;
+    try {
+      const { cancelBlingOrder } = await import("../_shared/blingStockPush.ts");
+      blingCancelResult = await cancelBlingOrder(supabase, orderId);
+      console.log(`[admin-commerce] Bling cancel for order ${orderId}:`, JSON.stringify(blingCancelResult));
+    } catch (blingErr: any) {
+      console.warn(`[admin-commerce] Bling cancel failed (non-blocking): ${blingErr.message}`);
+      blingCancelResult = { success: false, error: blingErr.message };
+    }
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        action: "cancel_order",
+        restored_variants: result.restored_variants,
+        bling_cancel: blingCancelResult,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  return new Response(JSON.stringify({ error: "Ação inválida. Use action: release_reservations, reconcile_stale, list_failed_webhook_events, cancel_order ou delete_order_test" }), {
     status: 400,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

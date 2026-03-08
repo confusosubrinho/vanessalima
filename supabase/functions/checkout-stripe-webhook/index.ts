@@ -489,6 +489,28 @@ Deno.serve(async (req) => {
         break;
     }
 
+    // ── Auto-push order to Bling after successful payment ──
+    if (
+      event.type === "payment_intent.succeeded" ||
+      (event.type === "checkout.session.completed" && (event.data.object as any)?.payment_status === "paid")
+    ) {
+      const resolvedOrderId =
+        (event.data.object as any)?.metadata?.order_id ||
+        (event.type === "payment_intent.succeeded"
+          ? await findOrderIdByPI((event.data.object as any).id)
+          : null);
+
+      if (resolvedOrderId) {
+        try {
+          const { autoPushOrderToBling } = await import("../_shared/blingStockPush.ts");
+          const blingResult = await autoPushOrderToBling(supabase, resolvedOrderId);
+          console.log(`[stripe-webhook] Bling auto-push for order ${resolvedOrderId}:`, JSON.stringify(blingResult));
+        } catch (blingErr: any) {
+          console.warn(`[stripe-webhook] Bling auto-push failed (non-blocking): ${blingErr.message}`);
+        }
+      }
+    }
+
     await supabase
       .from("stripe_webhook_events")
       .update({ processed_at: new Date().toISOString(), error_message: null })

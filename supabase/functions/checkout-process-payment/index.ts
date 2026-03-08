@@ -620,6 +620,17 @@ Deno.serve(async (req) => {
         await supabase.rpc("increment_coupon_uses", { p_coupon_id: validatedCouponId });
       }
 
+      // Auto-push order to Bling after successful payment
+      if (order_id) {
+        try {
+          const { autoPushOrderToBling } = await import("../_shared/blingStockPush.ts");
+          const blingResult = await autoPushOrderToBling(supabase, order_id);
+          console.log(`[process-payment] Bling auto-push for order ${order_id}:`, JSON.stringify(blingResult));
+        } catch (blingErr: any) {
+          console.warn(`[process-payment] Bling auto-push failed (non-blocking): ${blingErr.message}`);
+        }
+      }
+
       const result: Record<string, unknown> = {
         success: true,
         appmax_order_id: appmaxOrderId,

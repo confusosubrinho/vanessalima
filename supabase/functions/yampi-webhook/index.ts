@@ -432,6 +432,15 @@ Deno.serve(async (req) => {
         console.log("[yampi-webhook] Email automation log created for order", order.id);
       });
 
+      // Auto-push order to Bling
+      try {
+        const { autoPushOrderToBling } = await import("../_shared/blingStockPush.ts");
+        const blingResult = await autoPushOrderToBling(supabase, order.id);
+        console.log(`[yampi-webhook] Bling auto-push for order ${order.id}:`, JSON.stringify(blingResult));
+      } catch (blingErr: any) {
+        console.warn(`[yampi-webhook] Bling auto-push failed (non-blocking): ${blingErr.message}`);
+      }
+
       return jsonOk({ ok: true, order_id: order.id, order_number: order.order_number });
     }
 
