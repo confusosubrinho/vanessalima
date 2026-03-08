@@ -65,10 +65,26 @@ export async function getValidTokenSafe(supabase: any): Promise<string> {
         bling_token_expires_at: new Date(Date.now() + (tokenData.expires_in || 21600) * 1000).toISOString(),
       } as any)
       .eq("id", settings.id)
-      .eq("bling_refresh_token", oldRefreshToken);
+      .eq("bling_refresh_token", oldRefreshToken)
+      .select("id");
 
     if (updateError) {
       console.warn("[bling-token] Update failed (likely race condition), token still valid for this request");
+    } else if (!updateResult || updateResult.length === 0) {
+      // Optimistic lock failed — another process already refreshed the token
+      // Re-read to get the latest token persisted by the other process
+      console.log("[bling-token] Optimistic lock missed (0 rows updated), re-reading latest token");
+      const { data: latestSettings } = await supabase
+        .from("store_settings")
+        .select("bling_access_token, bling_token_expires_at")
+        .limit(1)
+        .maybeSingle();
+      if (latestSettings?.bling_access_token) {
+        const latestExpiry = latestSettings.bling_token_expires_at ? new Date(latestSettings.bling_token_expires_at) : new Date(0);
+        if (latestExpiry.getTime() > Date.now()) {
+          return latestSettings.bling_access_token;
+        }
+      }
     }
 
     return tokenData.access_token;

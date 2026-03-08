@@ -186,7 +186,16 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
         console.log(`[webhook] Skipping stock overwrite for single-variant product (bling_id=${blingProductId}) — recent local movements detected`);
         return "skipped_recent_movement";
       }
+      // Get old stock for audit trail
+      const { data: oldSingleVar } = await supabase.from("product_variants").select("stock_quantity").eq("id", singleVariantId).maybeSingle();
+      const oldSingleStock = oldSingleVar?.stock_quantity ?? 0;
       await supabase.from("product_variants").update({ stock_quantity: newStock }).eq("product_id", product.id);
+      // Record inventory movement
+      if (newStock !== oldSingleStock) {
+        await supabase.from("inventory_movements").insert({
+          variant_id: singleVariantId, quantity: newStock - oldSingleStock, type: "bling_sync",
+        }).then(() => {}).catch(() => {});
+      }
       await supabase.from("products").update({
         bling_sync_status: "synced",
         bling_last_synced_at: new Date().toISOString(),
@@ -388,8 +397,17 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
           if (hasRecent) {
             console.log(`[webhook] Skipping stock overwrite in syncStockOnly for variant ${match.variantId} — recent local movements`);
           } else {
+            // Get old stock for audit trail
+            const { data: oldVar } = await supabase.from("product_variants").select("stock_quantity").eq("id", match.variantId).maybeSingle();
+            const oldQty = oldVar?.stock_quantity ?? 0;
             await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", match.variantId);
             stockUpdated = true;
+            // Record inventory movement
+            if (qty !== oldQty) {
+              await supabase.from("inventory_movements").insert({
+                variant_id: match.variantId, quantity: qty - oldQty, type: "bling_sync",
+              }).then(() => {}).catch(() => {});
+            }
           }
         }
       }
@@ -408,6 +426,16 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
     if (skipAll) {
       console.log(`[webhook] Skipping stock overwrite in syncStockOnly no-variation for product ${productId} — recent local movements`);
     } else {
+      // Get old stocks for audit trail
+      for (const pv of (prodVariants || [])) {
+        const { data: oldVar } = await supabase.from("product_variants").select("stock_quantity").eq("id", pv.id).maybeSingle();
+        const oldQty = oldVar?.stock_quantity ?? 0;
+        if (qty !== oldQty) {
+          await supabase.from("inventory_movements").insert({
+            variant_id: pv.id, quantity: qty - oldQty, type: "bling_sync",
+          }).then(() => {}).catch(() => {});
+        }
+      }
       await supabase.from("product_variants").update({ stock_quantity: qty }).eq("product_id", productId);
       stockUpdated = true;
     }

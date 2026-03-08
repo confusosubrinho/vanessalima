@@ -445,7 +445,14 @@ async function upsertParentWithVariants(
       };
       if (alreadySynced) {
         const varUpdate: any = {};
-        if (config.sync_stock || imported) varUpdate.stock_quantity = varStock;
+        if (config.sync_stock || imported) {
+          const hasRecent = await hasRecentLocalMovements(supabase, alreadySynced.id, 10);
+          if (!hasRecent) {
+            varUpdate.stock_quantity = varStock;
+          } else {
+            console.log(`[sync] Skipping stock overwrite for variationItem variant ${alreadySynced.id} — recent local movements`);
+          }
+        }
         if (Object.keys(varUpdate).length > 0) await supabase.from("product_variants").update(varUpdate).eq("id", alreadySynced.id);
         syncedVariantIds.add(alreadySynced.id);
       } else {
@@ -464,7 +471,14 @@ async function upsertParentWithVariants(
     }
     const { data: existingDefault } = await supabase.from("product_variants").select("id").eq("product_id", productId).eq("size", "Único").maybeSingle();
     if (existingDefault) {
-      if (config.sync_stock || imported) await supabase.from("product_variants").update({ stock_quantity: stockQty }).eq("id", existingDefault.id);
+      if (config.sync_stock || imported) {
+        const hasRecent = await hasRecentLocalMovements(supabase, existingDefault.id, 10);
+        if (!hasRecent) {
+          await supabase.from("product_variants").update({ stock_quantity: stockQty }).eq("id", existingDefault.id);
+        } else {
+          console.log(`[sync] Skipping stock overwrite for "Único" variant ${existingDefault.id} — recent local movements`);
+        }
+      }
     } else {
       await supabase.from("product_variants").insert({ product_id: productId, size: "Único", stock_quantity: stockQty, is_active: true });
     }
@@ -1029,8 +1043,17 @@ serve(async (req) => {
                   if (hasRecent) {
                     console.log(`[relink] Skipping stock overwrite for variant ${lv.id} — recent local movements`);
                   } else {
+                    // Get old stock for audit trail
+                    const { data: oldVar } = await supabase.from("product_variants").select("stock_quantity").eq("id", lv.id).maybeSingle();
+                    const oldQty = oldVar?.stock_quantity ?? 0;
                     await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", lv.id);
                     stockUpdated++;
+                    // Record inventory movement for audit
+                    if (qty !== oldQty) {
+                      await supabase.from("inventory_movements").insert({
+                        variant_id: lv.id, quantity: qty - oldQty, type: "bling_sync",
+                      }).then(() => {}).catch(() => {});
+                    }
                   }
                 }
               }
