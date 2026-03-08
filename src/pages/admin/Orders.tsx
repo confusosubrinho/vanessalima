@@ -301,45 +301,7 @@ export default function Orders() {
     },
   });
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(price);
-  };
-
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const statusColors: Record<string, string> = {
-    pending: 'bg-warning/20 text-warning-foreground border-warning',
-    processing: 'bg-blue-100 text-blue-800',
-    shipped: 'bg-purple-100 text-purple-800',
-    delivered: 'bg-success/20 text-success border-success',
-    cancelled: 'bg-destructive/20 text-destructive',
-  };
-
-  const statusLabels: Record<string, string> = {
-    pending: 'Pendente',
-    processing: 'Processando',
-    shipped: 'Enviado',
-    delivered: 'Entregue',
-    cancelled: 'Cancelado',
-  };
-
-  const getProviderLabel = (provider: string | null | undefined): string => {
-    if (provider === 'stripe') return 'Stripe';
-    if (provider === 'appmax') return 'Appmax';
-    if (provider === 'yampi') return 'Yampi';
-    return 'Site';
-  };
+  // formatPrice, statusColors, statusLabels, getProviderLabel imported from @/lib/formatters
 
   // Apply filters (null-safe: order_number/shipping_name can be null)
   const searchLower = searchQuery.toLowerCase();
