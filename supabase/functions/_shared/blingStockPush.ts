@@ -204,10 +204,10 @@ export async function cancelBlingOrder(
       return { success: false, error: `Token error: ${err.message}` };
     }
 
-    // Cancel order in Bling — Bling automatically restores stock
+    // Cancel order in Bling via PATCH with situação 12 (cancelado) — Bling v3 API
     const response = await fetchWithTimeout(
-      `${BLING_API_URL}/pedidos/vendas/${blingOrderId}/cancelar`,
-      { method: "POST", headers: blingHeaders(token) }
+      `${BLING_API_URL}/pedidos/vendas/${blingOrderId}`,
+      { method: "PATCH", headers: blingHeaders(token), body: JSON.stringify({ situacao: { valor: 12 } }) }
     );
 
     if (!response.ok) {
