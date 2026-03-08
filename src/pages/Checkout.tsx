@@ -83,6 +83,7 @@ function luhnCheck(num: string): boolean {
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { items, subtotal, clearCart, updateQuantity, selectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
   const { toast } = useToast();
   const { feedback: triggerFeedback } = useFeedback();
@@ -96,6 +97,15 @@ export default function Checkout() {
   const [customerIp, setCustomerIp] = useState('0.0.0.0');
   const idempotencyKeyRef = useRef<string>(cartId);
   const submitInProgressRef = useRef(false);
+
+  // ─── Read navigation state from CheckoutStart (router "render" action) ───
+  const routerState = location.state as {
+    orderId?: string;
+    provider?: string;
+    requestId?: string;
+    orderAccessToken?: string;
+    clientSecret?: string;
+  } | null;
 
   // Provider ativo (fonte única: integrations_checkout) — define qual formulário mostrar
   const { data: checkoutConfig } = useQuery({
