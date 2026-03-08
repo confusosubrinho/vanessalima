@@ -445,7 +445,14 @@ async function upsertParentWithVariants(
       };
       if (alreadySynced) {
         const varUpdate: any = {};
-        if (config.sync_stock || imported) varUpdate.stock_quantity = varStock;
+        if (config.sync_stock || imported) {
+          const hasRecent = await hasRecentLocalMovements(supabase, alreadySynced.id, 10);
+          if (!hasRecent) {
+            varUpdate.stock_quantity = varStock;
+          } else {
+            console.log(`[sync] Skipping stock overwrite for variationItem variant ${alreadySynced.id} — recent local movements`);
+          }
+        }
         if (Object.keys(varUpdate).length > 0) await supabase.from("product_variants").update(varUpdate).eq("id", alreadySynced.id);
         syncedVariantIds.add(alreadySynced.id);
       } else {
