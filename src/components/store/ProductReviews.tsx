@@ -95,6 +95,8 @@ export function ProductReviews({ productId, productName }: ProductReviewsProps) 
       setTitle('');
       setComment('');
       setRating(5);
+      setCooldown(true);
+      setTimeout(() => setCooldown(false), 30_000);
       refetch();
     } catch (error) {
       toast({
