@@ -65,6 +65,48 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+function TrackingCodeEditor({ order, onUpdated }: { order: Order; onUpdated: (code: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(order.tracking_code || '');
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToastInline();
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from('orders').update({ tracking_code: value.trim() || null }).eq('id', order.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: 'Erro ao salvar rastreio', variant: 'destructive' });
+    } else {
+      toast({ title: 'Código de rastreio atualizado' });
+      onUpdated(value.trim());
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div>
+      <h3 className="font-medium mb-2 flex items-center gap-2">
+        Rastreamento
+        {!editing && (
+          <button onClick={() => { setValue(order.tracking_code || ''); setEditing(true); }} className="text-muted-foreground hover:text-foreground">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </h3>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Ex: BR123456789BR" className="h-8 text-sm" disabled={saving} onKeyDown={(e) => e.key === 'Enter' && save()} />
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={save} disabled={saving}><Check className="h-4 w-4" /></Button>
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditing(false)} disabled={saving}><X className="h-4 w-4" /></Button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">{order.tracking_code || '—'}</p>
+      )}
+    </div>
+  );
+}
+
 export default function Orders() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
