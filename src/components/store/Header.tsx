@@ -16,6 +16,7 @@ import { CartProductSuggestions } from './CartProductSuggestions';
 import { prefetchCategoryPage, prefetchSearchPage, prefetchCartPage, prefetchCheckoutStartPage } from '@/lib/prefetch';
 import { FeedbackPreferencesDialog } from './FeedbackPreferencesDialog';
 import { resolveImageUrl } from '@/lib/imageUrl';
+import { getCartItemUnitPrice } from '@/lib/cartPricing';
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Percent, Star, Sparkles, Heart, Gift, Tag, Flame, Zap, Crown, ShoppingBag,
