@@ -47,6 +47,7 @@ export default function Banners() {
   const [uploading, setUploading] = useState<'desktop' | 'mobile' | null>(null);
   const [pendingBannerFile, setPendingBannerFile] = useState<{ file: File; type: 'desktop' | 'mobile' } | null>(null);
   const [imagePickerFor, setImagePickerFor] = useState<'desktop' | 'mobile' | null>(null);
+  const [bannerToDelete, setBannerToDelete] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '', subtitle: '', image_url: '', mobile_image_url: '',
