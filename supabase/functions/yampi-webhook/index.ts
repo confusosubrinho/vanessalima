@@ -186,6 +186,16 @@ Deno.serve(async (req) => {
             }
           }
           await supabase.from("email_automation_logs").insert({ recipient_email: customerEmail || "unknown", recipient_name: customerName, status: "pending" });
+
+          // Auto-push order to Bling
+          try {
+            const { autoPushOrderToBling } = await import("../_shared/blingStockPush.ts");
+            const blingResult = await autoPushOrderToBling(supabase, existingBySession.id);
+            console.log(`[yampi-webhook] Bling auto-push for order ${existingBySession.id}:`, JSON.stringify(blingResult));
+          } catch (blingErr: any) {
+            console.warn(`[yampi-webhook] Bling auto-push failed (non-blocking): ${blingErr.message}`);
+          }
+
           console.log("[yampi-webhook] Order updated by session_id (paid):", existingBySession.id);
           return jsonOk({ ok: true, order_id: existingBySession.id, order_number: existingBySession.order_number, updated: true });
         }
