@@ -407,21 +407,35 @@ Deno.serve(async (req) => {
     // ===== #10 SHIPPED EVENTS =====
     if (shippedEvents.includes(effectiveEvent)) {
       const externalRef = resourceData?.order_id?.toString() || resourceData?.id?.toString() || "";
+      const sessionId = resourceData?.metadata?.session_id || null;
       const trackingCode = resourceData?.tracking_code || resourceData?.tracking?.code || resourceData?.shipment?.tracking_code || null;
+      const eventShippingCost = resourceData?.shipping_cost || resourceData?.value_shipment || null;
 
+      // Idempotency: hash check
+      const shippedHash = `shipped-${externalRef || sessionId}-${trackingCode || "notrack"}`;
+      const { data: existingEvent } = await supabase.from("order_events").select("id").eq("event_hash", shippedHash).maybeSingle();
+      if (existingEvent) {
+        console.log("[yampi-webhook] Duplicate shipped event, skipping:", shippedHash);
+        return jsonOk({ ok: true, event, duplicate: true });
+      }
+
+      let existingOrder: { id: string; status: string } | null = null;
       if (externalRef) {
-        const { data: existingOrder } = await supabase
-          .from("orders")
-          .select("id, status")
-          .eq("external_reference", externalRef)
-          .maybeSingle();
+        const { data } = await supabase.from("orders").select("id, status").eq("external_reference", externalRef).maybeSingle();
+        existingOrder = data;
+      }
+      if (!existingOrder && sessionId) {
+        const { data } = await supabase.from("orders").select("id, status").eq("checkout_session_id", sessionId).maybeSingle();
+        existingOrder = data;
+      }
 
-        if (existingOrder) {
-          const updateData: Record<string, unknown> = { status: "shipped" };
-          if (trackingCode) updateData.tracking_code = trackingCode;
-          await supabase.from("orders").update(updateData).eq("id", existingOrder.id);
-          console.log("[yampi-webhook] Order shipped:", existingOrder.id, trackingCode);
-        }
+      if (existingOrder) {
+        const updateData: Record<string, unknown> = { status: "shipped" };
+        if (trackingCode) updateData.tracking_code = trackingCode;
+        if (eventShippingCost != null && Number(eventShippingCost) > 0) updateData.shipping_cost = Number(eventShippingCost);
+        await supabase.from("orders").update(updateData).eq("id", existingOrder.id);
+        await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: effectiveEvent, event_hash: shippedHash, payload });
+        console.log("[yampi-webhook] Order shipped:", existingOrder.id, trackingCode);
       }
       return jsonOk({ ok: true, event });
     }
@@ -429,17 +443,29 @@ Deno.serve(async (req) => {
     // ===== #10 DELIVERED EVENTS =====
     if (deliveredEvents.includes(effectiveEvent)) {
       const externalRef = resourceData?.order_id?.toString() || resourceData?.id?.toString() || "";
-      if (externalRef) {
-        const { data: existingOrder } = await supabase
-          .from("orders")
-          .select("id")
-          .eq("external_reference", externalRef)
-          .maybeSingle();
+      const sessionId = resourceData?.metadata?.session_id || null;
 
-        if (existingOrder) {
-          await supabase.from("orders").update({ status: "delivered" }).eq("id", existingOrder.id);
-          console.log("[yampi-webhook] Order delivered:", existingOrder.id);
-        }
+      const deliveredHash = `delivered-${externalRef || sessionId}`;
+      const { data: existingEvent } = await supabase.from("order_events").select("id").eq("event_hash", deliveredHash).maybeSingle();
+      if (existingEvent) {
+        console.log("[yampi-webhook] Duplicate delivered event, skipping:", deliveredHash);
+        return jsonOk({ ok: true, event, duplicate: true });
+      }
+
+      let existingOrder: { id: string } | null = null;
+      if (externalRef) {
+        const { data } = await supabase.from("orders").select("id").eq("external_reference", externalRef).maybeSingle();
+        existingOrder = data;
+      }
+      if (!existingOrder && sessionId) {
+        const { data } = await supabase.from("orders").select("id").eq("checkout_session_id", sessionId).maybeSingle();
+        existingOrder = data;
+      }
+
+      if (existingOrder) {
+        await supabase.from("orders").update({ status: "delivered" }).eq("id", existingOrder.id);
+        await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: effectiveEvent, event_hash: deliveredHash, payload });
+        console.log("[yampi-webhook] Order delivered:", existingOrder.id);
       }
       return jsonOk({ ok: true, event });
     }
@@ -451,13 +477,24 @@ Deno.serve(async (req) => {
         resourceData?.order_id?.toString() ||
         resourceData?.id?.toString() ||
         "";
+      const sessionId = resourceData?.metadata?.session_id || null;
 
+      const cancelHash = `cancel-${externalRef || sessionId}-${effectiveEvent}`;
+      const { data: existingEvent } = await supabase.from("order_events").select("id").eq("event_hash", cancelHash).maybeSingle();
+      if (existingEvent) {
+        console.log("[yampi-webhook] Duplicate cancel event, skipping:", cancelHash);
+        return jsonOk({ ok: true, event, duplicate: true });
+      }
+
+      let existingOrder: { id: string; status: string } | null = null;
       if (externalRef) {
-        const { data: existingOrder } = await supabase
-          .from("orders")
-          .select("id, status")
-          .eq("external_reference", externalRef)
-          .maybeSingle();
+        const { data } = await supabase.from("orders").select("id, status").eq("external_reference", externalRef).maybeSingle();
+        existingOrder = data;
+      }
+      if (!existingOrder && sessionId) {
+        const { data } = await supabase.from("orders").select("id, status").eq("checkout_session_id", sessionId).maybeSingle();
+        existingOrder = data;
+      }
 
         if (existingOrder && existingOrder.status !== "cancelled") {
           // Não cancelar pedido já pago/enviado/entregue (evita evento de recusa anterior sobrescrever pagamento aprovado)
