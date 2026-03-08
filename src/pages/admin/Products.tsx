@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
+import { formatPrice } from '@/lib/formatters';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Trash2, Search, MoreHorizontal, Pencil, ArrowUpDown, Download, Upload, PackageX, EyeOff, CheckCircle, Store, ChevronDown, RefreshCw, Power, PowerOff, Edit3, X, AlertCircle, Clock, Loader2, Package } from 'lucide-react';
