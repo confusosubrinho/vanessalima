@@ -55,21 +55,29 @@ export async function autoPushOrderToBling(
       return { success: false, error: `Token error: ${err.message}` };
     }
 
-    // Build order items
+    // Build order items — use variant SKU when available for correct Bling stock decrement
     const { data: orderItems } = await supabase
       .from("order_items")
-      .select("product_name, quantity, unit_price, product_id")
+      .select("product_name, quantity, unit_price, product_id, product_variant_id")
       .eq("order_id", orderId);
 
     const itens = [];
     for (const item of (orderItems || [])) {
       let codigo = item.product_id?.substring(0, 8) || "PROD";
-      if (item.product_id) {
-        const { data: prod } = await supabase
-          .from("products")
-          .select("sku, bling_product_id")
-          .eq("id", item.product_id)
+      // Priority: variant SKU > product SKU > fallback
+      if (item.product_variant_id) {
+        const { data: variant } = await supabase
+          .from("product_variants")
+          .select("sku")
+          .eq("id", item.product_variant_id)
           .maybeSingle();
+        if (variant?.sku) codigo = variant.sku;
+        else if (item.product_id) {
+          const { data: prod } = await supabase.from("products").select("sku").eq("id", item.product_id).maybeSingle();
+          if (prod?.sku) codigo = prod.sku;
+        }
+      } else if (item.product_id) {
+        const { data: prod } = await supabase.from("products").select("sku").eq("id", item.product_id).maybeSingle();
         if (prod?.sku) codigo = prod.sku;
       }
       itens.push({
@@ -196,10 +204,10 @@ export async function cancelBlingOrder(
       return { success: false, error: `Token error: ${err.message}` };
     }
 
-    // Cancel order in Bling — Bling automatically restores stock
+    // Cancel order in Bling via PATCH with situação 12 (cancelado) — Bling v3 API
     const response = await fetchWithTimeout(
-      `${BLING_API_URL}/pedidos/vendas/${blingOrderId}/cancelar`,
-      { method: "POST", headers: blingHeaders(token) }
+      `${BLING_API_URL}/pedidos/vendas/${blingOrderId}`,
+      { method: "PATCH", headers: blingHeaders(token), body: JSON.stringify({ situacao: { valor: 12 } }) }
     );
 
     if (!response.ok) {

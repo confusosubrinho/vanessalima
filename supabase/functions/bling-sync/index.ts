@@ -393,7 +393,15 @@ async function upsertParentWithVariants(
       if (existingVar) {
         // Update existing variant: stock always if enabled, other fields per config
         const varUpdate: any = {};
-        if (config.sync_stock || imported) varUpdate.stock_quantity = varStock;
+        if (config.sync_stock || imported) {
+          // Check for recent local movements before overwriting stock
+          const hasRecent = await hasRecentLocalMovements(supabase, existingVar.id, 10);
+          if (!hasRecent) {
+            varUpdate.stock_quantity = varStock;
+          } else {
+            console.log(`[sync] Skipping stock overwrite for variant ${existingVar.id} — recent local movements`);
+          }
+        }
         if (config.sync_variant_active) varUpdate.is_active = v.situacao !== "I";
         // NEVER update is_active unless toggle is on
         if (Object.keys(varUpdate).length > 0) {
@@ -696,10 +704,27 @@ async function syncProducts(supabase: any, token: string, config: BlingSyncConfi
     if (blingProducts?.length) {
       for (const prod of blingProducts) {
         if (variationBlingIds.has(prod.bling_product_id)) {
-          await supabase.from("product_images").delete().eq("product_id", prod.id);
-          await supabase.from("product_variants").delete().eq("product_id", prod.id);
-          await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
-          await supabase.from("products").delete().eq("id", prod.id);
+          // Check if any variant of this product is referenced in order_items
+          const { data: variantsWithOrders } = await supabase
+            .from("product_variants")
+            .select("id")
+            .eq("product_id", prod.id);
+          let hasOrderRefs = false;
+          for (const v of (variantsWithOrders || [])) {
+            const { data: orderRef } = await supabase.from("order_items").select("id").eq("product_variant_id", v.id).limit(1);
+            if (orderRef?.length) { hasOrderRefs = true; break; }
+          }
+          if (hasOrderRefs) {
+            // Deactivate instead of deleting to preserve order history
+            await supabase.from("product_variants").update({ is_active: false }).eq("product_id", prod.id);
+            await supabase.from("products").update({ is_active: false }).eq("id", prod.id);
+            console.log(`[sync] Deactivated standalone variation product ${prod.id} (referenced in orders)`);
+          } else {
+            await supabase.from("product_images").delete().eq("product_id", prod.id);
+            await supabase.from("product_variants").delete().eq("product_id", prod.id);
+            await supabase.from("product_characteristics").delete().eq("product_id", prod.id);
+            await supabase.from("products").delete().eq("id", prod.id);
+          }
           cleaned++;
         }
       }
@@ -777,7 +802,16 @@ async function syncStock(supabase: any, token: string) {
         for (const vid of variantIds) {
           const hasRecent = await hasRecentLocalMovements(supabase, vid, 10);
           if (hasRecent) { console.log(`[syncStock] Skipping variant ${vid} — recent local movements`); continue; }
+          // Get current stock for audit trail
+          const { data: currentVar } = await supabase.from("product_variants").select("stock_quantity").eq("id", vid).maybeSingle();
+          const oldStock = currentVar?.stock_quantity ?? 0;
           await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", vid);
+          // Record inventory movement for audit
+          if (qty !== oldStock) {
+            await supabase.from("inventory_movements").insert({
+              variant_id: vid, quantity: qty - oldStock, type: "bling_sync",
+            }).then(() => {}).catch(() => {});
+          }
           updated++;
         }
       }
@@ -799,7 +833,12 @@ async function createOrder(supabase: any, token: string, orderId: string) {
   const itens = [];
   for (const item of (order.order_items || [])) {
     let codigo = item.product_id?.substring(0, 8) || "PROD";
-    if (item.product_id) { const { data: prod } = await supabase.from("products").select("sku, bling_product_id").eq("id", item.product_id).maybeSingle(); if (prod?.sku) codigo = prod.sku; }
+    // Priority: variant SKU > product SKU > fallback
+    if (item.product_variant_id) {
+      const { data: variant } = await supabase.from("product_variants").select("sku").eq("id", item.product_variant_id).maybeSingle();
+      if (variant?.sku) codigo = variant.sku;
+      else if (item.product_id) { const { data: prod } = await supabase.from("products").select("sku").eq("id", item.product_id).maybeSingle(); if (prod?.sku) codigo = prod.sku; }
+    } else if (item.product_id) { const { data: prod } = await supabase.from("products").select("sku, bling_product_id").eq("id", item.product_id).maybeSingle(); if (prod?.sku) codigo = prod.sku; }
     itens.push({ descricao: item.product_name, quantidade: item.quantity, valor: item.unit_price, codigo });
   }
   const blingOrder = {
@@ -982,7 +1021,19 @@ serve(async (req) => {
             const stockJson = await stockRes.json();
             for (const s of (stockJson?.data || [])) {
               const bId = s.produto?.id; const qty = s.saldoVirtualTotal ?? 0;
-              if (bId) { const { data: lv } = await supabase.from("product_variants").select("id").eq("bling_variant_id", bId).maybeSingle(); if (lv) { await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", lv.id); stockUpdated++; } }
+              if (bId) {
+                const { data: lv } = await supabase.from("product_variants").select("id").eq("bling_variant_id", bId).maybeSingle();
+                if (lv) {
+                  // Check for recent local movements before overwriting stock
+                  const hasRecent = await hasRecentLocalMovements(supabase, lv.id, 10);
+                  if (hasRecent) {
+                    console.log(`[relink] Skipping stock overwrite for variant ${lv.id} — recent local movements`);
+                  } else {
+                    await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", lv.id);
+                    stockUpdated++;
+                  }
+                }
+              }
             }
           } catch (err: any) { console.error(`[relink] Error for parent ${parentBlingId}:`, err.message); }
         }
@@ -1026,13 +1077,46 @@ serve(async (req) => {
             for (let i = 0; i < productIdsToDelete.length; i += CHUNK_SIZE) {
               const chunkIds = productIdsToDelete.slice(i, i + CHUNK_SIZE);
 
-              await Promise.all([
-                supabase.from("product_images").delete().in("product_id", chunkIds),
-                supabase.from("product_variants").delete().in("product_id", chunkIds),
-                supabase.from("product_characteristics").delete().in("product_id", chunkIds),
-                supabase.from("buy_together_products").delete().or(`product_id.in.(${chunkIds.join(',')}),related_product_id.in.(${chunkIds.join(',')})`),
-              ]);
-              await supabase.from("products").delete().in("id", chunkIds);
+              // Check for order_items references before deleting variants
+              const safeToDeleteProductIds: string[] = [];
+              const deactivateProductIds: string[] = [];
+              for (const pid of chunkIds) {
+                const { data: prodVariants } = await supabase
+                  .from("product_variants")
+                  .select("id")
+                  .eq("product_id", pid);
+                const varIds = (prodVariants || []).map((v: any) => v.id);
+                let hasOrderRef = false;
+                if (varIds.length > 0) {
+                  const { data: orderRefs } = await supabase
+                    .from("order_items")
+                    .select("id")
+                    .in("product_variant_id", varIds)
+                    .limit(1);
+                  hasOrderRef = (orderRefs?.length || 0) > 0;
+                }
+                if (hasOrderRef) {
+                  deactivateProductIds.push(pid);
+                } else {
+                  safeToDeleteProductIds.push(pid);
+                }
+              }
+              // Deactivate products with order references
+              if (deactivateProductIds.length > 0) {
+                await supabase.from("product_variants").update({ is_active: false }).in("product_id", deactivateProductIds);
+                await supabase.from("products").update({ is_active: false }).in("id", deactivateProductIds);
+                console.log(`[cleanup_variations] Deactivated ${deactivateProductIds.length} products (referenced in orders)`);
+              }
+              // Delete products without order references
+              if (safeToDeleteProductIds.length > 0) {
+                await Promise.all([
+                  supabase.from("product_images").delete().in("product_id", safeToDeleteProductIds),
+                  supabase.from("product_variants").delete().in("product_id", safeToDeleteProductIds),
+                  supabase.from("product_characteristics").delete().in("product_id", safeToDeleteProductIds),
+                  supabase.from("buy_together_products").delete().or(`product_id.in.(${safeToDeleteProductIds.join(',')}),related_product_id.in.(${safeToDeleteProductIds.join(',')})`),
+                ]);
+                await supabase.from("products").delete().in("id", safeToDeleteProductIds);
+              }
 
               cleanedCount += chunkIds.length;
             }
