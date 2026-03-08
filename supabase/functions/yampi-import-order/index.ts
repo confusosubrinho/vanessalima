@@ -473,7 +473,9 @@ async function importSingleOrder(
   const customer = (yampiOrder.customer as Record<string, unknown>) || {};
   const customerData = (customer.data as Record<string, unknown>) || customer;
   const customerEmail = (customerData.email as string) || null;
-  const customerName = `${customerData.first_name || ""} ${customerData.last_name || ""}`.trim() || "Cliente Yampi";
+  const customerName = (customerData.name as string)
+    || ((customerData.first_name as string) ? `${customerData.first_name} ${customerData.last_name || ""}`.trim() : null)
+    || "Cliente Yampi";
   const customerPhone = ((customerData.phone as Record<string, unknown>)?.full_number as string) || (customerData.phone as string) || null;
   const customerCpf = (customerData.cpf as string) || (customerData.cnpj as string) || null;
 
