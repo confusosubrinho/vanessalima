@@ -354,9 +354,12 @@ Deno.serve(async (req) => {
   }
 });
 
+// Keep a reference to request origin for jsonRes — set at handler entry
+let _currentOrigin: string | null = null;
+
 function jsonRes(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...getCorsHeaders(null), "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(_currentOrigin), "Content-Type": "application/json" },
   });
 }

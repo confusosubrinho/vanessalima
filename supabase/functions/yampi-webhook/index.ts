@@ -1,8 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -107,11 +108,15 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (existingBySession) {
-          const customer = resourceData?.customer || resourceData?.buyer || {};
+          // Bug fix: unwrap customer.data wrapper (Yampi API may wrap customer in .data)
+          const rawCustomer = resourceData?.customer || resourceData?.buyer || {};
+          const customer = rawCustomer?.data || rawCustomer;
           const customerEmail = customer?.email || resourceData?.email || null;
-          const customerName = customer?.name || customer?.first_name
-            ? `${customer?.first_name || ""} ${customer?.last_name || ""}`.trim()
-            : resourceData?.customer_name || "Cliente Yampi";
+          // Bug fix: correct ternary precedence for customerName
+          const customerName = customer?.name
+            || (customer?.first_name ? `${customer.first_name} ${customer?.last_name || ""}`.trim() : null)
+            || resourceData?.customer_name
+            || "Cliente Yampi";
           const customerPhone = customer?.phone?.full_number || customer?.phone || null;
           const customerCpf = customer?.cpf || customer?.document || null;
           const shipping = resourceData?.shipping_address || resourceData?.address || customer?.address || {};
@@ -144,13 +149,26 @@ Deno.serve(async (req) => {
             external_reference: yampiOrderId,
           } as Record<string, unknown>).eq("id", existingBySession.id);
 
+          // Convert existing reserves to debits, or create new debits
           const { data: existingItems } = await supabase.from("order_items").select("id, product_variant_id, quantity").eq("order_id", existingBySession.id);
           for (const row of existingItems || []) {
             if (!row.product_variant_id) continue;
             const { data: alreadyDebit } = await supabase.from("inventory_movements").select("id").eq("order_id", existingBySession.id).eq("variant_id", row.product_variant_id).eq("type", "debit").maybeSingle();
             if (!alreadyDebit) {
-              await supabase.rpc("decrement_stock", { p_variant_id: row.product_variant_id, p_quantity: row.quantity });
-              await supabase.from("inventory_movements").insert({ variant_id: row.product_variant_id, order_id: existingBySession.id, type: "debit", quantity: row.quantity });
+              // Check if there's already a reserve — if so, convert to debit (no need to decrement again)
+              const { data: existingReserve } = await supabase.from("inventory_movements").select("id").eq("order_id", existingBySession.id).eq("variant_id", row.product_variant_id).eq("type", "reserve").maybeSingle();
+              if (existingReserve) {
+                // Convert reserve to debit
+                await supabase.from("inventory_movements").update({ type: "debit" }).eq("id", existingReserve.id);
+              } else {
+                // No reserve exists — decrement stock now
+                const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: row.product_variant_id, p_quantity: row.quantity });
+                const stockData = stockResult.data as { success: boolean; error?: string } | null;
+                if (stockData && !stockData.success) {
+                  console.warn(`[yampi-webhook] decrement_stock failed for variant ${row.product_variant_id}: ${stockData.error} — continuing anyway`);
+                }
+                await supabase.from("inventory_movements").insert({ variant_id: row.product_variant_id, order_id: existingBySession.id, type: "debit", quantity: row.quantity });
+              }
             }
           }
 
@@ -201,11 +219,15 @@ Deno.serve(async (req) => {
         }
       }
 
-      const customer = resourceData?.customer || resourceData?.buyer || {};
+      // Bug fix: unwrap customer.data wrapper (Yampi API may wrap customer in .data)
+      const rawCustomer = resourceData?.customer || resourceData?.buyer || {};
+      const customer = rawCustomer?.data || rawCustomer;
       const customerEmail = customer?.email || resourceData?.email || null;
-      const customerName = customer?.name || customer?.first_name
-        ? `${customer?.first_name || ""} ${customer?.last_name || ""}`.trim()
-        : resourceData?.customer_name || "Cliente Yampi";
+      // Bug fix: correct ternary precedence for customerName
+      const customerName = customer?.name
+        || (customer?.first_name ? `${customer.first_name} ${customer?.last_name || ""}`.trim() : null)
+        || resourceData?.customer_name
+        || "Cliente Yampi";
       const customerPhone = customer?.phone?.full_number || customer?.phone || null;
       const customerCpf = customer?.cpf || customer?.document || null;
 
@@ -361,7 +383,12 @@ Deno.serve(async (req) => {
         });
 
         if (localVariant?.id) {
-          await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
+          // Bug fix: check decrement_stock result before inserting inventory_movement
+          const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
+          const stockData = stockResult.data as { success: boolean; error?: string } | null;
+          if (stockData && !stockData.success) {
+            console.warn(`[yampi-webhook] decrement_stock failed for variant ${localVariant.id}: ${stockData.error} — continuing order processing`);
+          }
           await supabase.from("inventory_movements").insert({
             variant_id: localVariant.id,
             order_id: order.id,
