@@ -1004,7 +1004,19 @@ serve(async (req) => {
             const stockJson = await stockRes.json();
             for (const s of (stockJson?.data || [])) {
               const bId = s.produto?.id; const qty = s.saldoVirtualTotal ?? 0;
-              if (bId) { const { data: lv } = await supabase.from("product_variants").select("id").eq("bling_variant_id", bId).maybeSingle(); if (lv) { await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", lv.id); stockUpdated++; } }
+              if (bId) {
+                const { data: lv } = await supabase.from("product_variants").select("id").eq("bling_variant_id", bId).maybeSingle();
+                if (lv) {
+                  // Check for recent local movements before overwriting stock
+                  const hasRecent = await hasRecentLocalMovements(supabase, lv.id, 10);
+                  if (hasRecent) {
+                    console.log(`[relink] Skipping stock overwrite for variant ${lv.id} — recent local movements`);
+                  } else {
+                    await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", lv.id);
+                    stockUpdated++;
+                  }
+                }
+              }
             }
           } catch (err: any) { console.error(`[relink] Error for parent ${parentBlingId}:`, err.message); }
         }
