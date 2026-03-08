@@ -53,6 +53,7 @@ Deno.serve(async (req) => {
 
       const product = (variant as any).products;
       const unitPrice = variant.sale_price ?? variant.base_price ?? product?.sale_price ?? product?.base_price;
+      const unitCost = variant.base_price ?? product?.base_price ?? unitPrice;
       const yampiProductId = product?.yampi_product_id;
       if (!yampiProductId) {
         return new Response(JSON.stringify({ error: "Produto sem yampi_product_id mapeado" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
