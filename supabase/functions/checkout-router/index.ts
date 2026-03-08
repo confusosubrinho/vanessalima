@@ -337,9 +337,17 @@ Deno.serve(async (req) => {
       if (errMsg && !redirectUrl) {
         return jsonRes({ success: false, provider, channel, experience, action: "redirect", error: errMsg }, 400, corsHeaders);
       }
-      if (orderId && yampiData.session_id) {
-        await supabase.from("orders").update({ checkout_session_id: yampiData.session_id as string }).eq("id", orderId);
+      const yampiSessionId = yampiData.session_id as string | undefined;
+      if (orderId && yampiSessionId) {
+        await supabase.from("orders").update({ checkout_session_id: yampiSessionId }).eq("id", orderId);
       }
+      // Bug fix: Replace Stripe placeholder {CHECKOUT_SESSION_ID} with actual session ID for Yampi
+      let finalSuccessUrl = successUrl;
+      if (yampiSessionId && finalSuccessUrl) {
+        finalSuccessUrl = finalSuccessUrl.replace("{CHECKOUT_SESSION_ID}", yampiSessionId);
+      }
+      // If redirect_url from Yampi is empty, redirect to success page with session
+      const fallbackRedirect = finalSuccessUrl || `${origin}/checkout/obrigado?session_id=${yampiSessionId || ""}`;
       console.log(JSON.stringify({ scope: "checkout-router", request_id: requestId, route: "start", provider, channel, duration_ms: Date.now() - t0 }));
       return jsonRes(
         {
@@ -348,7 +356,7 @@ Deno.serve(async (req) => {
           channel,
           experience,
           action: "redirect",
-          redirect_url: redirectUrl || `${origin}/checkout`,
+          redirect_url: redirectUrl || fallbackRedirect,
         },
         200,
         corsHeaders

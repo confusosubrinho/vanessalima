@@ -243,14 +243,18 @@ Deno.serve(async (req) => {
 
             if (variant.yampi_sku_id) {
               const unitPrice = variant.sale_price ?? variant.base_price ?? product.sale_price ?? product.base_price;
+              // Include product_id in PUT body — required by Yampi API
+              const yampiProductId = (product as Record<string, unknown>).yampi_product_id;
+              const skuUpdateBody: Record<string, unknown> = {
+                price_cost: unitPrice,
+                price_sale: unitPrice,
+                quantity: variant.stock_quantity,
+              };
+              if (yampiProductId) skuUpdateBody.product_id = yampiProductId;
               await fetchWithTimeout(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
                 method: "PUT",
                 headers: yampiHeaders,
-                body: JSON.stringify({
-                  price_cost: unitPrice,
-                  price_sale: unitPrice,
-                  quantity: variant.stock_quantity,
-                }),
+                body: JSON.stringify(skuUpdateBody),
               });
             }
           }

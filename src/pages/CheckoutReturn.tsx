@@ -47,13 +47,28 @@ export default function CheckoutReturn() {
     if (!sessionId || order) return;
 
     const fetchOrder = async () => {
-      const { data: linkedOrder } = await supabase
+      // Try external_reference first, then fallback to checkout_session_id (Yampi uses session UUID there)
+      let linkedOrder = null;
+      const { data: byExtRef } = await supabase
         .from("orders")
         .select("id, order_number, status, total_amount, customer_email, provider")
         .eq("external_reference", sessionId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle() as any;
+
+      if (byExtRef) {
+        linkedOrder = byExtRef;
+      } else {
+        const { data: bySession } = await supabase
+          .from("orders")
+          .select("id, order_number, status, total_amount, customer_email, provider")
+          .eq("checkout_session_id", sessionId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle() as any;
+        linkedOrder = bySession;
+      }
 
       if (linkedOrder) {
         setOrder(linkedOrder as OrderInfo);

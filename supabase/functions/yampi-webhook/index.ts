@@ -54,6 +54,8 @@ Deno.serve(async (req) => {
     if (event === "order.status.updated") {
       if (["paid", "approved", "payment_approved"].includes(statusValue)) effectiveEvent = "order.paid";
       else if (["cancelled", "canceled", "refused", "refunded"].includes(statusValue)) effectiveEvent = "order.cancelled";
+      else if (["shipped", "sent", "sending"].includes(statusValue)) effectiveEvent = "order.shipped";
+      else if (["delivered"].includes(statusValue)) effectiveEvent = "order.delivered";
     }
 
     // ===== PAYMENT APPROVED -> UPDATE EXISTING (by session) OR CREATE ORDER =====
@@ -131,17 +133,23 @@ Deno.serve(async (req) => {
             }
           }
 
-          await supabase.from("payments").insert({
-            order_id: existingBySession.id,
-            provider: "yampi",
-            status: "approved",
-            payment_method: paymentMethod,
-            gateway,
-            transaction_id: transactionId,
-            installments,
-            amount: totalAmount,
-            raw: payload,
-          });
+          // Idempotency: skip if payment with same transaction_id already exists
+          const existingPaymentCheck = transactionId
+            ? await supabase.from("payments").select("id").eq("order_id", existingBySession.id).eq("transaction_id", transactionId).maybeSingle()
+            : { data: null };
+          if (!existingPaymentCheck.data) {
+            await supabase.from("payments").insert({
+              order_id: existingBySession.id,
+              provider: "yampi",
+              status: "approved",
+              payment_method: paymentMethod,
+              gateway,
+              transaction_id: transactionId,
+              installments,
+              amount: totalAmount,
+              raw: payload,
+            });
+          }
           await supabase.from("abandoned_carts").update({ recovered: true, recovered_at: new Date().toISOString() }).eq("session_id", sessionId);
           if (customerEmail) {
             const { data: existingCustomer } = await supabase.from("customers").select("id, total_orders, total_spent").eq("email", customerEmail).maybeSingle();
@@ -332,18 +340,23 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Insert payment record
-      await supabase.from("payments").insert({
-        order_id: order.id,
-        provider: "yampi",
-        status: "approved",
-        payment_method: paymentMethod,
-        gateway,
-        transaction_id: transactionId,
-        installments,
-        amount: totalAmount,
-        raw: payload,
-      });
+      // Insert payment record (with idempotency check)
+      const existingPaymentCheck2 = transactionId
+        ? await supabase.from("payments").select("id").eq("order_id", order.id).eq("transaction_id", transactionId).maybeSingle()
+        : { data: null };
+      if (!existingPaymentCheck2.data) {
+        await supabase.from("payments").insert({
+          order_id: order.id,
+          provider: "yampi",
+          status: "approved",
+          payment_method: paymentMethod,
+          gateway,
+          transaction_id: transactionId,
+          installments,
+          amount: totalAmount,
+          raw: payload,
+        });
+      }
 
       // Mark abandoned cart as recovered
       if (sessionId) {
@@ -392,7 +405,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== #10 SHIPPED EVENTS =====
-    if (shippedEvents.includes(event)) {
+    if (shippedEvents.includes(effectiveEvent)) {
       const externalRef = resourceData?.order_id?.toString() || resourceData?.id?.toString() || "";
       const trackingCode = resourceData?.tracking_code || resourceData?.tracking?.code || resourceData?.shipment?.tracking_code || null;
 
@@ -414,7 +427,7 @@ Deno.serve(async (req) => {
     }
 
     // ===== #10 DELIVERED EVENTS =====
-    if (deliveredEvents.includes(event)) {
+    if (deliveredEvents.includes(effectiveEvent)) {
       const externalRef = resourceData?.order_id?.toString() || resourceData?.id?.toString() || "";
       if (externalRef) {
         const { data: existingOrder } = await supabase
