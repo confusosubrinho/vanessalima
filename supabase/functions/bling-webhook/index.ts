@@ -531,7 +531,16 @@ async function batchStockSync(supabase: any) {
               console.log(`[cron] Skipping stock overwrite for variant ${vid} (bling_id=${blingId}) — recent local movements`);
               continue;
             }
+            // Get current stock for audit trail
+            const { data: currentVar } = await supabase.from("product_variants").select("stock_quantity").eq("id", vid).maybeSingle();
+            const oldStock = currentVar?.stock_quantity ?? 0;
             await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", vid);
+            // Record inventory movement for audit
+            if (qty !== oldStock) {
+              await supabase.from("inventory_movements").insert({
+                variant_id: vid, quantity: qty - oldStock, type: "bling_sync",
+              }).then(() => {}).catch(() => {});
+            }
             updated++;
           }
           const pid = blingIdToProductId.get(blingId);
