@@ -1078,25 +1078,24 @@ serve(async (req) => {
               const chunkIds = productIdsToDelete.slice(i, i + CHUNK_SIZE);
 
               // Check for order_items references before deleting variants
-              const { data: referencedVariants } = await supabase
-                .from("product_variants")
-                .select("id")
-                .in("product_id", chunkIds);
               const safeToDeleteProductIds: string[] = [];
               const deactivateProductIds: string[] = [];
               for (const pid of chunkIds) {
-                const prodVariants = (referencedVariants || []).filter((v: any) => {
-                  // We need to check per product, but we only have variant ids here
-                  // Re-query per product
-                  return true;
-                });
-                // Check if any variant of this product is in order_items
-                const { data: orderRefs } = await supabase
-                  .from("order_items")
+                const { data: prodVariants } = await supabase
+                  .from("product_variants")
                   .select("id")
-                  .in("product_variant_id", (referencedVariants || []).map((v: any) => v.id))
-                  .limit(1);
-                if (orderRefs?.length) {
+                  .eq("product_id", pid);
+                const varIds = (prodVariants || []).map((v: any) => v.id);
+                let hasOrderRef = false;
+                if (varIds.length > 0) {
+                  const { data: orderRefs } = await supabase
+                    .from("order_items")
+                    .select("id")
+                    .in("product_variant_id", varIds)
+                    .limit(1);
+                  hasOrderRef = (orderRefs?.length || 0) > 0;
+                }
+                if (hasOrderRef) {
                   deactivateProductIds.push(pid);
                 } else {
                   safeToDeleteProductIds.push(pid);
