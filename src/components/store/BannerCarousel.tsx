@@ -5,11 +5,14 @@ import { useBanners } from '@/hooks/useProducts';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { resolveImageUrl } from '@/lib/imageUrl';
 
+const SWIPE_THRESHOLD = 50;
+
 export function BannerCarousel() {
   const { data: banners } = useBanners();
   const isMobile = useIsMobile();
   const [currentIndex, setCurrentIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const displayBanners = (banners || []).filter((b: any) =>
     b.is_active !== false &&
@@ -46,12 +49,34 @@ export function BannerCarousel() {
     resetTimer();
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
+    const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+
+    // Only swipe if horizontal movement > vertical (avoid scroll hijack)
+    if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dx) < Math.abs(dy)) return;
+
+    if (dx < 0) {
+      goToNext();
+    } else {
+      goToPrevious();
+    }
+  };
+
   return (
     <div
       className="relative w-full overflow-hidden bg-muted"
       role="region"
       aria-roledescription="carrossel"
       aria-label="Banner promocional"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       <div 
         className="flex transition-transform duration-500 ease-in-out"
@@ -71,7 +96,6 @@ export function BannerCarousel() {
           return (
             <div key={banner.id} className="w-full flex-shrink-0">
               <a href={banner.cta_url || '#'} className="block">
-                {/* Mobile: max-height 550px, imagem inteira (object-contain) */}
                 <span
                   className={
                     isMobile
