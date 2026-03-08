@@ -249,6 +249,7 @@ Deno.serve(async (req) => {
                 price_cost: unitPrice,
                 price_sale: unitPrice,
                 quantity: variant.stock_quantity,
+                quantity_managed: true,
               };
               if (yampiProductId) skuUpdateBody.product_id = yampiProductId;
               await fetchWithTimeout(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
