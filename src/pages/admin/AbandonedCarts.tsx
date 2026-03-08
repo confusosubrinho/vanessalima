@@ -91,8 +91,7 @@ export default function AbandonedCarts() {
     enabled: !!expandedCart,
   });
 
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
+  // formatPrice imported from @/lib/formatters
 
   const handleWhatsApp = async (cart: AbandonedCart) => {
     if (!cart.phone) {

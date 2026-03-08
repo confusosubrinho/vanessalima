@@ -193,7 +193,7 @@ export default function Coupons() {
     }
   };
 
-  const formatPrice = (price: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
+  // formatPrice imported from @/lib/formatters
 
   const TYPE_LABELS: Record<string, string> = {
     standard: 'Padrão',

@@ -200,8 +200,7 @@ export default function Products() {
     if (!open) setEditingProduct(null);
   };
 
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
+  // formatPrice imported from @/lib/formatters
 
   const isOutOfStock = (p: Product) => {
     if (!p.variants || p.variants.length === 0) return false;
