@@ -18,6 +18,10 @@ import { useDragReorder } from '@/hooks/useDragReorder';
 import { BannerImageOptionsDialog } from '@/components/admin/BannerImageOptionsDialog';
 import type { BannerImageOptionsResult } from '@/components/admin/BannerImageOptionsDialog';
 import { MediaPickerDialog } from '@/components/admin/MediaPickerDialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Banner {
   id: string;
