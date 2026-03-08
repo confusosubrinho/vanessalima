@@ -20,6 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { compressImageToWebP } from '@/lib/imageCompressor';
 import { Plus, Pencil, Trash2, GripVertical, Upload, Monitor, Smartphone, Video, Image as ImageIcon } from 'lucide-react';
