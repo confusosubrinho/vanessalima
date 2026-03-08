@@ -4,6 +4,7 @@
  * Requer autenticação de admin (JWT).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -89,9 +90,10 @@ Deno.serve(async (req) => {
     Accept: "application/json",
   };
 
+  // Y26: Use fetchWithTimeout instead of bare fetch
   async function fetchYampiOrder(q: string): Promise<Record<string, unknown> | null> {
     const searchUrl = `${baseUrl}/orders?${includeQuery}&q=${encodeURIComponent(q)}&limit=5`;
-    const res = await fetch(searchUrl, { headers });
+    const res = await fetchWithTimeout(searchUrl, { headers });
     if (!res.ok) return null;
     const json = await res.json();
     const orders = json?.data || [];
@@ -111,7 +113,7 @@ Deno.serve(async (req) => {
     // 3) Se ainda não achou, tenta GET direto por ID (algumas APIs suportam)
     if (!yampiOrder) {
       const directUrl = `${baseUrl}/orders/${order.external_reference}?${includeQuery}`;
-      const res = await fetch(directUrl, { headers });
+      const res = await fetchWithTimeout(directUrl, { headers });
       if (res.ok) {
         const json = await res.json();
         yampiOrder = (json?.data as Record<string, unknown>) || (json as Record<string, unknown>) || null;

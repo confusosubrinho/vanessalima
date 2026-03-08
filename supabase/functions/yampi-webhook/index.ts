@@ -643,6 +643,20 @@ Deno.serve(async (req) => {
       }
       if (existingOrder) {
         await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: effectiveEvent, event_hash: cancelHash, payload });
+
+        // Y30: Insert email automation log for cancellation
+        const customerEmail = resourceData?.customer?.email || resourceData?.email || null;
+        const customerName = resourceData?.customer?.name || resourceData?.customer_name || "Cliente";
+        const { data: cancelAutomation } = await supabase.from("email_automations")
+          .select("id").eq("trigger_event", "order_cancelled").eq("is_active", true).limit(1).maybeSingle();
+        if (customerEmail) {
+          await supabase.from("email_automation_logs").insert({
+            recipient_email: customerEmail,
+            recipient_name: customerName,
+            status: "pending",
+            automation_id: cancelAutomation?.id || null,
+          });
+        }
       }
       return jsonOk({ ok: true, event: effectiveEvent });
     }

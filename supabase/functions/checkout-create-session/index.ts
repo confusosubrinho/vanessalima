@@ -3,12 +3,19 @@ import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
-  _currentOrigin = req.headers.get("Origin");
+  const origin = req.headers.get("Origin");
   const corsHeaders = {
-    ...getCorsHeaders(_currentOrigin),
+    ...getCorsHeaders(origin),
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-request-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   };
+
+  function jsonRes(body: Record<string, unknown>, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -236,28 +243,38 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
         };
 
-        // Sync SKUs if enabled
+        // Y22 + Y25: Sync SKUs if enabled — with correct price_cost and try/catch per SKU
         if (config.sync_enabled) {
           for (const item of items) {
             const variant = variants.find((v) => v.id === item.variant_id)!;
             const product = productMap.get(variant.product_id)!;
 
             if (variant.yampi_sku_id) {
-              const unitPrice = variant.sale_price ?? variant.base_price ?? product.sale_price ?? product.base_price;
-              // Include product_id in PUT body — required by Yampi API
+              const salePrice = variant.sale_price ?? variant.base_price ?? product.sale_price ?? product.base_price;
+              const costPrice = variant.base_price ?? product.base_price;
               const yampiProductId = (product as Record<string, unknown>).yampi_product_id;
               const skuUpdateBody: Record<string, unknown> = {
-                price_cost: unitPrice,
-                price_sale: unitPrice,
+                price_cost: costPrice,
+                price_sale: salePrice,
                 quantity: variant.stock_quantity,
                 quantity_managed: true,
               };
               if (yampiProductId) skuUpdateBody.product_id = yampiProductId;
-              await fetchWithTimeout(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
-                method: "PUT",
-                headers: yampiHeaders,
-                body: JSON.stringify(skuUpdateBody),
-              });
+
+              try {
+                const syncRes = await fetchWithTimeout(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
+                  method: "PUT",
+                  headers: yampiHeaders,
+                  body: JSON.stringify(skuUpdateBody),
+                });
+                if (!syncRes.ok) {
+                  const errBody = await syncRes.text().catch(() => "");
+                  console.warn(`[checkout-create-session] Fast sync SKU ${variant.yampi_sku_id} failed (${syncRes.status}): ${errBody}`);
+                }
+              } catch (syncErr: unknown) {
+                const msg = syncErr instanceof Error ? syncErr.message : "unknown";
+                console.warn(`[checkout-create-session] Fast sync SKU ${variant.yampi_sku_id} error: ${msg}`);
+              }
             }
           }
         }
@@ -273,8 +290,8 @@ Deno.serve(async (req) => {
         // Build success redirect URL
         const successUrl = (body?.success_url as string) || (config.success_url as string) || null;
         // Derive base URL from request origin or config
-        const origin = req.headers.get("origin") || (config.store_url as string) || "";
-        const redirectAfterPayment = successUrl || (origin ? `${origin}/checkout/obrigado?session_id=${sessionId}` : undefined);
+        const reqOrigin = req.headers.get("origin") || (config.store_url as string) || "";
+        const redirectAfterPayment = successUrl || (reqOrigin ? `${reqOrigin}/checkout/obrigado?session_id=${sessionId}` : undefined);
 
         const attempts = [
           {
@@ -351,16 +368,9 @@ Deno.serve(async (req) => {
     return jsonRes({ redirect_url: "/checkout" });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro interno";
-    return jsonRes({ error: msg }, 500);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { ...getCorsHeaders(origin), "Content-Type": "application/json" },
+    });
   }
 });
-
-// Keep a reference to request origin for jsonRes — set at handler entry
-let _currentOrigin: string | null = null;
-
-function jsonRes(body: Record<string, unknown>, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...getCorsHeaders(_currentOrigin), "Content-Type": "application/json" },
-  });
-}
