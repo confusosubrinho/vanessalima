@@ -16,32 +16,11 @@ function createSupabase(authHeader?: string) {
   );
 }
 
-async function getValidToken(supabase: any): Promise<string> {
-  const { data: settings, error } = await supabase
-    .from("store_settings")
-    .select("id, bling_client_id, bling_client_secret, bling_access_token, bling_refresh_token, bling_token_expires_at")
-    .limit(1).maybeSingle();
-  if (error || !settings) throw new Error("Configurações não encontradas");
-  if (!settings.bling_access_token) throw new Error("Bling não conectado. Autorize primeiro nas Integrações.");
+// Use shared token refresh with optimistic locking
+import { getValidTokenSafe } from "../_shared/blingTokenRefresh.ts";
 
-  const expiresAt = settings.bling_token_expires_at ? new Date(settings.bling_token_expires_at) : new Date(0);
-  if (expiresAt.getTime() - 300000 < Date.now() && settings.bling_refresh_token) {
-    const basicAuth = btoa(`${settings.bling_client_id}:${settings.bling_client_secret}`);
-    const tokenResponse = await fetch(BLING_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: `Basic ${basicAuth}`, Accept: "application/json" },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: settings.bling_refresh_token }),
-    });
-    const tokenData = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokenData.access_token) throw new Error("Token do Bling expirado. Reconecte o Bling.");
-    await supabase.from("store_settings").update({
-      bling_access_token: tokenData.access_token,
-      bling_refresh_token: tokenData.refresh_token,
-      bling_token_expires_at: new Date(Date.now() + (tokenData.expires_in || 21600) * 1000).toISOString(),
-    } as any).eq("id", settings.id);
-    return tokenData.access_token;
-  }
-  return settings.bling_access_token;
+async function getValidToken(supabase: any): Promise<string> {
+  return getValidTokenSafe(supabase);
 }
 
 serve(async (req) => {

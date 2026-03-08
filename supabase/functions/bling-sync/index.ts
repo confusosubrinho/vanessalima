@@ -1039,7 +1039,24 @@ serve(async (req) => {
         break;
       }
 
-      case "create_order": result = await createOrder(supabase, token, payload.order_id); break;
+      case "create_order": {
+        // Bug 6 Fix: Check for duplicate and save bling_order_id
+        const { data: existingOrder } = await supabase.from("orders").select("id, notes").eq("id", payload.order_id).maybeSingle();
+        if (existingOrder?.notes?.includes("bling_order_id:")) {
+          result = { bling_order_id: existingOrder.notes.match(/bling_order_id:(\d+)/)?.[1], duplicate: true };
+        } else {
+          const orderResult = await createOrder(supabase, token, payload.order_id);
+          // Save bling_order_id back to order
+          if (orderResult.bling_order_id) {
+            const existingNotes = existingOrder?.notes || "";
+            await supabase.from("orders").update({
+              notes: `${existingNotes} | bling_order_id:${orderResult.bling_order_id}`.trim(),
+            }).eq("id", payload.order_id);
+          }
+          result = orderResult;
+        }
+        break;
+      }
       case "generate_nfe": result = await generateNfe(token, parseInt(payload.bling_order_id)); break;
       case "order_to_nfe": { const or = await createOrder(supabase, token, payload.order_id); const nf = await generateNfe(token, or.bling_order_id); result = { ...or, ...nf }; break; }
       default: return new Response(JSON.stringify({ error: "Ação inválida" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });

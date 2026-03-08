@@ -505,9 +505,16 @@ async function batchStockSync(supabase: any) {
     }
   }
 
-  // P0.1/P0.2 FIX: Update sync status for ALL products that had stock updated
+  // Improvement 2: Mark ALL checked products as synced (not just those with stock changes)
+  // This clears "error" status for products that were successfully checked
+  const allCheckedProductIds = new Set<string>(updatedProductIds);
+  for (const blingId of allBlingIds) {
+    const pid = blingIdToProductId.get(blingId);
+    if (pid) allCheckedProductIds.add(pid);
+  }
+
   const now = new Date().toISOString();
-  const productIdsArr = [...updatedProductIds];
+  const productIdsArr = [...allCheckedProductIds];
   let batch: string[] = [];
   for (let i = 0; i < productIdsArr.length; i++) {
     batch.push(productIdsArr[i]);
