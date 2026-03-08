@@ -1,67 +1,63 @@
 
 
-## Diagnosis: RLS Policy on `orders` Table Blocking Inserts
-
-The current INSERT policy on `orders` has a logic gap. It checks:
-- Branch 1: `auth.uid() IS NOT NULL AND user_id = auth.uid()` (logged-in user)
-- Branch 2: `auth.uid() IS NULL AND user_id IS NULL AND access_token IS NOT NULL` (guest)
-
-**The gap**: If the browser has a stale/partial Supabase auth session (e.g. expired token still in localStorage), `auth.uid()` may evaluate as NOT NULL but `user_id` is set to NULL in the code (because `getSession()` returns null). This fails both branches.
-
-## Plan
-
-### 1. Replace the INSERT RLS policy with a simpler, robust version
-
-Drop the current policy and create a new one that covers all cases:
-
-```sql
-DROP POLICY "Anyone can create orders" ON public.orders;
-
-CREATE POLICY "Anyone can create orders" ON public.orders
-FOR INSERT WITH CHECK (
-  -- Logged-in: user_id must match auth
-  (user_id IS NOT NULL AND user_id = auth.uid())
-  OR
-  -- Guest: no user_id, must have access_token
-  (user_id IS NULL AND access_token IS NOT NULL)
-);
-```
-
-Key change: Remove the `auth.uid() IS NULL` check from the guest branch. A guest order just needs `user_id IS NULL AND access_token IS NOT NULL` — we don't need to verify the JWT state.
-
-### 2. Also fix the UPDATE policy for guests
-
-The current guest update policy also checks `auth.uid() IS NULL`, which has the same vulnerability:
-
-```sql
-DROP POLICY "Guest users can update own orders" ON public.orders;
-
-CREATE POLICY "Guest users can update own orders" ON public.orders
-FOR UPDATE USING (
-  user_id IS NULL AND access_token IS NOT NULL
-) WITH CHECK (
-  user_id IS NULL AND access_token IS NOT NULL
-);
-```
-
-### 3. Add a logged-in user UPDATE policy
-
-Currently only admins and guests can update orders. Logged-in users should also be able to update their own orders (e.g. during payment processing):
-
-```sql
-CREATE POLICY "Users can update own orders" ON public.orders
-FOR UPDATE USING (
-  user_id IS NOT NULL AND user_id = auth.uid()
-) WITH CHECK (
-  user_id IS NOT NULL AND user_id = auth.uid()
-);
-```
-
-### 4. Verify end-to-end via browser test
-
-After applying the migration, navigate through the full checkout flow (product → cart → checkout → payment) to confirm orders are created successfully without RLS errors.
+## Auditoria do Painel Admin (Parte 2) — Bugs e Melhorias
 
 ---
 
-**Technical note**: These are database migration changes only — no frontend code changes needed. The root cause is purely the overly strict RLS conditions.
+### Bug 1 (Alto): SalesDashboard inclui pedidos cancelados em receita e KPIs
+
+Em `SalesDashboard.tsx` (linhas 104-116), `stats.revenue` soma `total_amount` de **todos** os pedidos sem filtrar cancelados. O mesmo erro corrigido no `Dashboard.tsx` existe aqui. Receita, ticket médio e comparação com período anterior ficam inflados. A query `allOrders` (linha 96-101) também não filtra cancelados para o cálculo de `prevStats`.
+
+**Fix**: Filtrar `orders.filter(o => o.status !== 'cancelled')` antes de calcular `stats` e `prevStats`.
+
+---
+
+### Bug 2 (Alto): SalesDashboard carrega TODOS os pedidos sem limite
+
+A query `allOrders` (linha 96-101) faz `select('id, total_amount, status, created_at')` sem `.limit()`. Com milhares de pedidos, isso causa lentidão e pode atingir o limite de 1000 rows do Supabase, resultando em comparação de período anterior incorreta.
+
+**Fix**: Adicionar filtro temporal na query `allOrders` para carregar apenas os dados necessários para a comparação (período atual + anterior), ou usar `.limit(2000)` com ordenação.
+
+---
+
+### Bug 3 (Médio): Exclusão de cupom e categoria sem confirmação
+
+Em `Coupons.tsx` (linha 344), `deleteMutation.mutate(coupon.id)` é chamado diretamente sem AlertDialog. Em `Categories.tsx` (linha 198), `deleteMutation.mutate(category.id)` também não tem confirmação. Exclusão acidental com um clique.
+
+**Fix**: Adicionar AlertDialog de confirmação similar ao que foi implementado em Products.tsx.
+
+---
+
+### Bug 4 (Médio): Exclusão de banner sem confirmação
+
+Em `Banners.tsx` (linha 156-166), `deleteMutation` existe mas é chamado diretamente sem confirmação. Similar aos Cupons e Categorias.
+
+**Fix**: Adicionar AlertDialog de confirmação.
+
+---
+
+### Bug 5 (Médio): Reviews search com SQL injection via `.or()`
+
+Em `Reviews.tsx` (linha 58), a busca usa `.or(\`customer_name.ilike.%${search}%,comment.ilike.%${search}%\`)` com interpolação direta do `search`. Caracteres especiais como `,`, `.`, `(`, `)` no input podem quebrar a query PostgREST ou injetar filtros indesejados.
+
+**Fix**: Sanitizar o `search` removendo caracteres especiais de PostgREST antes da interpolação, ou usar `.ilike('customer_name', `%${search}%`)` com encadeamento.
+
+---
+
+### Bug 6 (Baixo): Settings salva `soft_descriptor` mas o campo não existe na tabela `store_settings`
+
+O formulário em `Settings.tsx` (linhas 23, 205-212) gerencia `soft_descriptor`, mas a tabela `store_settings` (conforme schema) não tem essa coluna. O `.update()` silenciosamente ignora a coluna inexistente, mas o valor nunca é persistido.
+
+**Fix**: Ou remover o campo do formulário, ou adicionar a coluna `soft_descriptor` via migration.
+
+---
+
+### Arquivos a Modificar
+
+1. **`src/pages/admin/SalesDashboard.tsx`** — Filtrar cancelados dos KPIs; limitar query allOrders
+2. **`src/pages/admin/Coupons.tsx`** — Adicionar AlertDialog de confirmação na exclusão
+3. **`src/pages/admin/Categories.tsx`** — Adicionar AlertDialog de confirmação na exclusão
+4. **`src/pages/admin/Banners.tsx`** — Adicionar AlertDialog de confirmação na exclusão
+5. **`src/pages/admin/Reviews.tsx`** — Sanitizar input de busca no `.or()`
+6. **`src/pages/admin/Settings.tsx`** — Adicionar coluna `soft_descriptor` via migration ou remover campo do form
 
