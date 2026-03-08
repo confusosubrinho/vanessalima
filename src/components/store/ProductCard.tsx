@@ -44,7 +44,7 @@ export function ProductCard({ product }: ProductCardProps) {
         .from('product_reviews')
         .select('rating')
         .eq('product_id', product.id)
-        .eq('is_approved', true);
+        .eq('status', 'published');
       if (error || !data || data.length === 0) return { avg: 0, count: 0 };
       const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
       return { avg, count: data.length };

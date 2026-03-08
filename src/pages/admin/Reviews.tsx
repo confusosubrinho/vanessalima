@@ -13,6 +13,7 @@ import { Star, CheckCircle, XCircle, MessageSquare, ExternalLink, Search } from 
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface ReviewRow {
   id: string;
@@ -38,12 +39,27 @@ const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'second
 export default function Reviews() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [ratingFilter, setRatingFilter] = useState('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+
+  // Pending count for badge
+  const { data: pendingCount } = useQuery({
+    queryKey: ['pending-reviews-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('product_reviews')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      if (error) return 0;
+      return count || 0;
+    },
+    staleTime: 30_000,
+  });
 
   const { data: reviews, isLoading } = useQuery({
     queryKey: ['admin-reviews', statusFilter, ratingFilter, search],
@@ -107,12 +123,40 @@ export default function Reviews() {
     </div>
   );
 
+  const renderActions = (r: ReviewRow) => (
+    <div className={`flex ${isMobile ? 'flex-wrap gap-1.5 mt-2' : 'flex-col gap-1 shrink-0'}`}>
+      {r.status !== 'published' && (
+        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => updateStatus.mutate({ ids: [r.id], status: 'published' })}>
+          <CheckCircle className="h-3 w-3 mr-1" />Publicar
+        </Button>
+      )}
+      {r.status !== 'rejected' && (
+        <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" onClick={() => updateStatus.mutate({ ids: [r.id], status: 'rejected' })}>
+          <XCircle className="h-3 w-3 mr-1" />Rejeitar
+        </Button>
+      )}
+      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setReplyingId(r.id); setReplyText(r.admin_reply || ''); }}>
+        <MessageSquare className="h-3 w-3 mr-1" />Responder
+      </Button>
+      {r.products && (
+        <a href={`/produto/${(r.products as any).slug}`} target="_blank" rel="noopener">
+          <Button size="sm" variant="ghost" className="text-xs h-7 w-full"><ExternalLink className="h-3 w-3 mr-1" />Ver</Button>
+        </a>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      <div>
+      <div className="flex items-center gap-2">
         <h1 className="text-xl md:text-3xl font-bold">Avaliações</h1>
-        <p className="text-sm text-muted-foreground">Modere e responda avaliações dos clientes</p>
+        {(pendingCount ?? 0) > 0 && (
+          <Badge variant="secondary" className="text-xs">
+            {pendingCount} pendente{pendingCount !== 1 ? 's' : ''}
+          </Badge>
+        )}
       </div>
+      <p className="text-sm text-muted-foreground">Modere e responda avaliações dos clientes</p>
 
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px]">
@@ -156,58 +200,42 @@ export default function Reviews() {
           {reviews.map(r => (
             <Card key={r.id} className={r.status === 'pending' ? 'border-yellow-300' : r.status === 'rejected' ? 'opacity-60' : ''}>
               <CardContent className="p-3 md:p-4">
-                <div className="flex items-start gap-3">
-                  <Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleSelect(r.id)} className="mt-1" />
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-sm">{r.customer_name}</span>
-                      {renderStars(r.rating)}
-                      <Badge variant={STATUS_BADGE[r.status]?.variant || 'secondary'} className="text-[10px]">
-                        {STATUS_BADGE[r.status]?.label || r.status}
-                      </Badge>
-                      {r.is_verified_purchase && <Badge variant="outline" className="text-[10px]">Compra verificada</Badge>}
-                    </div>
-                    {r.products && <p className="text-xs text-muted-foreground">Produto: {(r.products as any).name}</p>}
-                    {r.title && <p className="text-sm font-medium">{r.title}</p>}
-                    <p className="text-sm text-muted-foreground">{r.comment}</p>
-                    {r.admin_reply && (
-                      <div className="bg-muted/50 rounded-lg p-2 mt-2 text-xs">
-                        <span className="font-semibold">Resposta da loja:</span> {r.admin_reply}
+                <div className={`flex ${isMobile ? 'flex-col' : 'items-start'} gap-3`}>
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <Checkbox checked={selected.has(r.id)} onCheckedChange={() => toggleSelect(r.id)} className="mt-1" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-sm">{r.customer_name}</span>
+                        {renderStars(r.rating)}
+                        <Badge variant={STATUS_BADGE[r.status]?.variant || 'secondary'} className="text-[10px]">
+                          {STATUS_BADGE[r.status]?.label || r.status}
+                        </Badge>
+                        {r.is_verified_purchase && <Badge variant="outline" className="text-[10px]">Compra verificada</Badge>}
                       </div>
-                    )}
-                    {replyingId === r.id && (
-                      <div className="flex gap-2 mt-2">
-                        <Textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Sua resposta..." className="text-sm min-h-[60px]" />
-                        <div className="flex flex-col gap-1">
-                          <Button size="sm" onClick={() => submitReply.mutate({ id: r.id, reply: replyText })} disabled={!replyText.trim()}>Enviar</Button>
-                          <Button size="sm" variant="ghost" onClick={() => setReplyingId(null)}>Cancelar</Button>
+                      {r.products && <p className="text-xs text-muted-foreground">Produto: {(r.products as any).name}</p>}
+                      {r.title && <p className="text-sm font-medium">{r.title}</p>}
+                      <p className="text-sm text-muted-foreground">{r.comment}</p>
+                      {r.admin_reply && (
+                        <div className="bg-muted/50 rounded-lg p-2 mt-2 text-xs">
+                          <span className="font-semibold">Resposta da loja:</span> {r.admin_reply}
                         </div>
+                      )}
+                      {replyingId === r.id && (
+                        <div className="flex gap-2 mt-2">
+                          <Textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Sua resposta..." className="text-sm min-h-[60px]" />
+                          <div className="flex flex-col gap-1">
+                            <Button size="sm" onClick={() => submitReply.mutate({ id: r.id, reply: replyText })} disabled={!replyText.trim()}>Enviar</Button>
+                            <Button size="sm" variant="ghost" onClick={() => setReplyingId(null)}>Cancelar</Button>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                        <span>{format(new Date(r.created_at), "dd/MM/yyyy", { locale: ptBR })}</span>
                       </div>
-                    )}
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                      <span>{format(new Date(r.created_at), "dd/MM/yyyy", { locale: ptBR })}</span>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1 shrink-0">
-                    {r.status !== 'published' && (
-                      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => updateStatus.mutate({ ids: [r.id], status: 'published' })}>
-                        <CheckCircle className="h-3 w-3 mr-1" />Publicar
-                      </Button>
-                    )}
-                    {r.status !== 'rejected' && (
-                      <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" onClick={() => updateStatus.mutate({ ids: [r.id], status: 'rejected' })}>
-                        <XCircle className="h-3 w-3 mr-1" />Rejeitar
-                      </Button>
-                    )}
-                    <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setReplyingId(r.id); setReplyText(r.admin_reply || ''); }}>
-                      <MessageSquare className="h-3 w-3 mr-1" />Responder
-                    </Button>
-                    {r.products && (
-                      <a href={`/produto/${(r.products as any).slug}`} target="_blank" rel="noopener">
-                        <Button size="sm" variant="ghost" className="text-xs h-7 w-full"><ExternalLink className="h-3 w-3 mr-1" />Ver</Button>
-                      </a>
-                    )}
-                  </div>
+                  {!isMobile && renderActions(r)}
+                  {isMobile && renderActions(r)}
                 </div>
               </CardContent>
             </Card>
