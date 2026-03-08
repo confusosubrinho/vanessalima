@@ -302,13 +302,53 @@ async function syncProductFields(supabase: any, headers: any, productId: string,
     bling_last_error: null,
   }).eq("id", productId);
 
-  // Sync images only if toggle is on
+  // Bug 4 Fix: Re-upload images to storage instead of using raw Bling URLs (which expire)
   if (config.sync_images && detail.midia?.imagens?.internas?.length) {
     await supabase.from("product_images").delete().eq("product_id", productId);
-    const images = detail.midia.imagens.internas.map((img: any, idx: number) => ({
-      product_id: productId, url: img.link, is_primary: idx === 0, display_order: idx, alt_text: detail.nome,
-    }));
-    await supabase.from("product_images").insert(images);
+    const images: any[] = [];
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    for (let idx = 0; idx < detail.midia.imagens.internas.length; idx++) {
+      const img = detail.midia.imagens.internas[idx];
+      let finalUrl = img.link;
+      try {
+        // Skip if already a Supabase URL without expiration
+        if (finalUrl.includes(supabaseUrl) && !finalUrl.includes("Expires=")) {
+          // Already in storage, use as-is
+        } else {
+          // Download and re-upload to storage
+          const response = await fetchWithTimeout(finalUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            const contentType = response.headers.get("content-type") || "image/jpeg";
+            const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+            const fileName = `bling/${productId}/${idx}-${Date.now()}.${ext}`;
+            const { error: uploadError } = await supabase.storage
+              .from("product-media")
+              .upload(fileName, blob, { contentType, upsert: true });
+            if (!uploadError) {
+              const { data: { publicUrl } } = supabase.storage
+                .from("product-media")
+                .getPublicUrl(fileName);
+              finalUrl = publicUrl;
+            } else {
+              console.warn(`[webhook] Image upload failed: ${uploadError.message}`);
+              finalUrl = finalUrl.split("?")[0]; // Strip query params as fallback
+            }
+          } else {
+            finalUrl = finalUrl.split("?")[0];
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[webhook] Image re-upload error: ${err.message}`);
+        finalUrl = finalUrl.split("?")[0];
+      }
+      images.push({
+        product_id: productId, url: finalUrl, is_primary: idx === 0, display_order: idx, alt_text: detail.nome,
+      });
+    }
+    if (images.length > 0) {
+      await supabase.from("product_images").insert(images);
+    }
   }
 
   // Sync stock (always if sync_stock is on)
