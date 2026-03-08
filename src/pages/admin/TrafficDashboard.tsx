@@ -1,8 +1,11 @@
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Globe, Smartphone, Monitor, TrendingUp, Users, Target, Search } from 'lucide-react';
+import { subDays, startOfDay } from 'date-fns';
 
 interface TrafficSession {
   id: string;
@@ -13,6 +16,7 @@ interface TrafficSession {
   device_type: string | null;
   referrer: string | null;
   created_at: string;
+  user_id: string | null;
 }
 
 const trafficIcons: Record<string, any> = {
@@ -45,36 +49,45 @@ const trafficColors: Record<string, string> = {
   campaign: 'bg-cyan-100 text-cyan-800',
 };
 
-export default function TrafficDashboard() {
-  const { data: sessions, isLoading } = useQuery({
-    queryKey: ['traffic-sessions'],
-    queryFn: async () => {
-      // Get admin user IDs to exclude from traffic
-      const { data: adminRoles } = await supabase
-        .from('user_roles')
-        .select('user_id')
-        .eq('role', 'admin');
-      
-      const adminIds = (adminRoles || []).map(r => r.user_id);
+const PERIOD_OPTIONS = [
+  { value: '7', label: '7 dias' },
+  { value: '30', label: '30 dias' },
+  { value: '90', label: '90 dias' },
+];
 
+export default function TrafficDashboard() {
+  const [period, setPeriod] = useState('30');
+  const periodStart = useMemo(() => startOfDay(subDays(new Date(), Number(period))).toISOString(), [period]);
+
+  const { data: adminIds } = useQuery({
+    queryKey: ['admin-user-ids'],
+    queryFn: async () => {
+      const { data } = await supabase.from('user_roles').select('user_id').eq('role', 'admin');
+      return (data || []).map(r => r.user_id);
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const { data: sessions, isLoading } = useQuery({
+    queryKey: ['traffic-sessions', period, adminIds],
+    queryFn: async () => {
       let query = supabase
         .from('traffic_sessions')
         .select('*')
+        .gte('created_at', periodStart)
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(1000);
 
-      // Exclude admin sessions
-      if (adminIds.length > 0) {
-        // Filter out sessions from admin users
-        for (const id of adminIds) {
-          query = query.neq('user_id', id);
-        }
+      // Exclude admin sessions with single filter
+      if (adminIds && adminIds.length > 0) {
+        query = query.not('user_id', 'in', `(${adminIds.join(',')})`);
       }
 
       const { data, error } = await query;
       if (error) throw error;
       return data as unknown as TrafficSession[];
     },
+    enabled: adminIds !== undefined,
   });
 
   const total = sessions?.length || 0;
