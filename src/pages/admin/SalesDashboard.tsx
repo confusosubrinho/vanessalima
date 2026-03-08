@@ -92,10 +92,20 @@ export default function SalesDashboard() {
     },
   });
 
+  const prevStartDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - parseInt(period) * 2);
+    return d.toISOString();
+  }, [period]);
+
   const { data: allOrders } = useQuery({
-    queryKey: ['sales-all-orders'],
+    queryKey: ['sales-all-orders', period],
     queryFn: async () => {
-      const { data } = await supabase.from('orders').select('id, total_amount, status, created_at');
+      const { data } = await supabase
+        .from('orders')
+        .select('id, total_amount, status, created_at')
+        .gte('created_at', prevStartDate)
+        .order('created_at', { ascending: false });
       return data || [];
     },
   });
