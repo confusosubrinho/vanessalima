@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 const BLING_API_URL = "https://api.bling.com.br/Api/v3";
-const BLING_TOKEN_URL = "https://api.bling.com.br/Api/v3/oauth/token";
 
 function createSupabase(authHeader?: string) {
   return createClient(

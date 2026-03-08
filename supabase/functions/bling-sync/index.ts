@@ -12,7 +12,6 @@ const corsHeaders = {
 };
 
 const BLING_API_URL = "https://api.bling.com.br/Api/v3";
-const BLING_TOKEN_URL = "https://api.bling.com.br/Api/v3/oauth/token";
 const BLING_RATE_LIMIT_MS = 340;
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
