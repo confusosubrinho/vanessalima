@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 
 const COOKIE_CONSENT_KEY = 'cookie-consent-accepted';
 
-export const CookieConsent = React.forwardRef<HTMLDivElement>(function CookieConsent(_props, ref) {
+function CookieConsentInner(_props: Record<string, never>, ref: React.ForwardedRef<HTMLDivElement>) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {

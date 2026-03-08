@@ -21,7 +21,7 @@ function getMessageForRoute(pathname: string): string {
   return 'Olá! Estou visitando a loja e gostaria de mais informações.';
 }
 
-export const WhatsAppFloat = React.forwardRef<HTMLAnchorElement>(function WhatsAppFloat(_props, ref) {
+function WhatsAppFloatInner(_props: Record<string, never>, ref: React.ForwardedRef<HTMLAnchorElement>) {
   const location = useLocation();
   const { data: settings } = useStoreSettings();
   
