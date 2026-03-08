@@ -1043,8 +1043,17 @@ serve(async (req) => {
                   if (hasRecent) {
                     console.log(`[relink] Skipping stock overwrite for variant ${lv.id} — recent local movements`);
                   } else {
+                    // Get old stock for audit trail
+                    const { data: oldVar } = await supabase.from("product_variants").select("stock_quantity").eq("id", lv.id).maybeSingle();
+                    const oldQty = oldVar?.stock_quantity ?? 0;
                     await supabase.from("product_variants").update({ stock_quantity: qty }).eq("id", lv.id);
                     stockUpdated++;
+                    // Record inventory movement for audit
+                    if (qty !== oldQty) {
+                      await supabase.from("inventory_movements").insert({
+                        variant_id: lv.id, quantity: qty - oldQty, type: "bling_sync",
+                      }).then(() => {}).catch(() => {});
+                    }
                   }
                 }
               }
