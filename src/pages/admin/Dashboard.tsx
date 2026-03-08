@@ -167,7 +167,7 @@ export default function Dashboard() {
         supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
       ]);
       const activeCurrentOrders = currentOrders.data?.filter(o => o.status !== 'cancelled') || [];
-      const activePrevOrders = prevOrders.data?.filter(o => (o as any).status !== 'cancelled') || [];
+      const activePrevOrders = prevOrders.data?.filter(o => o.status !== 'cancelled') || [];
       const curRevenue = activeCurrentOrders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
       const prevRevenue = activePrevOrders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
       const curCount = activeCurrentOrders.length;
@@ -188,7 +188,7 @@ export default function Dashboard() {
   const { data: revenueChart } = useQuery({
     queryKey: ['dashboard-revenue-chart', period],
     queryFn: async () => {
-      const { data } = await supabase.from('orders').select('created_at, total_amount').gte('created_at', periodStart.toISOString()).order('created_at');
+      const { data } = await supabase.from('orders').select('created_at, total_amount, status').gte('created_at', periodStart.toISOString()).neq('status', 'cancelled').order('created_at');
       const byDay: Record<string, number> = {};
       for (let i = 0; i < days; i++) {
         const d = format(subDays(now, days - 1 - i), 'dd/MM');
