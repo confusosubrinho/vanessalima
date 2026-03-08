@@ -159,8 +159,9 @@ export function ProductReviews({ productId, productName }: ProductReviewsProps) 
             <Button 
               className="w-full mt-6" 
               onClick={() => setShowForm(!showForm)}
+              disabled={cooldown}
             >
-              Escrever Avaliação
+              {cooldown ? 'Aguarde...' : 'Escrever Avaliação'}
             </Button>
           </div>
 
