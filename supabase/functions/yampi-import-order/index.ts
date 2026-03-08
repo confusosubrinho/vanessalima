@@ -73,15 +73,26 @@ Deno.serve(async (req) => {
     return jsonRes({ ok: false, error: "Credenciais Yampi incompletas (alias, user_token, user_secret_key)" }, 400);
   }
 
-  // ── Check if already imported ──
-  const { data: existing } = await supabase
+  // ── Check if already imported (by external_reference or checkout_session_id) ──
+  const { data: existingByRef } = await supabase
     .from("orders")
     .select("id, order_number")
     .eq("external_reference", yampiOrderId)
     .maybeSingle();
 
-  if (existing) {
-    return jsonRes({ ok: false, error: `Pedido já importado: ${existing.order_number}`, order_id: existing.id, order_number: existing.order_number }, 409);
+  if (existingByRef) {
+    return jsonRes({ ok: false, error: `Pedido já importado: ${existingByRef.order_number}`, order_id: existingByRef.id, order_number: existingByRef.order_number }, 409);
+  }
+
+  // Also check checkout_session_id (pre-created by checkout-router)
+  const { data: existingBySession } = await supabase
+    .from("orders")
+    .select("id, order_number")
+    .eq("checkout_session_id", yampiOrderId)
+    .maybeSingle();
+
+  if (existingBySession) {
+    return jsonRes({ ok: false, error: `Pedido já existe (pré-criado pelo checkout): ${existingBySession.order_number}`, order_id: existingBySession.id, order_number: existingBySession.order_number }, 409);
   }
 
   // ── Fetch from Yampi API ──

@@ -494,10 +494,15 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Normalize cancelled payment status instead of raw event string
+          const cancelledPaymentStatus = event.includes("refused") ? "refused"
+            : event.includes("chargeback") ? "chargeback"
+            : "cancelled";
+
           await supabase.from("payments").insert({
             order_id: existingOrder.id,
             provider: "yampi",
-            status: event,
+            status: cancelledPaymentStatus,
             payment_method: paymentMethod,
             gateway,
             transaction_id: transactionId,

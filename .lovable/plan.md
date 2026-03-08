@@ -1,54 +1,67 @@
 
 
-## Order Import & Status Sync — Audit & Fix Plan
+## Diagnosis: RLS Policy on `orders` Table Blocking Inserts
 
-### Bug 1 (Critical): `yampi-sync-order-status` missing from `config.toml`
+The current INSERT policy on `orders` has a logic gap. It checks:
+- Branch 1: `auth.uid() IS NOT NULL AND user_id = auth.uid()` (logged-in user)
+- Branch 2: `auth.uid() IS NULL AND user_id IS NULL AND access_token IS NOT NULL` (guest)
 
-The function is not listed in `supabase/config.toml`, so it defaults to `verify_jwt = true` via Supabase's gateway. The function does its own JWT auth internally, but the gateway rejects the request before the code even runs if the token format doesn't pass Supabase's built-in check. This can cause intermittent 401 errors.
+**The gap**: If the browser has a stale/partial Supabase auth session (e.g. expired token still in localStorage), `auth.uid()` may evaluate as NOT NULL but `user_id` is set to NULL in the code (because `getSession()` returns null). This fails both branches.
 
-**Fix**: Add `[functions.yampi-sync-order-status]` with `verify_jwt = false` to `config.toml`.
+## Plan
 
-### Bug 2 (Medium): Webhook cancelled payment record uses raw event name as status
+### 1. Replace the INSERT RLS policy with a simpler, robust version
 
-Line 500 of `yampi-webhook` inserts a payment record with `status: event` (e.g. `"payment.cancelled"`, `"payment.refused"`). Every other code path uses normalized values like `"approved"`, `"failed"`, `"refunded"`. This makes the `commerce_health` RPC and admin UI show inconsistent data.
+Drop the current policy and create a new one that covers all cases:
 
-**Fix**: Normalize the cancelled payment status to `"cancelled"`, `"refused"`, or `"failed"` instead of the raw event string.
+```sql
+DROP POLICY "Anyone can create orders" ON public.orders;
 
-### Bug 3 (Medium): `yampi-sync-order-status` doesn't restore stock on cancellation
+CREATE POLICY "Anyone can create orders" ON public.orders
+FOR INSERT WITH CHECK (
+  -- Logged-in: user_id must match auth
+  (user_id IS NOT NULL AND user_id = auth.uid())
+  OR
+  -- Guest: no user_id, must have access_token
+  (user_id IS NULL AND access_token IS NOT NULL)
+);
+```
 
-When sync detects the Yampi order changed to `cancelled`, it updates the local order status but does NOT restore stock. The `cancel_order_return_stock` RPC handles this correctly for manual cancellations, but sync bypasses it.
+Key change: Remove the `auth.uid() IS NULL` check from the guest branch. A guest order just needs `user_id IS NULL AND access_token IS NOT NULL` — we don't need to verify the JWT state.
 
-**Fix**: When sync detects status changed to `cancelled`, call `cancel_order_return_stock` RPC instead of a plain update.
+### 2. Also fix the UPDATE policy for guests
 
-### Bug 4 (Medium): Import doesn't check `checkout_session_id` for duplicates
+The current guest update policy also checks `auth.uid() IS NULL`, which has the same vulnerability:
 
-If an order was pre-created by `checkout-router` (stored in `checkout_session_id`), importing the same Yampi order by ID would create a duplicate since it only checks `external_reference`.
+```sql
+DROP POLICY "Guest users can update own orders" ON public.orders;
 
-**Fix**: Also check if an order with `checkout_session_id` matching the Yampi session exists before importing.
+CREATE POLICY "Guest users can update own orders" ON public.orders
+FOR UPDATE USING (
+  user_id IS NULL AND access_token IS NOT NULL
+) WITH CHECK (
+  user_id IS NULL AND access_token IS NOT NULL
+);
+```
 
-### Bug 5 (Low): Order search doesn't include `customer_email`
+### 3. Add a logged-in user UPDATE policy
 
-The admin Orders page only searches by `order_number` and `shipping_name`. Searching by email is a common need.
+Currently only admins and guests can update orders. Logged-in users should also be able to update their own orders (e.g. during payment processing):
 
-**Fix**: Add `customer_email` to the search filter in `Orders.tsx`.
+```sql
+CREATE POLICY "Users can update own orders" ON public.orders
+FOR UPDATE USING (
+  user_id IS NOT NULL AND user_id = auth.uid()
+) WITH CHECK (
+  user_id IS NOT NULL AND user_id = auth.uid()
+);
+```
 
-### Improvement 1: Add `yampi_order_number` and `external_reference` to search
+### 4. Verify end-to-end via browser test
 
-Allow searching orders by their Yampi order number or external reference, making it easier to cross-reference with the Yampi dashboard.
+After applying the migration, navigate through the full checkout flow (product → cart → checkout → payment) to confirm orders are created successfully without RLS errors.
 
-### Improvement 2: Show tracking code input on order details
+---
 
-Currently tracking code is read-only in the details dialog. Add an inline edit field so admins can manually add/update tracking codes without needing to sync.
-
-### Files to Modify
-
-1. **`supabase/config.toml`** — Add `yampi-sync-order-status` entry (cannot edit directly, but need to deploy)
-2. **`supabase/functions/yampi-webhook/index.ts`** — Normalize cancelled payment status
-3. **`supabase/functions/yampi-sync-order-status/index.ts`** — Use `cancel_order_return_stock` RPC for cancellation; add payment record creation for newly-approved orders
-4. **`supabase/functions/yampi-import-order/index.ts`** — Add `checkout_session_id` duplicate check
-5. **`src/pages/admin/Orders.tsx`** — Expand search to include `customer_email`, `yampi_order_number`, `external_reference`; add inline tracking code edit
-
-### Deploy
-
-Redeploy: `yampi-sync-order-status`, `yampi-webhook`, `yampi-import-order`
+**Technical note**: These are database migration changes only — no frontend code changes needed. The root cause is purely the overly strict RLS conditions.
 

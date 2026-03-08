@@ -160,23 +160,48 @@ Deno.serve(async (req) => {
   const yampiCreatedAt = yampiOrderDate ? new Date(yampiOrderDate).toISOString() : null;
   const yampiOrderNumber = (yampiOrder.number != null ? String(yampiOrder.number) : null) || (yampiOrder.order_number != null ? String(yampiOrder.order_number) : null) || null;
 
-  const updatePayload: Record<string, unknown> = {
-    status: localStatus,
-    payment_status: paymentStatus,
-    tracking_code: trackingCode,
-    shipping_method: shippingMethodName,
-    yampi_created_at: yampiCreatedAt,
-    yampi_order_number: yampiOrderNumber,
-  };
-
-  const { error: updateErr } = await supabase
+  // Fetch current order status to detect transitions
+  const { data: currentOrder } = await supabase
     .from("orders")
-    .update(updatePayload)
-    .eq("id", order.id);
+    .select("status")
+    .eq("id", order.id)
+    .single();
+  const oldStatus = currentOrder?.status;
 
-  if (updateErr) {
-    console.error("[yampi-sync] Update error:", updateErr?.message);
-    return jsonRes({ ok: false, error: updateErr?.message || "Erro ao atualizar pedido" }, 500);
+  // If transitioning to cancelled, use RPC to restore stock
+  if (localStatus === "cancelled" && oldStatus !== "cancelled") {
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc("cancel_order_return_stock", { p_order_id: order.id });
+    if (rpcErr) {
+      console.error("[yampi-sync] cancel_order_return_stock error:", rpcErr.message);
+      return jsonRes({ ok: false, error: rpcErr.message || "Erro ao cancelar e devolver estoque" }, 500);
+    }
+    // Update remaining fields that RPC doesn't set
+    await supabase.from("orders").update({
+      payment_status: paymentStatus,
+      tracking_code: trackingCode,
+      shipping_method: shippingMethodName,
+      yampi_created_at: yampiCreatedAt,
+      yampi_order_number: yampiOrderNumber,
+    }).eq("id", order.id);
+  } else {
+    const updatePayload: Record<string, unknown> = {
+      status: localStatus,
+      payment_status: paymentStatus,
+      tracking_code: trackingCode,
+      shipping_method: shippingMethodName,
+      yampi_created_at: yampiCreatedAt,
+      yampi_order_number: yampiOrderNumber,
+    };
+
+    const { error: updateErr } = await supabase
+      .from("orders")
+      .update(updatePayload)
+      .eq("id", order.id);
+
+    if (updateErr) {
+      console.error("[yampi-sync] Update error:", updateErr?.message);
+      return jsonRes({ ok: false, error: updateErr?.message || "Erro ao atualizar pedido" }, 500);
+    }
   }
 
   console.log(`[yampi-sync] Order ${order.order_number} synced: status=${localStatus}, payment_status=${paymentStatus}`);

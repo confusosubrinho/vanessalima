@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal, ShoppingCart, Trash2, RefreshCw, Clock, PackagePlus, Package } from 'lucide-react';
+import { Search, Eye, MoreHorizontal, Calendar, DollarSign, ArrowUpDown, Filter, Download, Upload, SlidersHorizontal, ShoppingCart, Trash2, RefreshCw, Clock, PackagePlus, Package, Pencil, Check, X } from 'lucide-react';
+import { useToast as useToastInline } from '@/hooks/use-toast';
 import { HelpHint } from '@/components/HelpHint';
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -63,6 +64,48 @@ import { logAudit, generateCorrelationId } from '@/lib/auditLogger';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+function TrackingCodeEditor({ order, onUpdated }: { order: Order; onUpdated: (code: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(order.tracking_code || '');
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToastInline();
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from('orders').update({ tracking_code: value.trim() || null }).eq('id', order.id);
+    setSaving(false);
+    if (error) {
+      toast({ title: 'Erro ao salvar rastreio', variant: 'destructive' });
+    } else {
+      toast({ title: 'Código de rastreio atualizado' });
+      onUpdated(value.trim());
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div>
+      <h3 className="font-medium mb-2 flex items-center gap-2">
+        Rastreamento
+        {!editing && (
+          <button onClick={() => { setValue(order.tracking_code || ''); setEditing(true); }} className="text-muted-foreground hover:text-foreground">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </h3>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Ex: BR123456789BR" className="h-8 text-sm" disabled={saving} onKeyDown={(e) => e.key === 'Enter' && save()} />
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={save} disabled={saving}><Check className="h-4 w-4" /></Button>
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditing(false)} disabled={saving}><X className="h-4 w-4" /></Button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">{order.tracking_code || '—'}</p>
+      )}
+    </div>
+  );
+}
 
 export default function Orders() {
   const queryClient = useQueryClient();
@@ -295,7 +338,10 @@ export default function Orders() {
   const searchLower = searchQuery.toLowerCase();
   let filteredOrders = orders?.filter(o =>
     (o.order_number ?? '').toLowerCase().includes(searchLower) ||
-    (o.shipping_name ?? '').toLowerCase().includes(searchLower)
+    (o.shipping_name ?? '').toLowerCase().includes(searchLower) ||
+    ((o as any).customer_email ?? '').toLowerCase().includes(searchLower) ||
+    ((o as any).external_reference ?? '').toLowerCase().includes(searchLower) ||
+    ((o as any).yampi_order_number ?? '').toLowerCase().includes(searchLower)
   ) || [];
 
   // Status filter
@@ -850,12 +896,10 @@ export default function Orders() {
                   </div>
                 </div>
               </div>
-              {selectedOrder.tracking_code && (
-                <div>
-                  <h3 className="font-medium mb-2">Rastreamento</h3>
-                  <p className="text-muted-foreground">{selectedOrder.tracking_code}</p>
-                </div>
-              )}
+              <TrackingCodeEditor order={selectedOrder} onUpdated={(code) => {
+                setSelectedOrder({ ...selectedOrder, tracking_code: code } as Order);
+                queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+              }} />
               {selectedOrder.notes && (
                 <div>
                   <h3 className="font-medium mb-2">Observações</h3>
