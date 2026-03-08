@@ -436,3 +436,120 @@ Deno.serve(async (req) => {
     items_stock_debited: itemsStockDebited,
   });
 });
+
+// ── Helper for batch import ──
+async function importSingleOrder(
+  supabase: ReturnType<typeof createClient>,
+  yampiOrderId: string,
+  alias: string,
+  userToken: string,
+  userSecretKey: string,
+): Promise<Record<string, unknown>> {
+  // Check duplicates
+  const { data: existingByRef } = await supabase.from("orders").select("id, order_number").eq("external_reference", yampiOrderId).maybeSingle();
+  if (existingByRef) return { ok: false, yampi_order_id: yampiOrderId, error: `Já importado: ${existingByRef.order_number}`, order_id: existingByRef.id };
+
+  const { data: existingBySession } = await supabase.from("orders").select("id, order_number").eq("checkout_session_id", yampiOrderId).maybeSingle();
+  if (existingBySession) return { ok: false, yampi_order_id: yampiOrderId, error: `Já existe (checkout): ${existingBySession.order_number}`, order_id: existingBySession.id };
+
+  const baseUrl = `https://api.dooki.com.br/v2/${alias}`;
+  const res = await fetch(`${baseUrl}/orders?include=items,customer,shipping_address,transactions&q=${encodeURIComponent(yampiOrderId)}&limit=5`, {
+    headers: { "User-Token": userToken, "User-Secret-Key": userSecretKey, Accept: "application/json" },
+  });
+  if (!res.ok) return { ok: false, yampi_order_id: yampiOrderId, error: `Yampi API ${res.status}` };
+
+  const json = await res.json();
+  const orders = json?.data || [];
+  const yampiOrder = orders.find((o: Record<string, unknown>) => String(o.id) === yampiOrderId || String(o.number) === yampiOrderId) || orders[0] || null;
+  if (!yampiOrder) return { ok: false, yampi_order_id: yampiOrderId, error: "Não encontrado na Yampi" };
+
+  const yId = String(yampiOrder.id || yampiOrderId);
+  const yampiOrderNumber = yampiOrder.number != null ? String(yampiOrder.number) : null;
+  const customer = (yampiOrder.customer as Record<string, unknown>) || {};
+  const customerData = (customer.data as Record<string, unknown>) || customer;
+  const customerEmail = (customerData.email as string) || null;
+  const customerName = `${customerData.first_name || ""} ${customerData.last_name || ""}`.trim() || "Cliente Yampi";
+  const customerPhone = ((customerData.phone as Record<string, unknown>)?.full_number as string) || (customerData.phone as string) || null;
+  const customerCpf = (customerData.cpf as string) || (customerData.cnpj as string) || null;
+
+  const shippingAddr = (yampiOrder.shipping_address as Record<string, unknown>) || {};
+  const addr = (shippingAddr.data as Record<string, unknown>) || shippingAddr;
+  const street = String(addr.street || addr.address || "").trim();
+  const city = String(addr.city || shippingAddr.city || "").trim();
+  const state = String(addr.state || addr.uf || shippingAddr.state || "").trim();
+  const zip = String(addr.zipcode || addr.zip || shippingAddr.zipcode || "").trim();
+
+  const shippingCost = Number(yampiOrder.value_shipment || yampiOrder.shipping_cost || 0);
+  const discountAmount = Number(yampiOrder.value_discount || yampiOrder.discount || 0);
+  const totalAmount = Number(yampiOrder.value_total || yampiOrder.total || 0);
+  let subtotal = totalAmount - shippingCost + discountAmount;
+  if (subtotal <= 0) subtotal = totalAmount;
+
+  const yampiStatus = String((yampiOrder.status as any)?.data?.alias || yampiOrder.status_alias || yampiOrder.status || "");
+  let localStatus = "processing";
+  if (["shipped", "sent"].includes(yampiStatus)) localStatus = "shipped";
+  else if (["delivered"].includes(yampiStatus)) localStatus = "delivered";
+  else if (["cancelled", "refused", "refunded"].includes(yampiStatus)) localStatus = "cancelled";
+  else if (["pending", "waiting_payment"].includes(yampiStatus)) localStatus = "pending";
+
+  const transactions = ((yampiOrder.transactions as Record<string, unknown>)?.data as unknown[]) || (yampiOrder.transactions as unknown[]) || [];
+  const firstTx = (transactions[0] as Record<string, unknown>) || {};
+  const paymentMethod = (firstTx.payment_method as string) || (yampiOrder.payment_method as string) || null;
+  const gateway = (firstTx.gateway as string) || (yampiOrder.gateway as string) || null;
+  const installments = Number(firstTx.installments || yampiOrder.installments || 1);
+  const transactionId = (firstTx.transaction_id as string) || (yampiOrder.transaction_id as string) || null;
+
+  const { data: order, error: orderErr } = await supabase.from("orders").insert({
+    order_number: "TEMP", subtotal, total_amount: totalAmount, shipping_cost: shippingCost, discount_amount: discountAmount,
+    shipping_name: customerName, shipping_address: street, shipping_city: city, shipping_state: state, shipping_zip: zip,
+    shipping_phone: customerPhone, customer_email: customerEmail, customer_cpf: customerCpf,
+    provider: "yampi", gateway, payment_method: paymentMethod, installments, transaction_id: transactionId,
+    status: localStatus, external_reference: yId, yampi_order_number: yampiOrderNumber,
+    notes: `Importado batch da Yampi (ID ${yId})`,
+  } as Record<string, unknown>).select("id, order_number").single();
+
+  if (orderErr || !order) return { ok: false, yampi_order_id: yampiOrderId, error: orderErr?.message || "Erro insert" };
+
+  // Insert items
+  const yampiItems = ((yampiOrder.items as Record<string, unknown>)?.data as unknown[]) || (yampiOrder.items as unknown[]) || [];
+  for (const rawItem of yampiItems) {
+    const item = rawItem as Record<string, unknown>;
+    const quantity = Number(item.quantity || 1);
+    const unitPrice = Number(item.price || item.price_sale || 0);
+    const itemName = (item.name as string) || "Produto";
+    const skuId = item.sku_id != null ? Number(item.sku_id) : null;
+
+    let localVariant: Record<string, unknown> | null = null;
+    if (skuId) {
+      const { data: v } = await supabase.from("product_variants").select("id, product_id, sku").eq("yampi_sku_id", skuId).maybeSingle();
+      localVariant = v;
+    }
+
+    await supabase.from("order_items").insert({
+      order_id: order.id, product_id: (localVariant?.product_id as string) || null,
+      product_variant_id: (localVariant?.id as string) || null, product_name: itemName,
+      quantity, unit_price: unitPrice, total_price: unitPrice * quantity,
+      yampi_sku_id: skuId,
+    });
+
+    if (localVariant?.id && localStatus !== "cancelled") {
+      await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
+      await supabase.from("inventory_movements").insert({ variant_id: localVariant.id, order_id: order.id, type: "debit", quantity });
+    }
+  }
+
+  if (["processing", "shipped", "delivered"].includes(localStatus)) {
+    await supabase.from("payments").insert({ order_id: order.id, provider: "yampi", status: "approved", payment_method: paymentMethod, gateway, transaction_id: transactionId, installments, amount: totalAmount });
+  }
+
+  if (customerEmail) {
+    const { data: existingCustomer } = await supabase.from("customers").select("id, total_orders, total_spent").eq("email", customerEmail).maybeSingle();
+    if (existingCustomer) {
+      await supabase.from("customers").update({ full_name: customerName, phone: customerPhone, total_orders: (existingCustomer.total_orders || 0) + 1, total_spent: (existingCustomer.total_spent || 0) + totalAmount }).eq("id", existingCustomer.id);
+    } else {
+      await supabase.from("customers").insert({ email: customerEmail, full_name: customerName, phone: customerPhone, total_orders: 1, total_spent: totalAmount });
+    }
+  }
+
+  return { ok: true, yampi_order_id: yampiOrderId, order_id: order.id, order_number: order.order_number, status: localStatus };
+}
