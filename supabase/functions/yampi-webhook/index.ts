@@ -383,18 +383,18 @@ Deno.serve(async (req) => {
         });
 
         if (localVariant?.id) {
-          // Bug fix: check decrement_stock result before inserting inventory_movement
           const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: localVariant.id, p_quantity: quantity });
           const stockData = stockResult.data as { success: boolean; error?: string } | null;
           if (stockData && !stockData.success) {
-            console.warn(`[yampi-webhook] decrement_stock failed for variant ${localVariant.id}: ${stockData.error} — continuing order processing`);
+            console.warn(`[yampi-webhook] decrement_stock failed for variant ${localVariant.id}: ${stockData.error} — skipping inventory_movement`);
+          } else {
+            await supabase.from("inventory_movements").insert({
+              variant_id: localVariant.id,
+              order_id: order.id,
+              type: "debit",
+              quantity,
+            });
           }
-          await supabase.from("inventory_movements").insert({
-            variant_id: localVariant.id,
-            order_id: order.id,
-            type: "debit",
-            quantity,
-          });
         }
       }
 
