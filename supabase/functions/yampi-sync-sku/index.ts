@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
         headers: yampiHeaders,
         body: JSON.stringify({
           product_id: yampiProductId,
-          price_cost: unitPrice,
+          price_cost: unitCost,
           price_sale: unitPrice,
           quantity: variant.stock_quantity,
           quantity_managed: true,
