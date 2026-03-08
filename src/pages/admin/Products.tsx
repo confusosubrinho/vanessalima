@@ -834,7 +834,7 @@ export default function Products() {
                             {syncingProductId === product.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                             Sincronizar estoque
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => deleteMutation.mutate(product.id)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Excluir</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setProductToDelete(product)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Excluir</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

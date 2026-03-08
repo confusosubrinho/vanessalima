@@ -54,13 +54,18 @@ export default function Customers() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(null);
 
+  const isMobile = useIsMobile();
+  const [currentPage, setCurrentPage] = useState(1);
+  const CUSTOMERS_PER_PAGE = 50;
+
   const { data: customers, isLoading } = useQuery({
     queryKey: ['admin-customers'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(500);
       if (error) throw error;
       return data as Customer[];
     },

@@ -584,6 +584,7 @@ export default function AdminLayout() {
             <main className="flex-1 p-3 pb-20 overflow-x-hidden">
               <Outlet />
             </main>
+            <AdminErrorIndicator />
             <MobileBottomBar />
           </div>
         </div>
