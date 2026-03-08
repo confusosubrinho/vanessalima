@@ -410,8 +410,60 @@ export default function Checkout() {
         if (['pending', 'processing'].includes(existingOrder.status)) {
           // If Stripe is active, create a PaymentIntent for the existing order
           if (isStripeActive) {
-            setStripeOrderId(existingOrder.id);
-            // Fall through to Stripe flow below using existing order
+            // Reuse existing pending order for Stripe payment
+            const reusedOrderId = existingOrder.id;
+            const reusedGuestToken = userId ? null : crypto.randomUUID();
+
+            const productsForStripe = items.map(item => ({
+              sku: item.product.sku || item.product.id,
+              name: item.product.name,
+              quantity: item.quantity,
+              price: getCartItemUnitPrice(item),
+              variant_id: item.variant.id,
+              product_id: item.product.id,
+            }));
+
+            const { data: intentResult, error: intentError } = await invokeCheckoutFunction<{ error?: string; client_secret?: string; pix_qr_url?: string; pix_emv?: string; pix_expires_at?: number }>(
+              'checkout-stripe-create-intent',
+              {
+                body: {
+                  action: 'create_payment_intent',
+                  order_id: reusedOrderId,
+                  amount: orderTotal,
+                  payment_method: formData.paymentMethod === 'card' ? 'card' : 'pix',
+                  customer_email: formData.email,
+                  customer_name: formData.name,
+                  products: productsForStripe,
+                  coupon_code: appliedCoupon?.code || null,
+                  discount_amount: discount,
+                  installments: selectedInstallments,
+                  order_access_token: reusedGuestToken,
+                },
+              },
+              requestId
+            );
+
+            if (intentError || intentResult?.error) {
+              throw new Error(intentResult?.error || intentError?.message || 'Erro ao criar pagamento Stripe');
+            }
+
+            if (formData.paymentMethod === 'pix' && intentResult.pix_qr_url) {
+              setStripePixData({
+                pixQrUrl: intentResult.pix_qr_url,
+                pixEmv: intentResult.pix_emv ?? null,
+                pixExpiresAt: intentResult.pix_expires_at ?? Math.floor(Date.now() / 1000) + 30 * 60,
+                orderNumber: existingOrder.order_number,
+                guestToken: reusedGuestToken ?? '',
+              });
+              setStripeOrderId(reusedOrderId);
+              setIsLoading(false);
+              return;
+            }
+
+            setStripeClientSecret(intentResult.client_secret ?? null);
+            setStripeOrderId(reusedOrderId);
+            setIsLoading(false);
+            return;
           } else {
             // For other providers, redirect to confirmation
             toast({
@@ -441,6 +493,9 @@ export default function Checkout() {
         orderTotal = finalTotal;
       }
 
+      // Determine provider name
+      const providerName = isStripeActive ? 'stripe' : (activeProvider || 'appmax');
+
       // 1. Create order (cart_id enforces one active checkout per cart in DB)
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -465,7 +520,7 @@ export default function Checkout() {
           idempotency_key: idempotencyKey,
           access_token: guestToken,
           notes: null,
-          provider: isStripeActive ? 'stripe' : 'appmax',
+          provider: providerName,
         } as any)
         .select()
         .single();
