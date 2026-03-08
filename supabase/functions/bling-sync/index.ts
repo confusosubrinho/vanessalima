@@ -463,9 +463,21 @@ async function upsertParentWithVariants(
     variantCount = 1;
   }
 
-  // Clean up orphaned variants
+  // Clean up orphaned variants — deactivate instead of delete if referenced in order_items
   const { data: allVars } = await supabase.from("product_variants").select("id").eq("product_id", productId).not("bling_variant_id", "is", null);
-  for (const v of (allVars || [])) { if (!syncedVariantIds.has(v.id)) await supabase.from("product_variants").delete().eq("id", v.id); }
+  for (const v of (allVars || [])) {
+    if (!syncedVariantIds.has(v.id)) {
+      // Check if variant is referenced in order_items before deleting
+      const { data: orderRef } = await supabase.from("order_items").select("id").eq("product_variant_id", v.id).limit(1);
+      if (orderRef?.length) {
+        // Deactivate instead of deleting to preserve order history
+        await supabase.from("product_variants").update({ is_active: false }).eq("id", v.id);
+        console.log(`[sync] Deactivated orphaned variant ${v.id} (referenced in orders)`);
+      } else {
+        await supabase.from("product_variants").delete().eq("id", v.id);
+      }
+    }
+  }
 
   return { imported, updated, linkedBySku, variantCount };
 }
