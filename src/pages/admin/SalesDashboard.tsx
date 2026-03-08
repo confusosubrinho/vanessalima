@@ -92,24 +92,35 @@ export default function SalesDashboard() {
     },
   });
 
+  const prevStartDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - parseInt(period) * 2);
+    return d.toISOString();
+  }, [period]);
+
   const { data: allOrders } = useQuery({
-    queryKey: ['sales-all-orders'],
+    queryKey: ['sales-all-orders', period],
     queryFn: async () => {
-      const { data } = await supabase.from('orders').select('id, total_amount, status, created_at');
+      const { data } = await supabase
+        .from('orders')
+        .select('id, total_amount, status, created_at')
+        .gte('created_at', prevStartDate)
+        .order('created_at', { ascending: false });
       return data || [];
     },
   });
 
-  // Aggregated stats
+  // Aggregated stats (exclude cancelled)
   const stats = useMemo(() => {
     if (!orders) return { revenue: 0, count: 0, avgTicket: 0, paid: 0, pending: 0 };
-    const revenue = orders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
-    const paid = orders.filter(o => ['delivered', 'shipped', 'processing'].includes(o.status)).reduce((s, o) => s + Number(o.total_amount || 0), 0);
-    const pending = orders.filter(o => o.status === 'pending').reduce((s, o) => s + Number(o.total_amount || 0), 0);
+    const activeOrders = orders.filter(o => o.status !== 'cancelled');
+    const revenue = activeOrders.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+    const paid = activeOrders.filter(o => ['delivered', 'shipped', 'processing'].includes(o.status)).reduce((s, o) => s + Number(o.total_amount || 0), 0);
+    const pending = activeOrders.filter(o => o.status === 'pending').reduce((s, o) => s + Number(o.total_amount || 0), 0);
     return {
       revenue,
-      count: orders.length,
-      avgTicket: orders.length ? revenue / orders.length : 0,
+      count: activeOrders.length,
+      avgTicket: activeOrders.length ? revenue / activeOrders.length : 0,
       paid,
       pending,
     };
@@ -122,7 +133,7 @@ export default function SalesDashboard() {
     prevStart.setDate(prevStart.getDate() - parseInt(period) * 2);
     const prevEnd = new Date();
     prevEnd.setDate(prevEnd.getDate() - parseInt(period));
-    const prev = allOrders.filter(o => new Date(o.created_at) >= prevStart && new Date(o.created_at) < prevEnd);
+    const prev = allOrders.filter(o => o.status !== 'cancelled' && new Date(o.created_at) >= prevStart && new Date(o.created_at) < prevEnd);
     return {
       revenue: prev.reduce((s, o) => s + Number(o.total_amount || 0), 0),
       count: prev.length,

@@ -20,7 +20,7 @@ interface StoreSettings {
   store_name: string | null;
   logo_url: string | null;
   favicon_url: string | null;
-  soft_descriptor: string | null;
+  
   contact_email: string | null;
   contact_phone: string | null;
   contact_whatsapp: string | null;
@@ -38,7 +38,6 @@ export default function Settings() {
     store_name: '',
     logo_url: '',
     favicon_url: '',
-    soft_descriptor: '',
     contact_email: '',
     contact_phone: '',
     contact_whatsapp: '',
@@ -67,7 +66,6 @@ export default function Settings() {
         store_name: settings.store_name || '',
         logo_url: settings.logo_url || '',
         favicon_url: (settings as any).favicon_url || '',
-        soft_descriptor: (settings as any).soft_descriptor || '',
         contact_email: settings.contact_email || '',
         contact_phone: settings.contact_phone || '',
         contact_whatsapp: settings.contact_whatsapp || '',
@@ -199,16 +197,6 @@ export default function Settings() {
                     value={formData.store_name || ''}
                     onChange={(e) => setFormData({ ...formData, store_name: e.target.value })}
                     placeholder="Minha Loja"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nome na Fatura (Soft Descriptor)</Label>
-                  <p className="text-xs text-muted-foreground">Nome que aparecerá na fatura do cartão de crédito (máximo 13 caracteres)</p>
-                  <Input
-                    value={formData.soft_descriptor || ''}
-                    onChange={(e) => setFormData({ ...formData, soft_descriptor: e.target.value })}
-                    placeholder="MINHALOJA"
-                    maxLength={13}
                   />
                 </div>
                 <div className="space-y-2">

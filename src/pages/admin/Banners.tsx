@@ -18,6 +18,10 @@ import { useDragReorder } from '@/hooks/useDragReorder';
 import { BannerImageOptionsDialog } from '@/components/admin/BannerImageOptionsDialog';
 import type { BannerImageOptionsResult } from '@/components/admin/BannerImageOptionsDialog';
 import { MediaPickerDialog } from '@/components/admin/MediaPickerDialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Banner {
   id: string;
@@ -43,6 +47,7 @@ export default function Banners() {
   const [uploading, setUploading] = useState<'desktop' | 'mobile' | null>(null);
   const [pendingBannerFile, setPendingBannerFile] = useState<{ file: File; type: 'desktop' | 'mobile' } | null>(null);
   const [imagePickerFor, setImagePickerFor] = useState<'desktop' | 'mobile' | null>(null);
+  const [bannerToDelete, setBannerToDelete] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '', subtitle: '', image_url: '', mobile_image_url: '',
@@ -341,7 +346,7 @@ export default function Banners() {
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(banner)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteMutation.mutate(banner.id)}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setBannerToDelete(banner.id)}><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
               </CardContent>
@@ -349,6 +354,21 @@ export default function Banners() {
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!bannerToDelete} onOpenChange={(open) => !open && setBannerToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir banner?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação é irreversível. O banner será removido permanentemente.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (bannerToDelete) { deleteMutation.mutate(bannerToDelete); setBannerToDelete(null); } }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

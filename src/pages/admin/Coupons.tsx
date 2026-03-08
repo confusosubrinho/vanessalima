@@ -19,6 +19,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Coupon } from '@/types/database';
 import { logAudit } from '@/lib/auditLogger';
 import { exportToCSV } from '@/lib/csv';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function Coupons() {
   const queryClient = useQueryClient();
@@ -26,6 +30,7 @@ export default function Coupons() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
   const [activeTab, setActiveTab] = useState('list');
+  const [couponToDelete, setCouponToDelete] = useState<string | null>(null);
 
   // Bulk generation state
   const [bulkPrefix, setBulkPrefix] = useState('');
@@ -341,7 +346,7 @@ export default function Coupons() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(coupon)}><Pencil className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteMutation.mutate(coupon.id)}><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => setCouponToDelete(coupon.id)}><Trash2 className="h-4 w-4" /></Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -392,6 +397,21 @@ export default function Coupons() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!couponToDelete} onOpenChange={(open) => !open && setCouponToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cupom?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação é irreversível. O cupom será removido permanentemente.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (couponToDelete) { deleteMutation.mutate(couponToDelete); setCouponToDelete(null); } }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

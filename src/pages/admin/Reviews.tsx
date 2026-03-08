@@ -55,7 +55,12 @@ export default function Reviews() {
         .limit(100);
       if (statusFilter !== 'all') q = q.eq('status', statusFilter);
       if (ratingFilter !== 'all') q = q.eq('rating', Number(ratingFilter));
-      if (search) q = q.or(`customer_name.ilike.%${search}%,comment.ilike.%${search}%`);
+      if (search) {
+        const sanitized = search.replace(/[,.()"'\\%_]/g, '');
+        if (sanitized.trim()) {
+          q = q.or(`customer_name.ilike.%${sanitized}%,comment.ilike.%${sanitized}%`);
+        }
+      }
       const { data, error } = await q;
       if (error) throw error;
       return (data as unknown as ReviewRow[]) || [];
