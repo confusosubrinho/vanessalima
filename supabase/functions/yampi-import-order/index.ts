@@ -428,6 +428,26 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Y28: Insert email automation log for single-order import
+  if (customerEmail && ["processing", "shipped", "delivered"].includes(localStatus)) {
+    const { data: activeAutomation } = await supabase.from("email_automations")
+      .select("id").eq("trigger_event", "order_confirmed").eq("is_active", true).limit(1).maybeSingle();
+    await supabase.from("email_automation_logs").insert({
+      recipient_email: customerEmail,
+      recipient_name: customerName,
+      status: "pending",
+      automation_id: activeAutomation?.id || null,
+    });
+  }
+
+  // Y29: Insert order_event for traceability
+  await supabase.from("order_events").insert({
+    order_id: order.id,
+    event_type: "yampi_imported",
+    event_hash: `import-single-${yId}-${order.id}`,
+    payload: { yampi_order_id: yId, yampi_order_number: yampiOrderNumber, source: "single" },
+  });
+
   console.log(`[yampi-import] Order imported: ${order.id} (${order.order_number}) from Yampi ID ${yId}`);
 
   return jsonRes({
