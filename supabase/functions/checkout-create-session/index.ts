@@ -268,6 +268,12 @@ Deno.serve(async (req) => {
 
         const checkoutName = `Checkout ${sessionId.substring(0, 8)}`;
 
+        // Build success redirect URL
+        const successUrl = (body?.success_url as string) || (config.success_url as string) || null;
+        // Derive base URL from request origin or config
+        const origin = req.headers.get("origin") || (config.store_url as string) || "";
+        const redirectAfterPayment = successUrl || (origin ? `${origin}/pedido-confirmado` : undefined);
+
         const attempts = [
           {
             url: `${yampiBase}/checkout/payment-link`,
@@ -276,6 +282,7 @@ Deno.serve(async (req) => {
               active: true,
               skus: linkSkus,
               metadata: { session_id: sessionId },
+              ...(redirectAfterPayment && { redirect_url: redirectAfterPayment }),
             },
           },
           {
@@ -284,6 +291,7 @@ Deno.serve(async (req) => {
               name: checkoutName,
               items: linkSkus.map((sku) => ({ sku_id: sku.id, quantity: sku.quantity })),
               metadata: { session_id: sessionId },
+              ...(redirectAfterPayment && { redirect_url: redirectAfterPayment }),
             },
           },
         ];

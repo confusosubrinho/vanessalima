@@ -548,6 +548,9 @@ Deno.serve(async (req) => {
             raw: payload,
           });
         }
+        if (existingOrder) {
+          await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: effectiveEvent, event_hash: cancelHash, payload });
+        }
       }
       return jsonOk({ ok: true, event: effectiveEvent });
     }
