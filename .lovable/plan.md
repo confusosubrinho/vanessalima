@@ -1,52 +1,67 @@
 
 
-## Yampi Integration — Round 3 Audit: Bugs & Improvements
+## Diagnosis: RLS Policy on `orders` Table Blocking Inserts
 
-### Bug 1 (Medium): `checkout-create-session` Yampi SKU sync missing `quantity_managed: true`
+The current INSERT policy on `orders` has a logic gap. It checks:
+- Branch 1: `auth.uid() IS NOT NULL AND user_id = auth.uid()` (logged-in user)
+- Branch 2: `auth.uid() IS NULL AND user_id IS NULL AND access_token IS NOT NULL` (guest)
 
-In `checkout-create-session/index.ts` lines 248-253, when syncing SKU price/stock to Yampi before creating a payment link, the PUT body doesn't include `quantity_managed: true`. This was fixed in `yampi-sync-sku` and `yampi-catalog-sync` in previous rounds but missed here. Without it, Yampi may ignore the stock value if the SKU was previously set to unmanaged.
+**The gap**: If the browser has a stale/partial Supabase auth session (e.g. expired token still in localStorage), `auth.uid()` may evaluate as NOT NULL but `user_id` is set to NULL in the code (because `getSession()` returns null). This fails both branches.
 
-**Fix**: Add `quantity_managed: true` to the SKU update payload at line 248.
+## Plan
 
-### Bug 2 (Medium): Webhook approved event has no `order_events` idempotency hash
+### 1. Replace the INSERT RLS policy with a simpler, robust version
 
-The shipped, delivered, and cancelled handlers all insert into `order_events` with hash checks to prevent duplicate processing. However, the approved event handler (lines 62-405) — the most critical path — only checks `external_reference` for duplicates, which has a race window if two webhook deliveries arrive simultaneously before the first one writes `external_reference`.
+Drop the current policy and create a new one that covers all cases:
 
-**Fix**: Add an `order_events` hash check at the start of the approved handler (e.g., `approved-{yampiOrderId}-{transactionId}`). Skip if hash already exists.
+```sql
+DROP POLICY "Anyone can create orders" ON public.orders;
 
-### Bug 3 (Medium): `yampi-sync-order-status` doesn't update transaction details
+CREATE POLICY "Anyone can create orders" ON public.orders
+FOR INSERT WITH CHECK (
+  -- Logged-in: user_id must match auth
+  (user_id IS NOT NULL AND user_id = auth.uid())
+  OR
+  -- Guest: no user_id, must have access_token
+  (user_id IS NULL AND access_token IS NOT NULL)
+);
+```
 
-The sync function updates `status`, `payment_status`, `tracking_code`, `shipping_method`, `yampi_created_at`, `yampi_order_number` — but never updates `payment_method`, `gateway`, `installments`, `transaction_id`, or `shipping_cost`. When an admin syncs a Yampi order, these fields stay empty even though the Yampi API returns them.
+Key change: Remove the `auth.uid() IS NULL` check from the guest branch. A guest order just needs `user_id IS NULL AND access_token IS NOT NULL` — we don't need to verify the JWT state.
 
-**Fix**: Extract `payment_method`, `gateway`, `installments`, `transaction_id`, and `shipping_cost` from the Yampi API response and include them in the update payload.
+### 2. Also fix the UPDATE policy for guests
 
-### Bug 4 (Low): Batch import helper missing fields
+The current guest update policy also checks `auth.uid() IS NULL`, which has the same vulnerability:
 
-The `importSingleOrder` helper (lines 502-509) creates orders without `payment_status`, `tracking_code`, `shipping_method`, or `yampi_created_at`. The main single-import path sets all these correctly, but the batch helper skips them, causing incomplete records.
+```sql
+DROP POLICY "Guest users can update own orders" ON public.orders;
 
-**Fix**: Add the missing fields to the batch import insert payload.
+CREATE POLICY "Guest users can update own orders" ON public.orders
+FOR UPDATE USING (
+  user_id IS NULL AND access_token IS NOT NULL
+) WITH CHECK (
+  user_id IS NULL AND access_token IS NOT NULL
+);
+```
 
-### Bug 5 (Low): `checkout-create-session` Yampi redirect URL uses wrong path
+### 3. Add a logged-in user UPDATE policy
 
-Lines 274-275 build `redirectAfterPayment` using `/pedido-confirmado` as fallback path. But `CheckoutReturn` is mounted at `/checkout/obrigado`. If the Yampi payment link respects the `redirect_url`, users would land on a 404 page.
+Currently only admins and guests can update orders. Logged-in users should also be able to update their own orders (e.g. during payment processing):
 
-**Fix**: Change the fallback path from `/pedido-confirmado` to `/checkout/obrigado?session_id=${sessionId}`.
+```sql
+CREATE POLICY "Users can update own orders" ON public.orders
+FOR UPDATE USING (
+  user_id IS NOT NULL AND user_id = auth.uid()
+) WITH CHECK (
+  user_id IS NOT NULL AND user_id = auth.uid()
+);
+```
 
-### Improvement 1: Show CPF/CNPJ in order details dialog
+### 4. Verify end-to-end via browser test
 
-The order details dialog shows email, provider, payment info, and address — but doesn't display `customer_cpf`, which is collected and stored for Yampi orders. This is useful for invoice generation and customer identification.
+After applying the migration, navigate through the full checkout flow (product → cart → checkout → payment) to confirm orders are created successfully without RLS errors.
 
-**Fix**: Add a CPF/CNPJ field to the order details grid in `Orders.tsx`.
+---
 
-### Files to Modify
-
-1. **`supabase/functions/checkout-create-session/index.ts`** — Add `quantity_managed: true` to SKU sync; fix redirect URL path
-2. **`supabase/functions/yampi-webhook/index.ts`** — Add `order_events` hash idempotency for approved events
-3. **`supabase/functions/yampi-sync-order-status/index.ts`** — Include transaction detail fields in update
-4. **`supabase/functions/yampi-import-order/index.ts`** — Add missing fields to batch import helper
-5. **`src/pages/admin/Orders.tsx`** — Show CPF/CNPJ in order details
-
-### Deploy
-
-Redeploy: `checkout-create-session`, `yampi-webhook`, `yampi-sync-order-status`, `yampi-import-order`
+**Technical note**: These are database migration changes only — no frontend code changes needed. The root cause is purely the overly strict RLS conditions.
 

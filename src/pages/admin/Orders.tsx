@@ -742,6 +742,9 @@ export default function Orders() {
                 {(selectedOrder as any).customer_email && (
                   <span>Email: {(selectedOrder as any).customer_email}</span>
                 )}
+                {(selectedOrder as any).customer_cpf && (
+                  <span>CPF/CNPJ: {(selectedOrder as any).customer_cpf}</span>
+                )}
                 <Badge variant="outline" className="text-xs">{getProviderLabel((selectedOrder as any).provider)}</Badge>
                 {(selectedOrder as any).provider === 'yampi' && ((selectedOrder as any).yampi_order_number || (selectedOrder as any).external_reference) && (
                   <span className="text-muted-foreground text-xs block mt-1">

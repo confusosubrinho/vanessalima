@@ -184,6 +184,13 @@ Deno.serve(async (req) => {
       yampi_order_number: yampiOrderNumber,
     }).eq("id", order.id);
   } else {
+    // Extract transaction details
+    const txPaymentMethod = (firstTx.payment_method as string) || (yampiOrder.payment_method as string) || null;
+    const txGateway = (firstTx.gateway as string) || (yampiOrder.gateway as string) || null;
+    const txInstallments = firstTx.installments ? Number(firstTx.installments) : (yampiOrder.installments ? Number(yampiOrder.installments) : null);
+    const txTransactionId = (firstTx.transaction_id as string) || (yampiOrder.transaction_id as string) || null;
+    const txShippingCost = yampiOrder.value_shipment != null ? Number(yampiOrder.value_shipment) : (yampiOrder.shipping_cost != null ? Number(yampiOrder.shipping_cost) : null);
+
     const updatePayload: Record<string, unknown> = {
       status: localStatus,
       payment_status: paymentStatus,
@@ -192,6 +199,12 @@ Deno.serve(async (req) => {
       yampi_created_at: yampiCreatedAt,
       yampi_order_number: yampiOrderNumber,
     };
+    // Only set transaction fields if they have values (avoid overwriting with null)
+    if (txPaymentMethod) updatePayload.payment_method = txPaymentMethod;
+    if (txGateway) updatePayload.gateway = txGateway;
+    if (txInstallments) updatePayload.installments = txInstallments;
+    if (txTransactionId) updatePayload.transaction_id = txTransactionId;
+    if (txShippingCost != null) updatePayload.shipping_cost = txShippingCost;
 
     const { error: updateErr } = await supabase
       .from("orders")

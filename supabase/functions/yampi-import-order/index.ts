@@ -505,6 +505,10 @@ async function importSingleOrder(
     shipping_phone: customerPhone, customer_email: customerEmail, customer_cpf: customerCpf,
     provider: "yampi", gateway, payment_method: paymentMethod, installments, transaction_id: transactionId,
     status: localStatus, external_reference: yId, yampi_order_number: yampiOrderNumber,
+    payment_status: localStatus === "cancelled" ? "failed" : (localStatus === "pending" ? "pending" : "approved"),
+    tracking_code: (yampiOrder.tracking_code as string) || null,
+    shipping_method: (yampiOrder.shipping_option_name as string) || ((yampiOrder.shipping_option as Record<string, unknown>)?.name as string) || null,
+    yampi_created_at: (yampiOrder.created_at as string) ? new Date(yampiOrder.created_at as string).toISOString() : null,
     notes: `Importado batch da Yampi (ID ${yId})`,
   } as Record<string, unknown>).select("id, order_number").single();
 

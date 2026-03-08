@@ -249,6 +249,7 @@ Deno.serve(async (req) => {
                 price_cost: unitPrice,
                 price_sale: unitPrice,
                 quantity: variant.stock_quantity,
+                quantity_managed: true,
               };
               if (yampiProductId) skuUpdateBody.product_id = yampiProductId;
               await fetchWithTimeout(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
@@ -272,7 +273,7 @@ Deno.serve(async (req) => {
         const successUrl = (body?.success_url as string) || (config.success_url as string) || null;
         // Derive base URL from request origin or config
         const origin = req.headers.get("origin") || (config.store_url as string) || "";
-        const redirectAfterPayment = successUrl || (origin ? `${origin}/pedido-confirmado` : undefined);
+        const redirectAfterPayment = successUrl || (origin ? `${origin}/checkout/obrigado?session_id=${sessionId}` : undefined);
 
         const attempts = [
           {

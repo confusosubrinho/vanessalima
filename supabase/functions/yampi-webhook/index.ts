@@ -63,6 +63,27 @@ Deno.serve(async (req) => {
       const yampiOrderId = resourceData?.order_id?.toString() || resourceData?.id?.toString() || null;
       const sessionId = resourceData?.metadata?.session_id || null;
 
+      // Idempotency: check order_events hash for approved event
+      const approvedHash = `approved-${yampiOrderId || "unknown"}-${transactionId || Date.now()}`;
+      const { data: existingEvent } = await supabase
+        .from("order_events")
+        .select("id")
+        .eq("event_hash", approvedHash)
+        .maybeSingle();
+
+      if (existingEvent) {
+        console.log("[yampi-webhook] Approved event already processed (hash), skipping:", approvedHash);
+        return jsonOk({ ok: true, duplicate: true, hash: approvedHash });
+      }
+
+      // Record the event hash early to prevent race conditions
+      await supabase.from("order_events").insert({
+        event_type: "yampi_approved",
+        event_hash: approvedHash,
+        payload: { yampi_order_id: yampiOrderId, transaction_id: transactionId },
+        appmax_order_id: yampiOrderId,
+      });
+
       // #5 Idempotency: check if order already exists by external_reference
       if (yampiOrderId) {
         const { data: existingOrder } = await supabase
