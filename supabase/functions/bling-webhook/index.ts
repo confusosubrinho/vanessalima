@@ -403,8 +403,19 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
     const stockRes = await fetchWithTimeout(`${BLING_API_URL}/estoques/saldos?idsProdutos[]=${blingProductId}`, { headers });
     const stockJson = await stockRes.json();
     const qty = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
-    await supabase.from("product_variants").update({ stock_quantity: qty }).eq("product_id", productId);
-    stockUpdated = true;
+    // Check recent local movements for all variants of this product
+    const { data: prodVariants } = await supabase.from("product_variants").select("id").eq("product_id", productId);
+    const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
+    let skipAll = false;
+    for (const pv of (prodVariants || [])) {
+      if (await hasRecentLocalMovements(supabase, pv.id, 10)) { skipAll = true; break; }
+    }
+    if (skipAll) {
+      console.log(`[webhook] Skipping stock overwrite in syncStockOnly no-variation for product ${productId} — recent local movements`);
+    } else {
+      await supabase.from("product_variants").update({ stock_quantity: qty }).eq("product_id", productId);
+      stockUpdated = true;
+    }
   }
 
   if (stockUpdated) {
