@@ -66,6 +66,7 @@ Deno.serve(async (req) => {
           price_cost: unitPrice,
           price_sale: unitPrice,
           quantity: variant.stock_quantity,
+          quantity_managed: true,
         }),
       });
 
