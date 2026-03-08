@@ -31,8 +31,12 @@ export function AddedToCartToast({
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
-      <div className="pointer-events-auto bg-background border border-border rounded-2xl shadow-2xl p-5 w-[340px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-300">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50"
+    >
+      <div className="bg-background border border-border rounded-2xl shadow-2xl p-5 w-[340px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-300">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 text-primary">
@@ -42,6 +46,7 @@ export function AddedToCartToast({
           <button
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground transition-colors rounded-full p-1 hover:bg-muted"
+            aria-label="Fechar notificação"
           >
             <X className="h-4 w-4" />
           </button>
