@@ -16,6 +16,7 @@ import { CartProductSuggestions } from './CartProductSuggestions';
 import { prefetchCategoryPage, prefetchSearchPage, prefetchCartPage, prefetchCheckoutStartPage } from '@/lib/prefetch';
 import { FeedbackPreferencesDialog } from './FeedbackPreferencesDialog';
 import { resolveImageUrl } from '@/lib/imageUrl';
+import { getCartItemUnitPrice } from '@/lib/cartPricing';
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
   Percent, Star, Sparkles, Heart, Gift, Tag, Flame, Zap, Crown, ShoppingBag,
@@ -365,7 +366,7 @@ export function Header() {
                         {items.map((item) => (
                           <div key={item.variant.id} className="flex gap-3 border-b pb-3">
                             <img
-                              src={item.product.images?.[0]?.url || '/placeholder.svg'}
+                              src={resolveImageUrl(item.product.images?.[0]?.url, { width: 128 })}
                               alt={item.product.name}
                               className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
                             />
@@ -397,7 +398,7 @@ export function Header() {
                                   </Button>
                                 </div>
                                 <p className="font-bold text-sm">
-                                  {formatPrice(Number(item.product.sale_price || item.product.base_price) * item.quantity)}
+                                  {formatPrice(getCartItemUnitPrice(item) * item.quantity)}
                                 </p>
                               </div>
                             </div>

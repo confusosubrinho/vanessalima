@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Product, ProductVariant } from '@/types/database';
 import { useCart } from '@/contexts/CartContext';
-import { ShoppingBag, Check, Bell } from 'lucide-react';
+import { ShoppingBag, Bell } from 'lucide-react';
 import { StockNotifyModal } from './StockNotifyModal';
 import { resolveImageUrl } from '@/lib/imageUrl';
 
@@ -15,12 +15,35 @@ interface VariantSelectorModalProps {
 
 export function VariantSelectorModal({ product, open, onOpenChange }: VariantSelectorModalProps) {
   const { addItem } = useCart();
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   const [notifyVariant, setNotifyVariant] = useState<ProductVariant | null>(null);
 
   const activeVariants = product.variants?.filter(v => v.is_active) || [];
-  const sizes = activeVariants
+
+  // Extract unique colors
+  const colors = useMemo(() => {
+    const colorSet = new Map<string, ProductVariant>();
+    activeVariants.forEach(v => {
+      if (v.color && !colorSet.has(v.color)) {
+        colorSet.set(v.color, v);
+      }
+    });
+    return Array.from(colorSet.entries()).map(([color, variant]) => ({ color, variant }));
+  }, [activeVariants]);
+
+  const hasColors = colors.length > 1;
+
+  // Auto-select first color if only one exists
+  const effectiveColor = hasColors ? selectedColor : (colors[0]?.color ?? null);
+
+  // Filter sizes by selected color
+  const filteredVariants = effectiveColor
+    ? activeVariants.filter(v => v.color === effectiveColor)
+    : activeVariants;
+
+  const sizes = filteredVariants
     .map(v => ({ size: v.size, variant: v }))
     .filter((v, i, arr) => arr.findIndex(a => a.size === v.size) === i)
     .sort((a, b) => {
@@ -42,13 +65,22 @@ export function VariantSelectorModal({ product, open, onOpenChange }: VariantSel
     addItem(product, selectedVariant, 1);
     onOpenChange(false);
     setSelectedVariant(null);
+    setSelectedColor(null);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      setSelectedVariant(null);
+      setSelectedColor(null);
+    }
+    onOpenChange(open);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Selecione o tamanho</DialogTitle>
+          <DialogTitle>{hasColors ? 'Selecione cor e tamanho' : 'Selecione o tamanho'}</DialogTitle>
           <DialogDescription>Escolha uma opção para adicionar ao carrinho</DialogDescription>
         </DialogHeader>
         <div className="flex gap-4 items-start">
@@ -72,35 +104,71 @@ export function VariantSelectorModal({ product, open, onOpenChange }: VariantSel
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2 mt-2">
-          {sizes.map(({ size, variant }) => {
-            const inStock = variant.stock_quantity > 0;
-            const isSelected = selectedVariant?.id === variant.id;
-            return (
-              <button
-                key={variant.id}
-                id={`btn-variant-select-${variant.id}`}
-                onClick={() => {
-                  if (inStock) {
-                    setSelectedVariant(variant);
-                  } else {
-                    setNotifyVariant(variant);
-                    setNotifyModalOpen(true);
-                  }
-                }}
-                className={`h-10 rounded border text-sm font-medium transition-all ${
-                  isSelected
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : inStock
-                    ? 'border-border hover:border-primary'
-                    : 'border-border/50 text-muted-foreground opacity-60 hover:border-primary/50'
-                }`}
-              >
-                <span className={!inStock ? 'line-through' : ''}>{size}</span>
-              </button>
-            );
-          })}
-        </div>
+        {/* Color selector */}
+        {hasColors && (
+          <div className="mt-2">
+            <p className="text-sm font-medium text-muted-foreground mb-2">
+              Cor{selectedColor ? `: ${selectedColor}` : ''}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {colors.map(({ color }) => {
+                const isSelected = selectedColor === color;
+                return (
+                  <button
+                    key={color}
+                    onClick={() => {
+                      setSelectedColor(color);
+                      setSelectedVariant(null);
+                    }}
+                    className={`h-9 px-3 rounded border text-sm font-medium transition-all ${
+                      isSelected
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border hover:border-primary'
+                    }`}
+                  >
+                    {color}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Size selector */}
+        {(!hasColors || selectedColor) && (
+          <div className="mt-2">
+            {hasColors && <p className="text-sm font-medium text-muted-foreground mb-2">Tamanho</p>}
+            <div className="grid grid-cols-4 gap-2">
+              {sizes.map(({ size, variant }) => {
+                const inStock = variant.stock_quantity > 0;
+                const isSelected = selectedVariant?.id === variant.id;
+                return (
+                  <button
+                    key={variant.id}
+                    id={`btn-variant-select-${variant.id}`}
+                    onClick={() => {
+                      if (inStock) {
+                        setSelectedVariant(variant);
+                      } else {
+                        setNotifyVariant(variant);
+                        setNotifyModalOpen(true);
+                      }
+                    }}
+                    className={`h-10 rounded border text-sm font-medium transition-all ${
+                      isSelected
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : inStock
+                        ? 'border-border hover:border-primary'
+                        : 'border-border/50 text-muted-foreground opacity-60 hover:border-primary/50'
+                    }`}
+                  >
+                    <span className={!inStock ? 'line-through' : ''}>{size}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <Button
           id="btn-variant-add-to-cart"

@@ -3,24 +3,49 @@ import { Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 export function Newsletter() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
     setIsLoading(true);
-    setTimeout(() => {
-      toast({
-        title: '🎉 Cadastro realizado!',
-        description: 'Você receberá seu cupom de 5% de desconto no email.',
-      });
+
+    try {
+      const { error } = await supabase
+        .from('newsletter_subscribers' as any)
+        .insert({ email: email.toLowerCase().trim(), source: 'website' } as any);
+
+      if (error) {
+        // Unique constraint = already subscribed
+        if (error.code === '23505') {
+          toast({
+            title: '📧 Você já está cadastrado!',
+            description: 'Este email já recebeu o cupom de desconto.',
+          });
+        } else {
+          throw error;
+        }
+      } else {
+        toast({
+          title: '🎉 Cadastro realizado!',
+          description: 'Você receberá seu cupom de 5% de desconto no email.',
+        });
+      }
       setEmail('');
+    } catch {
+      toast({
+        title: 'Erro ao cadastrar',
+        description: 'Tente novamente em alguns instantes.',
+        variant: 'destructive',
+      });
+    } finally {
       setIsLoading(false);
-    }, 800);
+    }
   };
 
   return (
