@@ -162,7 +162,7 @@ export default function Dashboard() {
     queryFn: async () => {
       const [currentOrders, prevOrders, currentCustomers, prevCustomers] = await Promise.all([
         supabase.from('orders').select('id, total_amount, status').gte('created_at', periodStart.toISOString()),
-        supabase.from('orders').select('id, total_amount').gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
+        supabase.from('orders').select('id, total_amount, status').gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
         supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', periodStart.toISOString()),
         supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
       ]);
