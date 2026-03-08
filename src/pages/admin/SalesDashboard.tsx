@@ -85,9 +85,21 @@ export default function SalesDashboard() {
     queryFn: async () => {
       const { data } = await supabase
         .from('orders')
-        .select('*, items:order_items(*)')
+        .select('id, total_amount, status, created_at, notes, payment_method')
         .gte('created_at', startDate)
         .order('created_at', { ascending: false });
+      return data || [];
+    },
+  });
+
+  // Separate query for top products — avoids heavy join on order_items
+  const { data: orderItemsForTop } = useQuery({
+    queryKey: ['sales-order-items-top', period],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('order_items')
+        .select('product_name, quantity, total_price')
+        .gte('created_at', startDate);
       return data || [];
     },
   });
