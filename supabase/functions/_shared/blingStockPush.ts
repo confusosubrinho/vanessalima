@@ -231,7 +231,7 @@ export async function hasRecentLocalMovements(
     .from("inventory_movements")
     .select("id")
     .eq("variant_id", variantId)
-    .in("type", ["debit", "reserve"])
+    .in("type", ["debit", "reserve", "refund"])
     .gt("created_at", cutoff)
     .limit(1);
 

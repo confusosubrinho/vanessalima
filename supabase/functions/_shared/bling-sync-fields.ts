@@ -115,3 +115,25 @@ export function getInsertOnlyFields(detail: any) {
     description: detail.descricaoCurta || detail.descricaoComplementar || detail.observacoes || null,
   };
 }
+
+/**
+ * Shared getSyncConfig — loads bling_sync_config from DB, with defaults.
+ * Used by both bling-sync and bling-webhook to avoid duplication.
+ */
+export async function getSyncConfig(supabase: any): Promise<BlingSyncConfig> {
+  const { data } = await supabase.from("bling_sync_config").select("*").limit(1).maybeSingle();
+  if (!data) return { ...DEFAULT_SYNC_CONFIG };
+  return {
+    sync_stock: data.sync_stock ?? true,
+    sync_titles: data.sync_titles ?? false,
+    sync_descriptions: data.sync_descriptions ?? false,
+    sync_images: data.sync_images ?? false,
+    sync_prices: data.sync_prices ?? false,
+    sync_dimensions: data.sync_dimensions ?? false,
+    sync_sku_gtin: data.sync_sku_gtin ?? false,
+    sync_variant_active: data.sync_variant_active ?? false,
+    import_new_products: data.import_new_products ?? true,
+    merge_by_sku: data.merge_by_sku ?? true,
+    first_import_done: data.first_import_done ?? false,
+  };
+}

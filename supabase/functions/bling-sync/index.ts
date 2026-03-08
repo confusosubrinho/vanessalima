@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getFirstImportFields, getConfigAwareUpdateFields, DEFAULT_SYNC_CONFIG } from "../_shared/bling-sync-fields.ts";
+import { getFirstImportFields, getConfigAwareUpdateFields, DEFAULT_SYNC_CONFIG, getSyncConfig } from "../_shared/bling-sync-fields.ts";
 import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import { fetchWithRateLimit } from "../_shared/blingFetchWithRateLimit.ts";
 import { getValidTokenSafe } from "../_shared/blingTokenRefresh.ts";
+import { hasRecentLocalMovements } from "../_shared/blingStockPush.ts";
 import type { BlingSyncConfig } from "../_shared/bling-sync-fields.ts";
 
 const corsHeaders = {
@@ -52,23 +53,7 @@ function createSupabase() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
-async function getSyncConfig(supabase: any): Promise<BlingSyncConfig> {
-  const { data } = await supabase.from("bling_sync_config").select("*").limit(1).maybeSingle();
-  if (!data) return { ...DEFAULT_SYNC_CONFIG };
-  return {
-    sync_stock: data.sync_stock ?? true,
-    sync_titles: data.sync_titles ?? false,
-    sync_descriptions: data.sync_descriptions ?? false,
-    sync_images: data.sync_images ?? false,
-    sync_prices: data.sync_prices ?? false,
-    sync_dimensions: data.sync_dimensions ?? false,
-    sync_sku_gtin: data.sync_sku_gtin ?? false,
-    sync_variant_active: data.sync_variant_active ?? false,
-    import_new_products: data.import_new_products ?? true,
-    merge_by_sku: data.merge_by_sku ?? true,
-    first_import_done: data.first_import_done ?? false,
-  };
-}
+// getSyncConfig is now imported from _shared/bling-sync-fields.ts
 
 // getValidToken is now imported as getValidTokenSafe from _shared/blingTokenRefresh.ts
 async function getValidToken(supabase: any): Promise<string> {
@@ -478,9 +463,21 @@ async function upsertParentWithVariants(
     variantCount = 1;
   }
 
-  // Clean up orphaned variants
+  // Clean up orphaned variants — deactivate instead of delete if referenced in order_items
   const { data: allVars } = await supabase.from("product_variants").select("id").eq("product_id", productId).not("bling_variant_id", "is", null);
-  for (const v of (allVars || [])) { if (!syncedVariantIds.has(v.id)) await supabase.from("product_variants").delete().eq("id", v.id); }
+  for (const v of (allVars || [])) {
+    if (!syncedVariantIds.has(v.id)) {
+      // Check if variant is referenced in order_items before deleting
+      const { data: orderRef } = await supabase.from("order_items").select("id").eq("product_variant_id", v.id).limit(1);
+      if (orderRef?.length) {
+        // Deactivate instead of deleting to preserve order history
+        await supabase.from("product_variants").update({ is_active: false }).eq("id", v.id);
+        console.log(`[sync] Deactivated orphaned variant ${v.id} (referenced in orders)`);
+      } else {
+        await supabase.from("product_variants").delete().eq("id", v.id);
+      }
+    }
+  }
 
   return { imported, updated, linkedBySku, variantCount };
 }
@@ -772,7 +769,6 @@ async function syncStock(supabase: any, token: string) {
     const res = await fetchWithRateLimit(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
     const json = await res.json();
     if (!res.ok) { console.error("Stock sync error:", JSON.stringify(json)); continue; }
-    const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
     for (const stock of (json?.data || [])) {
       const blingId = stock.produto?.id; const qty = stock.saldoVirtualTotal ?? 0;
       if (!blingId) continue;
@@ -797,8 +793,9 @@ async function createOrder(supabase: any, token: string, orderId: string) {
   const headers = blingHeaders(token);
   const { data: order, error: orderError } = await supabase.from("orders").select("*, order_items(*)").eq("id", orderId).maybeSingle();
   if (orderError || !order) throw new Error(`Pedido não encontrado: ${orderError?.message || orderId}`);
-  const cpfMatch = order.notes?.match(/CPF:\s*([\d.\-]+)/);
-  const cpf = cpfMatch ? cpfMatch[1].replace(/\D/g, "") : "";
+  // Use customer_cpf column as primary source, fallback to regex in notes
+  const cpfRaw = order.customer_cpf || order.notes?.match(/CPF:\s*([\d.\-]+)/)?.[1] || "";
+  const cpf = cpfRaw.replace(/\D/g, "");
   const itens = [];
   for (const item of (order.order_items || [])) {
     let codigo = item.product_id?.substring(0, 8) || "PROD";

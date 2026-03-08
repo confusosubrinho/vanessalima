@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getConfigAwareUpdateFields, DEFAULT_SYNC_CONFIG } from "../_shared/bling-sync-fields.ts";
+import { getConfigAwareUpdateFields, DEFAULT_SYNC_CONFIG, getSyncConfig } from "../_shared/bling-sync-fields.ts";
 import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 import { fetchWithRateLimit } from "../_shared/blingFetchWithRateLimit.ts";
 import { getValidTokenSafe } from "../_shared/blingTokenRefresh.ts";
+import { hasRecentLocalMovements } from "../_shared/blingStockPush.ts";
 import type { BlingSyncConfig } from "../_shared/bling-sync-fields.ts";
 
 const corsHeaders = {
@@ -46,24 +47,7 @@ async function logWebhook(supabase: any, params: {
   }
 }
 
-// ─── Load sync config ───
-async function getSyncConfig(supabase: any): Promise<BlingSyncConfig> {
-  const { data } = await supabase.from("bling_sync_config").select("*").limit(1).maybeSingle();
-  if (!data) return { ...DEFAULT_SYNC_CONFIG };
-  return {
-    sync_stock: data.sync_stock ?? true,
-    sync_titles: data.sync_titles ?? false,
-    sync_descriptions: data.sync_descriptions ?? false,
-    sync_images: data.sync_images ?? false,
-    sync_prices: data.sync_prices ?? false,
-    sync_dimensions: data.sync_dimensions ?? false,
-    sync_sku_gtin: data.sync_sku_gtin ?? false,
-    sync_variant_active: data.sync_variant_active ?? false,
-    import_new_products: data.import_new_products ?? true,
-    merge_by_sku: data.merge_by_sku ?? true,
-    first_import_done: data.first_import_done ?? false,
-  };
-}
+// getSyncConfig is now imported from _shared/bling-sync-fields.ts
 
 // Use shared token refresh with optimistic locking
 async function getValidToken(supabase: any): Promise<string> {
@@ -144,13 +128,21 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
     }
     if (newStock !== undefined) {
       // Check for recent local movements (sales/reserves in last 10 min)
-      const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
       const hasRecent = await hasRecentLocalMovements(supabase, variantMatch.id, 10);
       if (hasRecent) {
         console.log(`[webhook] Skipping stock overwrite for variant ${variantMatch.id} (bling_id=${blingProductId}) — recent local movements detected`);
         return "skipped_recent_movement";
       }
+      // Get current stock for audit trail
+      const { data: currentVar } = await supabase.from("product_variants").select("stock_quantity").eq("id", variantMatch.id).maybeSingle();
+      const oldStock = currentVar?.stock_quantity ?? 0;
       await supabase.from("product_variants").update({ stock_quantity: newStock }).eq("id", variantMatch.id);
+      // Record inventory movement for audit
+      if (newStock !== oldStock) {
+        await supabase.from("inventory_movements").insert({
+          variant_id: variantMatch.id, quantity: newStock - oldStock, type: "bling_sync",
+        }).then(() => {}).catch(() => {});
+      }
       await supabase.from("products").update({
         bling_sync_status: "synced",
         bling_last_synced_at: new Date().toISOString(),
@@ -188,7 +180,6 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
     }
     if (variantCount === 1 && newStock !== undefined) {
       // Check for recent local movements
-      const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
       const singleVariantId = variants[0].id;
       const hasRecent = await hasRecentLocalMovements(supabase, singleVariantId, 10);
       if (hasRecent) {
@@ -218,7 +209,13 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
           if (skuVariant) {
             await supabase.from("product_variants").update({ bling_variant_id: blingProductId }).eq("id", skuVariant.id);
             if (newStock !== undefined) {
-              await supabase.from("product_variants").update({ stock_quantity: newStock }).eq("id", skuVariant.id);
+              // Check for recent local movements before overwriting
+              const hasRecent = await hasRecentLocalMovements(supabase, skuVariant.id, 10);
+              if (hasRecent) {
+                console.log(`[webhook] Skipping SKU fallback stock overwrite for variant ${skuVariant.id} — recent local movements`);
+              } else {
+                await supabase.from("product_variants").update({ stock_quantity: newStock }).eq("id", skuVariant.id);
+              }
               await supabase.from("products").update({
                 bling_sync_status: "synced",
                 bling_last_synced_at: new Date().toISOString(),
@@ -387,7 +384,6 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
         const match = await findVariantByBlingIdOrSku(supabase, varBlingId, tokenFromHeaders);
         if (match) {
           // Check for recent local movements before overwriting
-          const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
           const hasRecent = await hasRecentLocalMovements(supabase, match.variantId, 10);
           if (hasRecent) {
             console.log(`[webhook] Skipping stock overwrite in syncStockOnly for variant ${match.variantId} — recent local movements`);
@@ -405,7 +401,6 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
     const qty = stockJson?.data?.[0]?.saldoVirtualTotal ?? 0;
     // Check recent local movements for all variants of this product
     const { data: prodVariants } = await supabase.from("product_variants").select("id").eq("product_id", productId);
-    const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
     let skipAll = false;
     for (const pv of (prodVariants || [])) {
       if (await hasRecentLocalMovements(supabase, pv.id, 10)) { skipAll = true; break; }
@@ -499,8 +494,19 @@ async function batchStockSync(supabase: any) {
   let errorsCount = 0;
   const errorDetails: any[] = [];
   const updatedProductIds = new Set<string>();
+  const cronStartTime = Date.now();
+  const TIMEOUT_SAFETY_MS = 50_000; // Stop at 50s to allow cleanup before edge function timeout
+  let timedOut = false;
   
   for (let i = 0; i < allBlingIds.length; i += 50) {
+    // Timeout guard: stop if we're close to the edge function limit
+    if (Date.now() - cronStartTime > TIMEOUT_SAFETY_MS) {
+      timedOut = true;
+      console.warn(`[cron] Timeout guard: stopping after ${i} IDs (${allBlingIds.length} total). ${allBlingIds.length - i} pending.`);
+      errorDetails.push({ reason: `timeout_guard`, processed: i, total: allBlingIds.length, pending: allBlingIds.length - i });
+      break;
+    }
+
     const batch = allBlingIds.slice(i, i + 50);
     const idsParam = batch.map(id => `idsProdutos[]=${id}`).join("&");
     try {
@@ -513,7 +519,6 @@ async function batchStockSync(supabase: any) {
         errorDetails.push({ batch_start: i, error: JSON.stringify(json).substring(0, 200) });
         continue;
       }
-      const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
       for (const stock of (json?.data || [])) {
         const blingId = stock.produto?.id;
         const qty = stock.saldoVirtualTotal ?? 0;
