@@ -164,9 +164,10 @@ Deno.serve(async (req) => {
                 const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: row.product_variant_id, p_quantity: row.quantity });
                 const stockData = stockResult.data as { success: boolean; error?: string } | null;
                 if (stockData && !stockData.success) {
-                  console.warn(`[yampi-webhook] decrement_stock failed for variant ${row.product_variant_id}: ${stockData.error} — continuing anyway`);
+                  console.warn(`[yampi-webhook] decrement_stock failed for variant ${row.product_variant_id}: ${stockData.error} — skipping inventory_movement`);
+                } else {
+                  await supabase.from("inventory_movements").insert({ variant_id: row.product_variant_id, order_id: existingBySession.id, type: "debit", quantity: row.quantity });
                 }
-                await supabase.from("inventory_movements").insert({ variant_id: row.product_variant_id, order_id: existingBySession.id, type: "debit", quantity: row.quantity });
               }
             }
           }
