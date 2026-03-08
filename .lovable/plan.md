@@ -1,67 +1,59 @@
 
 
-## Diagnosis: RLS Policy on `orders` Table Blocking Inserts
+## Stripe Checkout Flow Audit — Plan
 
-The current INSERT policy on `orders` has a logic gap. It checks:
-- Branch 1: `auth.uid() IS NOT NULL AND user_id = auth.uid()` (logged-in user)
-- Branch 2: `auth.uid() IS NULL AND user_id IS NULL AND access_token IS NOT NULL` (guest)
+### Critical Bug Found
 
-**The gap**: If the browser has a stale/partial Supabase auth session (e.g. expired token still in localStorage), `auth.uid()` may evaluate as NOT NULL but `user_id` is set to NULL in the code (because `getSession()` returns null). This fails both branches.
+**Checkout.tsx ignores navigation state from CheckoutStart.** When the checkout-router returns `action: "render"` with `clientSecret` and `orderId` for internal Stripe, CheckoutStart navigates to `/checkout` with state. However, `Checkout.tsx` never reads `location.state`, so:
 
-## Plan
+1. User arrives at `/checkout` but the clientSecret/orderId from the router are lost
+2. User fills form and clicks submit → `handleSubmit` finds the existing order (same `cart_id`) via idempotency check → redirects to confirmation page for an **unpaid** order
+3. Payment is never collected
 
-### 1. Replace the INSERT RLS policy with a simpler, robust version
+This means the internal Stripe flow via CheckoutStart is completely broken.
 
-Drop the current policy and create a new one that covers all cases:
+### Secondary Issues
 
-```sql
-DROP POLICY "Anyone can create orders" ON public.orders;
+1. **Double stock decrement risk**: checkout-router already calls `stripe-create-intent` (which decrements stock), but if `handleSubmit` in Checkout.tsx somehow creates a new PaymentIntent, stock gets decremented again.
 
-CREATE POLICY "Anyone can create orders" ON public.orders
-FOR INSERT WITH CHECK (
-  -- Logged-in: user_id must match auth
-  (user_id IS NOT NULL AND user_id = auth.uid())
-  OR
-  -- Guest: no user_id, must have access_token
-  (user_id IS NULL AND access_token IS NOT NULL)
-);
-```
+2. **PIX regeneration orphans**: "Gerar novo PIX" clears state but doesn't cancel the old PaymentIntent. Next `handleSubmit` hits the idempotency check and redirects to unpaid confirmation.
 
-Key change: Remove the `auth.uid() IS NULL` check from the guest branch. A guest order just needs `user_id IS NULL AND access_token IS NOT NULL` — we don't need to verify the JWT state.
+3. **Provider fallback**: Line 432 in Checkout.tsx uses `isStripeActive ? 'stripe' : 'appmax'` — doesn't handle Yampi as provider.
 
-### 2. Also fix the UPDATE policy for guests
+4. **Checkout.tsx creates orders client-side**: The transparent checkout page creates orders directly via `supabase.from('orders').insert(...)` from the browser. This works but bypasses the server-side price validation that checkout-router performs. When Stripe internal mode is active via CheckoutStart, the order is already created server-side with validated prices.
 
-The current guest update policy also checks `auth.uid() IS NULL`, which has the same vulnerability:
+### Fix Plan
 
-```sql
-DROP POLICY "Guest users can update own orders" ON public.orders;
+#### 1. Checkout.tsx: Read and use location.state from CheckoutStart
 
-CREATE POLICY "Guest users can update own orders" ON public.orders
-FOR UPDATE USING (
-  user_id IS NULL AND access_token IS NOT NULL
-) WITH CHECK (
-  user_id IS NULL AND access_token IS NOT NULL
-);
-```
+Add `useLocation()` and on mount, check if `state.orderId` + `state.clientSecret` are present. If so:
+- Store them in `stripeOrderId` / `stripeClientSecret`
+- Skip directly to the payment step (or allow user to fill identification/shipping first, then show Stripe Elements without creating a new order)
+- The `handleSubmit` function should detect that an order already exists from state and skip order creation
 
-### 3. Add a logged-in user UPDATE policy
+#### 2. Fix handleSubmit idempotency flow
 
-Currently only admins and guests can update orders. Logged-in users should also be able to update their own orders (e.g. during payment processing):
+When `handleSubmit` finds an existing order with the same `cart_id`:
+- If it's a `pending` order, **reuse it** for payment instead of redirecting to confirmation
+- Set `stripeOrderId` to the existing order and proceed to call `stripe-create-intent`
+- Only redirect to confirmation if the order is already `paid`
 
-```sql
-CREATE POLICY "Users can update own orders" ON public.orders
-FOR UPDATE USING (
-  user_id IS NOT NULL AND user_id = auth.uid()
-) WITH CHECK (
-  user_id IS NOT NULL AND user_id = auth.uid()
-);
-```
+#### 3. Fix PIX regeneration
 
-### 4. Verify end-to-end via browser test
+When "Gerar novo PIX" is clicked:
+- Clear existing state
+- Allow `handleSubmit` to reuse the same order (the idempotency key on the PaymentIntent `pi_{order_id}` will return the existing PI from Stripe)
 
-After applying the migration, navigate through the full checkout flow (product → cart → checkout → payment) to confirm orders are created successfully without RLS errors.
+#### 4. Deploy updated functions
 
----
+Redeploy `checkout-router` and `checkout-stripe-create-intent` after any edge function changes.
 
-**Technical note**: These are database migration changes only — no frontend code changes needed. The root cause is purely the overly strict RLS conditions.
+### Files to Modify
+
+- **`src/pages/Checkout.tsx`** — Main fix: consume `location.state`, reuse existing orders instead of redirecting, handle provider correctly
+- **`supabase/functions/checkout-stripe-create-intent/index.ts`** — Minor: ensure idempotent PaymentIntent creation handles reuse gracefully (already uses `idempotencyKey: pi_{order_id}`)
+
+### Implementation Priority
+
+The core fix is in `Checkout.tsx` — making it properly consume the router state and reuse existing orders for payment. This alone resolves the broken internal Stripe flow.
 
