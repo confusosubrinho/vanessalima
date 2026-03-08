@@ -20,7 +20,7 @@ interface StoreSettings {
   store_name: string | null;
   logo_url: string | null;
   favicon_url: string | null;
-  soft_descriptor: string | null;
+  
   contact_email: string | null;
   contact_phone: string | null;
   contact_whatsapp: string | null;
