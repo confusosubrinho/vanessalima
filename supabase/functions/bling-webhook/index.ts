@@ -180,7 +180,6 @@ async function updateStockForBlingId(supabase: any, blingProductId: number, newS
     }
     if (variantCount === 1 && newStock !== undefined) {
       // Check for recent local movements
-      const { hasRecentLocalMovements } = await import("../_shared/blingStockPush.ts");
       const singleVariantId = variants[0].id;
       const hasRecent = await hasRecentLocalMovements(supabase, singleVariantId, 10);
       if (hasRecent) {
