@@ -1,63 +1,79 @@
 
 
-## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
+# Diagnóstico: Sincronização de Status de Pedidos com a Yampi
 
-### Fixes Aplicados
+## Bugs Críticos Encontrados
 
-**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
+### Bug 1 (CRÍTICO): `order.status.updated` com status intermediários re-executa fluxo de pagamento
+**Arquivo:** `yampi-webhook/index.ts` linhas 59-62
 
-**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
+Quando a Yampi envia `order.status.updated` com status `processing`, `in_production`, `in_separation` ou `ready_for_shipping`, o código trata como `order.paid`, o que redireciona para o bloco `approvedEvents`. Isso tenta **criar um novo pedido ou re-processar pagamento** em um pedido que já foi pago.
 
-**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
+Cenário real: Pedido pago → Yampi envia status `in_production` → sistema tenta criar novo pedido duplicado ou re-debitar estoque.
 
-**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
+### Bug 2: Sem handler para atualizações de status intermediárias
+Não existe bloco para tratar transições como `processing → in_separation → ready_for_shipping → shipped`. Todas caem no fluxo de pagamento aprovado ou são ignoradas.
 
-**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
+### Bug 3: Status `processing` não mapeado no `yampi-sync-order-status`
+**Arquivo:** `yampi-sync-order-status/index.ts` linha 137
 
-### Documentação: Limitação de Cupons (Y33)
+O mapeamento de status não inclui `processing`, `in_production`, `in_separation`, `ready_for_shipping` explicitamente. Eles caem no `else` padrão que é `processing`, mas por acidente.
 
-**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
+### Bug 4: Webhook não protege contra re-processamento de pedidos já pagos
+No bloco `approvedEvents`, se um pedido já existe por `checkout_session_id` com status `processing` ou `shipped`, o webhook re-executa o update completo (payment, customer, inventory), podendo duplicar movimentações.
 
-**Workaround recomendado**: Para descontos significativos, considerar:
-1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
-2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
-
-### Não Implementado (Decisão Técnica)
-
-- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
-- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
-- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
+### Bug 5: Falta tratamento de `refund` parcial
+Yampi pode enviar `payment.refunded` para reembolsos parciais. O código atual cancela o pedido inteiro.
 
 ---
 
-## Resumo das 4 Rodadas de Auditoria
+## Plano de Correções
 
-| Rodada | Fixes | Status |
-|--------|-------|--------|
-| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
-| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
-| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
-| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
-| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
+### Correção 1: Criar bloco separado para status intermediários no webhook
+Em vez de rotear `processing/in_production/in_separation/ready_for_shipping` para `order.paid`, criar uma nova categoria `statusUpdateEvents` que apenas atualiza o campo `status` do pedido sem re-processar pagamento.
 
-**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
+```typescript
+// ANTES (Bug):
+else if (["processing", "in_production", "in_separation", "ready_for_shipping"].includes(statusValue)) {
+  effectiveEvent = "order.paid"; // ERRADO - re-processa pagamento
+}
+
+// DEPOIS (Fix):
+else if (["processing", "in_production", "in_separation", "ready_for_shipping"].includes(statusValue)) {
+  effectiveEvent = "order.status_update"; // Novo evento que só atualiza status
+}
+```
+
+Novo bloco handler:
+```typescript
+const statusUpdateEvents = ["order.status_update"];
+if (statusUpdateEvents.includes(effectiveEvent)) {
+  // Apenas atualiza status do pedido, sem mexer em pagamento/estoque
+  const externalRef = resourceData?.order_id?.toString() || ...;
+  // Busca pedido, atualiza status para "processing", loga evento
+}
+```
+
+### Correção 2: Proteção contra re-processamento no bloco approved
+Adicionar verificação: se o pedido encontrado por session já tem status `processing`, `shipped` ou `delivered`, pular re-processamento de pagamento e estoque.
+
+### Correção 3: Completar mapeamento no `yampi-sync-order-status`
+Adicionar status explícitos: `processing`, `in_production`, `in_separation`, `ready_for_shipping`, `invoiced`.
+
+### Correção 4: Tratamento de refund vs cancelamento
+Diferenciar `payment.refunded` (pode ser parcial, não cancela pedido) de `order.cancelled`.
 
 ---
 
-## Rodada 5: Yampi Integration Fixes ✅
+## Arquivos a Modificar
 
-### Bugs Corrigidos
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/yampi-webhook/index.ts` | Fix #1, #2, #4: novo bloco status_update, proteção re-processamento |
+| `supabase/functions/yampi-sync-order-status/index.ts` | Fix #3: completar mapeamento de status |
 
-**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
+## Impacto
+- Elimina criação de pedidos duplicados quando Yampi envia status intermediários
+- Previne re-debitação de estoque em pedidos já processados
+- Mapeamento completo de todos os status possíveis da Yampi
 
-**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
-
-**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
-
-**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
-
-**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
-
-**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
-
-**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
