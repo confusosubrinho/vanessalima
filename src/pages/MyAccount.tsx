@@ -413,6 +413,85 @@ const BRAZILIAN_STATES = [
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Password change section */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              Alterar Senha
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (passwordForm.newPassword.length < 6) {
+                  toast({ title: 'Senha muito curta', description: 'A senha deve ter pelo menos 6 caracteres.', variant: 'destructive' });
+                  return;
+                }
+                if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+                  toast({ title: 'Senhas não conferem', description: 'A nova senha e a confirmação devem ser iguais.', variant: 'destructive' });
+                  return;
+                }
+                setPasswordLoading(true);
+                const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
+                setPasswordLoading(false);
+                if (error) {
+                  toast({ title: 'Erro ao alterar senha', description: error.message, variant: 'destructive' });
+                } else {
+                  toast({ title: 'Senha alterada com sucesso!' });
+                  setPasswordForm({ newPassword: '', confirmPassword: '' });
+                }
+              }}
+              className="space-y-4 max-w-lg"
+            >
+              <div className="space-y-2">
+                <Label>Nova Senha</Label>
+                <div className="relative">
+                  <Input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    placeholder="Mínimo 6 caracteres"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Confirmar Nova Senha</Label>
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                    placeholder="Repita a nova senha"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <Button type="submit" disabled={passwordLoading} className="rounded-full">
+                {passwordLoading ? 'Salvando...' : 'Alterar Senha'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </StoreLayout>
   );
