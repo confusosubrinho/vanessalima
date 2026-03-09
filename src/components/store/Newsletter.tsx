@@ -33,7 +33,7 @@ export function Newsletter() {
       } else {
         toast({
           title: '🎉 Cadastro realizado!',
-          description: 'Você receberá seu cupom de 5% de desconto no email.',
+          description: 'Você receberá nossas novidades e ofertas no email.',
         });
       }
       setEmail('');
