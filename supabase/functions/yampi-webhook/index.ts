@@ -44,21 +44,24 @@ Deno.serve(async (req) => {
     const totalAmount = resourceData?.amount || resourceData?.total || resourceData?.value_total || 0;
 
     const approvedEvents = ["payment.approved", "payment.paid", "order.paid"];
-    const cancelledEvents = ["payment.cancelled", "payment.refused", "order.cancelled", "payment.refunded", "order.refunded"];
+    const cancelledEvents = ["payment.cancelled", "payment.refused", "order.cancelled"];
+    const refundedEvents = ["payment.refunded", "order.refunded"];
+    const statusUpdateEvents = ["order.status_update"];
     const shippedEvents = ["order.shipped", "order.sent", "shipment.created"];
     const deliveredEvents = ["order.delivered", "shipment.delivered"];
 
-    // order.status.updated: Yampi pode enviar status assim — normalizar para order.paid ou order.cancelled
+    // order.status.updated: Yampi pode enviar status assim — normalizar para evento correto
     const statusValue = (resourceData?.status || resourceData?.order_status || "").toString().toLowerCase();
     let effectiveEvent = event;
     if (event === "order.status.updated") {
       if (["paid", "approved", "payment_approved"].includes(statusValue)) effectiveEvent = "order.paid";
-      else if (["cancelled", "canceled", "refused", "refunded"].includes(statusValue)) effectiveEvent = "order.cancelled";
+      else if (["cancelled", "canceled", "refused"].includes(statusValue)) effectiveEvent = "order.cancelled";
+      else if (["refunded"].includes(statusValue)) effectiveEvent = "order.refunded";
       else if (["shipped", "sent", "sending"].includes(statusValue)) effectiveEvent = "order.shipped";
       else if (["delivered"].includes(statusValue)) effectiveEvent = "order.delivered";
-      else if (["processing", "in_production", "in_separation", "ready_for_shipping"].includes(statusValue)) {
-        console.log("[yampi-webhook] order.status.updated with processing-like status:", statusValue, "— treating as paid");
-        effectiveEvent = "order.paid";
+      else if (["processing", "in_production", "in_separation", "ready_for_shipping", "invoiced"].includes(statusValue)) {
+        console.log("[yampi-webhook] order.status.updated with intermediate status:", statusValue, "— routing to status_update handler");
+        effectiveEvent = "order.status_update";
       }
     }
 
