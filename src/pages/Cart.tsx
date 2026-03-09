@@ -16,6 +16,8 @@ import { HelpHint } from '@/components/HelpHint';
 import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
 import { Pressable } from '@/components/ui/Pressable';
 import { resolveImageUrl } from '@/lib/imageUrl';
+import { Helmet } from 'react-helmet-async';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const checkoutHref = '/checkout/start';
 
