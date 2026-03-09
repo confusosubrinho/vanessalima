@@ -675,7 +675,7 @@ export default function Orders() {
                         <p className="text-sm text-muted-foreground">{order.shipping_city} - {order.shipping_state}</p>
                       </div>
                     </TableCell>
-                    <TableCell>{formatDate(order.created_at)}</TableCell>
+                    <TableCell>{formatDate(getOrderDate(order))}</TableCell>
                     <TableCell className="font-medium">{formatPrice(Number(order.total_amount))}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs font-normal">{getProviderLabel((order as any).provider)}</Badge>
