@@ -98,7 +98,12 @@ export function ContactForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Telefone</Label>
-                <Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} />
+                <Input
+                  value={form.phone}
+                  onChange={e => setForm({...form, phone: formatPhone(e.target.value)})}
+                  placeholder="(00) 00000-0000"
+                  inputMode="tel"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Assunto</Label>

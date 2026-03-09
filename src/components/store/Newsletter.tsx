@@ -65,14 +65,18 @@ export function Newsletter() {
             Assine nossa newsletter e fique por dentro dos lançamentos e promoções!
           </p>
           <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-            <Input
-              type="email"
-              placeholder="Seu melhor email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/50 rounded-full"
-              required
-            />
+            <div className="flex-1">
+              <Input
+                type="email"
+                placeholder="Seu melhor email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(''); }}
+                onBlur={() => { if (email && !isValidEmail(email)) setEmailError('Email inválido'); else setEmailError(''); }}
+                className={`bg-white/10 border-white/20 text-white placeholder:text-white/50 rounded-full ${emailError ? 'border-destructive' : ''}`}
+                required
+              />
+              {emailError && <p className="text-xs text-destructive mt-1">{emailError}</p>}
+            </div>
             <Button
               type="submit"
               disabled={isLoading}

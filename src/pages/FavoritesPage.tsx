@@ -51,7 +51,17 @@ export default function FavoritesPage() {
               <Link to="/auth">Criar Conta / Entrar</Link>
             </Button>
           </div>
-        ) : favoriteProducts.length === 0 && !isLoading ? (
+        ) : isLoading ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="space-y-3">
+                <Skeleton className="aspect-square w-full rounded-lg" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : favoriteProducts.length === 0 ? (
           <div className="text-center py-16 space-y-4">
             <Heart className="h-16 w-16 mx-auto text-muted-foreground" />
             <h2 className="text-xl font-semibold">Nenhum favorito ainda</h2>

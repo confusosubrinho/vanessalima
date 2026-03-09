@@ -326,6 +326,12 @@ export default function Auth() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Back to store link */}
+      <div className="mt-4 text-center">
+        <Link to="/" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+          ← Voltar para a loja
+        </Link>
+      </div>
     </div>
   );
 }

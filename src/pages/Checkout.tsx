@@ -1106,6 +1106,13 @@ export default function Checkout() {
                         type="email"
                         value={formData.email}
                         onChange={handleMaskedChange}
+                        onBlur={() => {
+                          if (formData.email && !validateEmail(formData.email)) {
+                            setEmailError('Insira um email válido');
+                          } else {
+                            setEmailError('');
+                          }
+                        }}
                         placeholder="seu@email.com"
                         className={emailError ? 'border-destructive' : ''}
                       />

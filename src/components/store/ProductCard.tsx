@@ -174,9 +174,10 @@ export function ProductCard({ product }: ProductCardProps) {
           <button
             type="button"
             onClick={handleFavoriteClick}
-            className="absolute top-2 right-2 bg-background/80 p-1.5 rounded-full hover:bg-background transition-colors shadow-sm"
+            disabled={favoriteLoading}
+            className={`absolute top-2 right-2 bg-background/80 p-1.5 rounded-full hover:bg-background transition-all shadow-sm ${favoriteLoading ? 'opacity-50 animate-pulse' : ''}`}
           >
-            <Heart className={`h-4 w-4 ${isFavorite(product.id) ? 'fill-destructive text-destructive' : 'text-muted-foreground'}`} />
+            <Heart className={`h-4 w-4 transition-transform ${isFavorite(product.id) ? 'fill-destructive text-destructive scale-110' : 'text-muted-foreground'}`} />
           </button>
 
           {/* Buy button overlay */}
