@@ -25,6 +25,7 @@ export default function Cart() {
   const navigate = useNavigate();
   const { items, subtotal, removeItem, updateQuantity, clearCart, discount, selectedShipping, total } = useCart();
   const { data: pricingConfig } = usePricingConfig();
+  const isMobile = useIsMobile();
 
   // Fetch fresh stock data for cart items
   const { data: freshStockData } = useQuery({
