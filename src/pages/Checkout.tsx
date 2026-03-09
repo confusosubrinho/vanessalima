@@ -84,7 +84,7 @@ function luhnCheck(num: string): boolean {
 export default function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { items, subtotal, clearCart, updateQuantity, selectedShipping, setSelectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
+  const { items, subtotal, total, clearCart, updateQuantity, selectedShipping, setSelectedShipping, shippingZip, discount, appliedCoupon, removeCoupon, cartId } = useCart();
   const { toast } = useToast();
   const { feedback: triggerFeedback } = useFeedback();
   const [currentStep, setCurrentStep] = useState<Step>('identification');
@@ -308,8 +308,8 @@ export default function Checkout() {
   };
 
   // Use pricing engine for installments
-  const shippingCost = selectedShipping ? selectedShipping.price : 0;
-  const total = subtotal - discount + shippingCost;
+  // BUG FIX: Use total from CartContext (single source of truth) instead of recalculating locally
+  const shippingCost = selectedShipping?.price || 0;
 
   // PIX total: when pix_discount_applies_to_sale_products is false, apply discount only to full-price items
   let finalTotal: number;
@@ -825,6 +825,15 @@ export default function Checkout() {
       setFormData(prev => ({ ...prev, cep: shippingZip }));
     }
   }, [shippingZip, formData.cep]);
+
+  // BUG FIX: Clear selected shipping when CEP changes between cart and checkout form
+  useEffect(() => {
+    const formCepClean = (formData.cep || "").replace(/\D/g, "");
+    const cartCepClean = (shippingZip || "").replace(/\D/g, "");
+    if (formCepClean.length === 8 && cartCepClean.length === 8 && formCepClean !== cartCepClean) {
+      setSelectedShipping(null);
+    }
+  }, [formData.cep, shippingZip, setSelectedShipping]);
 
   // Clear selected shipping when checkout CEP diverges from cart CEP
   useEffect(() => {

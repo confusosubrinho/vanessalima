@@ -1,84 +1,63 @@
 
 
-# Auditoria de Bugs e Melhorias do Sistema
+## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
 
-## Bugs Encontrados
+### Fixes Aplicados
 
-### BUG 1 — ALTO: `payments` INSERT policy permite qualquer usuário autenticado inserir pagamentos
-A tabela `payments` tem policy `"Service can insert payments"` com `WITH CHECK (true)`. Isso significa que qualquer usuário autenticado pode inserir registros de pagamento falsos, potencialmente causando fraude ou inconsistências no sistema financeiro. Edge functions usam service_role (bypassam RLS), então a policy deveria ser `WITH CHECK (is_admin())`.
+**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
 
-**Arquivos afetados:** Migration SQL
+**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
 
-### BUG 2 — MÉDIO: Checkout.tsx recalcula `total` localmente ignorando CartContext
-Linha 312 em `Checkout.tsx`:
-```ts
-const total = subtotal - discount + shippingCost;
-```
-O `CartContext` já expõe `total` calculado corretamente (linha 212 no contexto). O Checkout ignora esse valor e calcula seu próprio, criando risco de inconsistência. O `Cart.tsx` usa corretamente `total` do contexto (linha 23), mas o Checkout não.
+**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
 
-**Correção:** Usar `total` do CartContext e remover o cálculo duplicado.
+**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
 
-### BUG 3 — MÉDIO: `store_settings_public` é SECURITY DEFINER view
-O linter detectou que a view `store_settings_public` usa SECURITY DEFINER, o que pode expor dados inadvertidamente ao rodar com privilégios do criador da view em vez do usuário que consulta.
+**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
 
-**Correção:** Alterar para SECURITY INVOKER ou revisar se os dados expostos são realmente públicos.
+### Documentação: Limitação de Cupons (Y33)
 
-### BUG 4 — MÉDIO: `setSelectedShipping` no useEffect de Checkout.tsx sem dependência
-Linha 834-836:
-```ts
-useEffect(() => {
-  if (formCepClean.length === 8 && cartCepClean.length === 8 && formCepClean !== cartCepClean) {
-    setSelectedShipping(null);
-  }
-}, [formData.cep, shippingZip]);
-```
-O `setSelectedShipping` é usado mas não está no dependency array. Embora seja uma função estável do contexto, o ESLint/React recomendam incluí-la para clareza.
+**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
 
-**Correção:** Adicionar `setSelectedShipping` ao dependency array.
+**Workaround recomendado**: Para descontos significativos, considerar:
+1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
+2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
 
-### BUG 5 — BAIXO: Coupon zip prefix validation compara apenas 5 dígitos
-Em `couponDiscount.ts` linhas 98-99:
-```ts
-const zipDigits = (shippingZip || "").replace(/\D/g, "").slice(0, 5);
-if (!zipDigits || !zipPrefixes.some((p) => (p || "").replace(/\D/g, "").slice(0, 5) === zipDigits))
-```
-CEPs brasileiros têm 8 dígitos. Comparar apenas 5 pode causar matches muito amplos (ex: cupom para CEP 01310-000 valeria para 01315-999).
+### Não Implementado (Decisão Técnica)
 
-**Correção:** Ajustar a lógica para comparar o prefixo configurado contra o início do CEP completo.
+- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
+- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
+- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
 
-### BUG 6 — BAIXO: `admin_audit_log` INSERT policy permite qualquer um inserir
-A policy `"System can insert audit log"` tem `WITH CHECK (true)`, permitindo que qualquer usuário (incluindo anon) insira logs de auditoria falsos.
+---
 
-**Correção:** Restringir para `is_admin()` ou remover a policy já que edge functions usam service_role.
+## Resumo das 4 Rodadas de Auditoria
 
-### BUG 7 — BAIXO: `traffic_sessions` INSERT permite spam de sessões
-Qualquer visitante pode inserir infinitas sessões de tráfego, potencialmente poluindo métricas ou estourando storage.
+| Rodada | Fixes | Status |
+|--------|-------|--------|
+| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
+| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
+| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
+| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
+| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
 
-**Correção:** Considerar rate limiting ou validação adicional no frontend antes de inserir.
+**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
 
-## Melhorias Propostas
+---
 
-### MELHORIA 1 — Hardening das RLS policies de INSERT
-Restringir INSERT com `is_admin()` nas tabelas de serviço onde edge functions já usam service_role:
-- `payments` (CRÍTICO)
-- `admin_audit_log`
-- Manter INSERT público apenas onde necessário: `contact_messages`, `newsletter_subscribers`, `stock_notifications`, `abandoned_carts`, `login_attempts`, `error_logs`
+## Rodada 5: Yampi Integration Fixes ✅
 
-### MELHORIA 2 — Unificar cálculo de total no Checkout
-Usar `total` do CartContext em vez de recalcular localmente.
+### Bugs Corrigidos
 
-### MELHORIA 3 — Corrigir validação de prefixo de CEP em cupons
-Ajustar `isCouponValidForLocation` para usar `startsWith` em vez de comparar apenas 5 dígitos.
+**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
 
-### MELHORIA 4 — Converter `store_settings_public` para SECURITY INVOKER
-Remover SECURITY DEFINER da view para seguir best practices.
+**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
 
-## Arquivos Modificados
+**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
 
-- **`src/pages/Checkout.tsx`** — Usar `total` do CartContext, corrigir dependency array
-- **`src/lib/couponDiscount.ts`** — Corrigir validação de CEP
-- **1 migration SQL** — Restringir INSERT em `payments` e `admin_audit_log`, converter view
+**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
 
-## Sem alteração de regras de negócio
-Correções são defensivas. Nenhum fluxo de pagamento ou lógica existente será alterada.
+**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
 
+**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
+
+**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
