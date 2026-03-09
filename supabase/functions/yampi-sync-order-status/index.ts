@@ -266,12 +266,30 @@ Deno.serve(async (req) => {
       yampi_order_number: yampiOrderNumber,
     }).eq("id", order.id);
   } else {
-    // Extract transaction details
-    const txPaymentMethod = (firstTx.payment_method as string) || (yampiOrder.payment_method as string) || null;
-    const txGateway = (firstTx.gateway as string) || (yampiOrder.gateway as string) || null;
+    // Extract transaction details (expanded fallbacks for Yampi nested structures)
+    const txPaymentMethodObj = firstTx.payment_method || firstTx.payment;
+    const txPaymentMethod = (typeof txPaymentMethodObj === "object" && txPaymentMethodObj !== null
+      ? ((txPaymentMethodObj as Record<string, unknown>).name as string) || ((txPaymentMethodObj as Record<string, unknown>).label as string)
+      : (txPaymentMethodObj as string))
+      || (typeof yampiOrder.payment_method === "object" && yampiOrder.payment_method !== null
+        ? ((yampiOrder.payment_method as Record<string, unknown>).name as string)
+        : (yampiOrder.payment_method as string))
+      || null;
+
+    const txGatewayObj = firstTx.gateway;
+    const txGateway = (typeof txGatewayObj === "object" && txGatewayObj !== null
+      ? ((txGatewayObj as Record<string, unknown>).name as string)
+      : (txGatewayObj as string))
+      || (typeof yampiOrder.gateway === "object" && yampiOrder.gateway !== null
+        ? ((yampiOrder.gateway as Record<string, unknown>).name as string)
+        : (yampiOrder.gateway as string))
+      || null;
+
     const txInstallments = firstTx.installments ? Number(firstTx.installments) : (yampiOrder.installments ? Number(yampiOrder.installments) : null);
-    const txTransactionId = (firstTx.transaction_id as string) || (yampiOrder.transaction_id as string) || null;
+    const txTransactionId = (firstTx.transaction_id as string) || (firstTx.tid as string) || (yampiOrder.transaction_id as string) || null;
     const txShippingCost = yampiOrder.value_shipment != null ? Number(yampiOrder.value_shipment) : (yampiOrder.shipping_cost != null ? Number(yampiOrder.shipping_cost) : null);
+
+    console.log("[yampi-sync] Resolved payment_method:", txPaymentMethod, "| gateway:", txGateway, "| shipping_method:", shippingMethodName);
 
     // --- Extract customer data ---
     const customerRaw = yampiOrder.customer as Record<string, unknown> | undefined;
