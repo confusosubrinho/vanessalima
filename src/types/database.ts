@@ -216,6 +216,7 @@ export interface ProductReview {
 }
  
  export interface ShippingOption {
+   id: string;
    name: string;
    price: number;
    deadline: string;
