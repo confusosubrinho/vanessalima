@@ -116,6 +116,7 @@ const ALL_TEMPLATES: TemplateItem[] = [
   { section_type: 'instagram_feed',    label: 'Feed do Instagram',       ...SECTION_META.instagram_feed },
   { section_type: 'testimonials',      label: 'Avaliações de Clientes',  ...SECTION_META.testimonials },
   { section_type: 'newsletter',        label: 'Newsletter',              ...SECTION_META.newsletter },
+  { section_type: 'blog',              label: 'Blog',                    ...SECTION_META.blog },
   { section_type: 'features_bar',      label: 'Barra de Diferenciais',   ...SECTION_META.features_bar },
   { section_type: 'product_sections',  label: 'Seções de Produtos',      ...SECTION_META.product_sections },
 ];
