@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 
 export default function CheckoutStart() {
   const navigate = useNavigate();
-  const { items, subtotal, discount, selectedShipping, clearCart, appliedCoupon, cartId, shippingZip } = useCart();
+  const { items, subtotal, discount, total, selectedShipping, clearCart, appliedCoupon, cartId, shippingZip } = useCart();
   const [error, setError] = useState<string | null>(null);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const hasStartedCheckout = useRef(false);
