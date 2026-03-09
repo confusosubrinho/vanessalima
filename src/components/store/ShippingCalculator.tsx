@@ -85,7 +85,7 @@ export function ShippingCalculator({ compact = false, products }: ShippingCalcul
       if (data?.free_shipping_threshold && subtotal >= data.free_shipping_threshold) {
         const cheapest = (data?.options || []).sort((a: any, b: any) => a.price - b.price)[0];
         if (cheapest) {
-          setSelectedShipping({ name: cheapest.name, price: 0, deadline: cheapest.deadline, company: cheapest.company });
+          setSelectedShipping({ id: cheapest.id || cheapest.name || 'free-shipping', name: cheapest.name, price: 0, deadline: cheapest.deadline, company: cheapest.company });
         }
       }
     } catch (err: any) {
