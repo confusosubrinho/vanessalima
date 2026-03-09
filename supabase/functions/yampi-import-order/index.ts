@@ -255,6 +255,11 @@ Deno.serve(async (req) => {
   const yampiOrderDate = (yampiOrder.created_at as string) || (yampiOrder.date as string) || (yampiOrder.order_date as string) || (yampiOrder.updated_at as string) || null;
   const yampiCreatedAt = yampiOrderDate ? new Date(yampiOrderDate).toISOString() : null;
 
+  // Y48: Extract coupon code from Yampi order
+  const couponData = (yampiOrder.coupon as Record<string, unknown>) || {};
+  const couponDataInner = (couponData.data as Record<string, unknown>) || couponData;
+  const couponCode = (couponDataInner.code as string) || (yampiOrder.coupon_code as string) || null;
+
   // ── Create order ──
   const { data: order, error: orderErr } = await supabase
     .from("orders")
