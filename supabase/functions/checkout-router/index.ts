@@ -308,23 +308,27 @@ Deno.serve(async (req) => {
       if (orderId && newOrder && !orderErr) {
         const fullItems = items.map((i) => {
           const meta = variantMap.get(i.variant_id)!;
+          const variantParts = [meta.size, meta.color].filter(Boolean);
+          const variantInfo = variantParts.join(" / ");
+          const imageSnapshot = meta.product_id ? (productImageMap.get(meta.product_id) || null) : null;
           return {
             order_id: orderId,
             product_variant_id: i.variant_id,
             product_id: meta.product_id,
             product_name: i.product_name,
-            variant_info: "",
+            variant_info: variantInfo,
             quantity: i.quantity,
             unit_price: i.unit_price,
             total_price: i.unit_price * i.quantity,
             title_snapshot: i.product_name,
-            image_snapshot: null as string | null,
+            image_snapshot: imageSnapshot,
+            sku_snapshot: meta.sku || null,
             yampi_sku_id: meta.yampi_sku_id,
           };
         });
         await supabase.from("order_items").insert(
-          fullItems.map(({ order_id, product_variant_id, product_id, product_name, variant_info, quantity, unit_price, total_price, title_snapshot, image_snapshot, yampi_sku_id }) =>
-            ({ order_id, product_variant_id, product_id, product_name, variant_info, quantity, unit_price, total_price, title_snapshot, image_snapshot, yampi_sku_id })
+          fullItems.map(({ order_id, product_variant_id, product_id, product_name, variant_info, quantity, unit_price, total_price, title_snapshot, image_snapshot, sku_snapshot, yampi_sku_id }) =>
+            ({ order_id, product_variant_id, product_id, product_name, variant_info, quantity, unit_price, total_price, title_snapshot, image_snapshot, sku_snapshot, yampi_sku_id })
           )
         );
       }
