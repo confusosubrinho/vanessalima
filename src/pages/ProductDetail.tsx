@@ -106,6 +106,7 @@ export default function ProductDetail() {
   useEffect(() => {
     setSelectedSize(null);
     setSelectedColor(null);
+    setSelectedCustomAttr(null);
     setQuantity(1);
     setSelectedImage(0);
     setActiveTab('description');
