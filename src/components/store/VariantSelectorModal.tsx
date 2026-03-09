@@ -8,6 +8,7 @@ import { StockNotifyModal } from './StockNotifyModal';
 import { resolveImageUrl } from '@/lib/imageUrl';
 import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentDisplay, formatCurrency as fmtCurrency } from '@/lib/pricingEngine';
+import { useToast } from '@/hooks/use-toast';
 
 interface VariantSelectorModalProps {
   product: Product;
