@@ -259,14 +259,30 @@ export default function ProductDetail() {
   });
   const colors = [...new Map(validVariants.filter(v => v.color).map(v => [v.color, { name: v.color!, hex: v.color_hex }])).values()];
   
-  // Filter sizes available for selected color
+  // Extract custom attributes from variants
+  const customAttrName = useMemo(() => {
+    const names = variants.filter(v => v.custom_attribute_name).map(v => v.custom_attribute_name!);
+    return names.length > 0 ? names[0] : null;
+  }, [variants]);
+
+  const customAttrValues = useMemo(() => {
+    if (!customAttrName) return [];
+    let filtered = validVariants.filter(v => v.custom_attribute_name === customAttrName && v.custom_attribute_value);
+    if (selectedColor) filtered = filtered.filter(v => v.color === selectedColor);
+    if (selectedSize) filtered = filtered.filter(v => v.size === selectedSize);
+    return [...new Set(filtered.map(v => v.custom_attribute_value!))];
+  }, [validVariants, customAttrName, selectedColor, selectedSize]);
+
+  const hasCustomAttr = customAttrName && customAttrValues.length > 0;
+
+  // Filter sizes available for selected color + custom attr
   const availableSizes = selectedColor
-    ? [...new Set(validVariants.filter(v => v.color === selectedColor).map(v => v.size))].sort((a, b) => {
+    ? [...new Set(validVariants.filter(v => v.color === selectedColor && (!hasCustomAttr || !selectedCustomAttr || v.custom_attribute_value === selectedCustomAttr)).map(v => v.size))].sort((a, b) => {
         const numA = Number(a); const numB = Number(b);
         if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
         return a.localeCompare(b);
       })
-    : [...new Set(validVariants.map(v => v.size))].sort((a, b) => {
+    : [...new Set(validVariants.filter(v => !hasCustomAttr || !selectedCustomAttr || v.custom_attribute_value === selectedCustomAttr).map(v => v.size))].sort((a, b) => {
         const numA = Number(a); const numB = Number(b);
         if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
         return a.localeCompare(b);
@@ -286,14 +302,22 @@ export default function ProductDetail() {
     }).format(price);
   };
 
-  // Determine selected variant considering colors
+  // Determine selected variant considering colors + custom attr
   const hasColors = colors.length > 0;
   const selectedVariant = selectedSize
     ? (hasColors && selectedColor
-        ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
+        ? (hasCustomAttr && selectedCustomAttr
+            ? variants.find(v => v.size === selectedSize && v.color === selectedColor && v.custom_attribute_value === selectedCustomAttr)
+            : hasCustomAttr
+              ? null
+              : variants.find(v => v.size === selectedSize && v.color === selectedColor))
         : hasColors
           ? null // Force color selection when colors exist
-          : variants.find(v => v.size === selectedSize))
+          : (hasCustomAttr && selectedCustomAttr
+              ? variants.find(v => v.size === selectedSize && v.custom_attribute_value === selectedCustomAttr)
+              : hasCustomAttr
+                ? null
+                : variants.find(v => v.size === selectedSize)))
     : null;
 
   // Price calculation: prioritize variant-specific pricing
