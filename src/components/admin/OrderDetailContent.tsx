@@ -4,9 +4,10 @@ import { Separator } from '@/components/ui/separator';
 import { formatPrice, getProviderLabel } from '@/lib/formatters';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Clock, CreditCard, MapPin, Package, RefreshCw, ShoppingBag, Trash2 } from 'lucide-react';
+import { Clock, CreditCard, MapPin, MessageCircle, Package, RefreshCw, ShoppingBag, Trash2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Order } from '@/types/database';
+import { getWhatsAppNumber } from '@/hooks/useStoreContact';
 
 interface OrderItem {
   id: string;
@@ -227,7 +228,20 @@ export function OrderDetailContent({
               {(order.shipping_city || order.shipping_state) && <>{order.shipping_city}{order.shipping_state ? ` - ${order.shipping_state}` : ''}<br /></>}
               {order.shipping_zip && <>CEP: {order.shipping_zip}</>}
             </p>
-            {order.shipping_phone && <p className="text-muted-foreground">Tel: {order.shipping_phone}</p>}
+            {order.shipping_phone && (
+              <div className="flex items-center gap-2">
+                <p className="text-muted-foreground">Tel: {order.shipping_phone}</p>
+                <a
+                  href={`https://wa.me/${getWhatsAppNumber(order.shipping_phone)}?text=${encodeURIComponent(`Olá! Referente ao pedido #${order.order_number}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-green-600 text-white hover:bg-green-700 transition-colors"
+                >
+                  <MessageCircle className="h-3 w-3" />
+                  WhatsApp
+                </a>
+              </div>
+            )}
           </div>
         </section>
 

@@ -395,9 +395,22 @@ Deno.serve(async (req) => {
 
         const yampiSkuId = item.sku_id ? Number(item.sku_id) : (skuData.id ? Number(skuData.id) : null);
 
-        // --- Fix #1: Extract product name from skuData.title (Yampi puts title there, not in item.product) ---
-        let productName = (item.name as string) || (skuData.title as string) ||
-          (productData.name as string) || (item.product_name as string) || null;
+        // --- Fix #1: Extract product name, deprioritizing generic "Produto" placeholder ---
+        const isGenericName = (n: unknown): boolean => {
+          if (!n || typeof n !== "string") return true;
+          const lower = n.trim().toLowerCase();
+          return lower === "produto" || lower === "produto yampi" || lower === "";
+        };
+        const rawItemName = (item.name as string) || null;
+        const rawSkuTitle = (skuData.title as string) || null;
+        const rawProductDataName = (productData.name as string) || null;
+        const rawProductName = (item.product_name as string) || null;
+        // Prefer non-generic names first
+        let productName = (!isGenericName(rawItemName) ? rawItemName
+          : !isGenericName(rawSkuTitle) ? rawSkuTitle
+          : !isGenericName(rawProductDataName) ? rawProductDataName
+          : !isGenericName(rawProductName) ? rawProductName
+          : rawItemName) || null;
 
         // --- Fix #3: Correct variation extraction - handle both array and {data:[]} formats ---
         const variationsRaw = skuData.variations;
@@ -462,8 +475,8 @@ Deno.serve(async (req) => {
           if (localImg?.url) localImageUrl = localImg.url;
         }
 
-        // Use local product name if Yampi name is missing or use local as canonical
-        if (!productName && localProductName) productName = localProductName;
+        // Use local product name if Yampi name is missing/generic
+        if (localProductName && (isGenericName(productName) || !productName)) productName = localProductName;
 
         // Image URL - with local fallback
         const skuImagesArr = ((skuData.images as Record<string, unknown>)?.data as unknown[]) || (skuData.images as unknown[]) || [];

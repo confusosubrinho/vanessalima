@@ -497,7 +497,13 @@ Deno.serve(async (req) => {
         const skuId = rawSkuId != null && rawSkuId !== "" ? Number(rawSkuId) : null;
         const quantity = Number(item?.quantity) || 1;
         const unitPrice = Number(item?.price || item?.price_sale || item?.unit_price) || 0;
-        const itemName = item?.name || item?.product_name || "Produto";
+        const isGenericName = (n: unknown): boolean => {
+          if (!n || typeof n !== "string") return true;
+          const lower = n.trim().toLowerCase();
+          return lower === "produto" || lower === "produto yampi" || lower === "";
+        };
+        const rawItemName = (item?.name as string) || (item?.product_name as string) || null;
+        let itemName = isGenericName(rawItemName) ? "Produto" : rawItemName!;
         const itemSku = (item?.sku as string) || (item?.sku_code as string) || (item?.code as string) || ((item?.sku as Record<string, unknown>)?.sku as string) || null;
         const itemImage = (item?.image as Record<string, unknown>) || (item?.product as Record<string, unknown>)?.image as Record<string, unknown> || {};
         const itemImageUrl = (itemImage?.url as string) || (itemImage?.src as string) || (item?.image_url as string) || null;
@@ -524,7 +530,13 @@ Deno.serve(async (req) => {
         let productId = localVariant?.product_id || null;
         if (productId) {
           const { data: p } = await supabase.from("products").select("name").eq("id", productId).maybeSingle();
-          if (p) productName = p.name;
+          if (p?.name) productName = p.name;
+        }
+        // If still generic after local lookup, try SKU data title
+        if (isGenericName(productName)) {
+          const skuTitle = ((item?.sku as Record<string, unknown>)?.data as Record<string, unknown>)?.title as string
+            || (item?.sku as Record<string, unknown>)?.title as string;
+          if (!isGenericName(skuTitle)) productName = skuTitle!;
         }
 
         let imageSnapshot: string | null = itemImageUrl || null;
