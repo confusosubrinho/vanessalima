@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
       const sessionId = resourceData?.metadata?.session_id || null;
 
       // Idempotency: check order_events hash for approved event
-      const approvedHash = `approved-${yampiOrderId || "unknown"}-${transactionId || Date.now()}`;
+      const approvedHash = `approved-${yampiOrderId || "unknown"}-${transactionId || yampiOrderId || Date.now()}`;
       const { data: existingEvent } = await supabase
         .from("order_events")
         .select("id")
