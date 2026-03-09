@@ -669,7 +669,7 @@ Deno.serve(async (req) => {
           await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: effectiveEvent, event_hash: shippedHash, payload });
           return jsonOk({ ok: true, event, action: "ignored_already_delivered" });
         }
-        const updateData: Record<string, unknown> = { status: "shipped" };
+        const updateData: Record<string, unknown> = { status: "shipped", payment_status: "approved" };
         if (trackingCode) updateData.tracking_code = trackingCode;
         if (eventShippingCost != null && Number(eventShippingCost) > 0) updateData.shipping_cost = Number(eventShippingCost);
         await supabase.from("orders").update(updateData).eq("id", existingOrder.id);
