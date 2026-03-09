@@ -65,6 +65,9 @@ export default function Cart() {
             <Link to="/">Continuar Comprando</Link>
           </Button>
         </div>
+        <div className="container-custom pb-16">
+          <CartProductSuggestions />
+        </div>
       </StoreLayout>
     );
   }

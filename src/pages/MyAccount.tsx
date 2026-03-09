@@ -8,9 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { User, Package, MapPin, LogOut, Heart } from 'lucide-react';
+import { User, Package, MapPin, LogOut, ChevronDown, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Helmet } from 'react-helmet-async';
+import { lookupCEP } from '@/lib/validators';
 import type { User as SupaUser } from '@supabase/supabase-js';
 
 export default function MyAccount() {
@@ -19,6 +23,8 @@ export default function MyAccount() {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<SupaUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -119,6 +125,31 @@ export default function MyAccount() {
     navigate('/');
   };
 
+  const handleCepBlur = async () => {
+    const cleaned = profileForm.zip_code.replace(/\D/g, '');
+    if (cleaned.length !== 8) return;
+    setCepLoading(true);
+    const result = await lookupCEP(cleaned);
+    setCepLoading(false);
+    if (result) {
+      setProfileForm(prev => ({
+        ...prev,
+        address: result.logradouro || prev.address,
+        city: result.localidade || prev.city,
+        state: result.uf || prev.state,
+      }));
+    }
+  };
+
+  const toggleOrder = (orderId: string) => {
+    setExpandedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
   const formatPrice = (price: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price);
 
@@ -138,10 +169,28 @@ export default function MyAccount() {
     cancelled: 'bg-red-100 text-red-800',
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <StoreLayout>
+        <Helmet><title>Minha Conta | Vanessa Lima Shoes</title></Helmet>
+        <div className="container-custom py-8 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+            <Skeleton className="h-10 w-20 rounded-full" />
+          </div>
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-64 w-full rounded-lg" />
+        </div>
+      </StoreLayout>
+    );
+  }
 
   return (
     <StoreLayout>
+      <Helmet><title>Minha Conta | Vanessa Lima Shoes</title></Helmet>
       <div className="container-custom py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -227,28 +276,58 @@ export default function MyAccount() {
                 ) : (
                   <div className="space-y-4">
                     {orders.map((order: any) => (
-                      <div key={order.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <p className="font-medium">Pedido #{order.order_number}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                      <Collapsible
+                        key={order.id}
+                        open={expandedOrders.has(order.id)}
+                        onOpenChange={() => toggleOrder(order.id)}
+                      >
+                        <div className="border rounded-lg p-4">
+                          <CollapsibleTrigger className="w-full text-left">
+                            <div className="flex items-center justify-between mb-1">
+                              <div>
+                                <p className="font-medium">Pedido #{order.order_number}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-right">
+                                  <Badge className={statusColors[order.status] || ''}>
+                                    {statusLabels[order.status] || order.status}
+                                  </Badge>
+                                  <p className="font-bold mt-1">{formatPrice(order.total_amount)}</p>
+                                </div>
+                                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expandedOrders.has(order.id) ? 'rotate-180' : ''}`} />
+                              </div>
+                            </div>
+                            {order.tracking_code && (
+                              <p className="text-sm text-primary">Rastreio: {order.tracking_code}</p>
+                            )}
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {order.order_items?.length || 0} {order.order_items?.length === 1 ? 'item' : 'itens'} — Clique para ver detalhes
                             </p>
-                          </div>
-                          <div className="text-right">
-                            <Badge className={statusColors[order.status] || ''}>
-                              {statusLabels[order.status] || order.status}
-                            </Badge>
-                            <p className="font-bold mt-1">{formatPrice(order.total_amount)}</p>
-                          </div>
+                          </CollapsibleTrigger>
+
+                          <CollapsibleContent>
+                            <div className="mt-3 pt-3 border-t space-y-2">
+                              {order.order_items?.map((item: any) => (
+                                <div key={item.id} className="flex items-center justify-between text-sm py-1">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium truncate">{item.product_name}</p>
+                                    {item.variant_info && (
+                                      <p className="text-xs text-muted-foreground">{item.variant_info}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right ml-4 shrink-0">
+                                    <p className="text-muted-foreground">{item.quantity}x {formatPrice(item.unit_price)}</p>
+                                    <p className="font-medium">{formatPrice(item.total_price)}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CollapsibleContent>
                         </div>
-                        {order.tracking_code && (
-                          <p className="text-sm text-primary">Rastreio: {order.tracking_code}</p>
-                        )}
-                        <div className="mt-2 text-sm text-muted-foreground">
-                          {order.order_items?.length || 0} {order.order_items?.length === 1 ? 'item' : 'itens'}
-                        </div>
-                      </div>
+                      </Collapsible>
                     ))}
                   </div>
                 )}
@@ -271,11 +350,17 @@ export default function MyAccount() {
                 >
                   <div className="space-y-2">
                     <Label>CEP</Label>
-                    <Input
-                      value={profileForm.zip_code}
-                      onChange={(e) => setProfileForm({ ...profileForm, zip_code: e.target.value })}
-                      placeholder="00000-000"
-                    />
+                    <div className="relative">
+                      <Input
+                        value={profileForm.zip_code}
+                        onChange={(e) => setProfileForm({ ...profileForm, zip_code: e.target.value })}
+                        onBlur={handleCepBlur}
+                        placeholder="00000-000"
+                      />
+                      {cepLoading && (
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Endereço</Label>
