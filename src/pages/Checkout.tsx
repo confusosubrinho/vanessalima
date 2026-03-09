@@ -817,12 +817,14 @@ export default function Checkout() {
     triggerFeedback('error');
   };
 
-  // Pre-fill CEP from cart
+  // Pre-fill CEP from cart (only once when component mounts with existing cart CEP)
+  const cepPrefilledRef = useRef(false);
   useEffect(() => {
-    if (shippingZip && !formData.cep) {
+    if (shippingZip && !formData.cep && !cepPrefilledRef.current) {
+      cepPrefilledRef.current = true;
       setFormData(prev => ({ ...prev, cep: shippingZip }));
     }
-  }, [shippingZip]);
+  }, [shippingZip, formData.cep]);
 
   // Clear selected shipping when checkout CEP diverges from cart CEP
   useEffect(() => {

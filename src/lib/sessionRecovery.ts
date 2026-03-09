@@ -26,7 +26,7 @@ export function initSessionRecovery() {
   });
 
   // Periodically check session health
-  setInterval(async () => {
+  intervalId = setInterval(async () => {
     if (isRecovering) return;
     
     try {

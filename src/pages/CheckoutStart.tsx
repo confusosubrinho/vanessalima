@@ -122,7 +122,7 @@ export default function CheckoutStart() {
     };
 
     startCheckout();
-  }, [items.length, navigate, retryTrigger]);
+  }, [items.length, navigate, retryTrigger, cartId, subtotal, discount, selectedShipping, appliedCoupon, shippingZip]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

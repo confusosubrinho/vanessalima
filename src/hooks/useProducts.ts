@@ -41,11 +41,9 @@ export function useProducts(categorySlug?: string, options?: { enabled?: boolean
  
       const { data, error } = await query;
       if (error) {
+        // Let React Query handle retry with fresh queryFn (avoid stale query builder)
         if (error.message?.includes('JWT expired')) {
           await supabase.auth.signOut();
-          const { data: retryData, error: retryError } = await query;
-          if (retryError) throw retryError;
-          return (retryData as Product[]) || [];
         }
         logApiError('useProducts', error, { categorySlug });
         throw error;
