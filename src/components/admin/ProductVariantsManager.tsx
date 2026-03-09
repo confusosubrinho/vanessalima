@@ -556,6 +556,28 @@ export function ProductVariantsManager({
                 </div>
               </div>
 
+              {/* Custom Attribute */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Nome do Atributo</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editingVariant.custom_attribute_name ?? ''}
+                    onChange={(e) => updateVariant(editIndex, 'custom_attribute_name', e.target.value)}
+                    placeholder="Ex: Material"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Valor do Atributo</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editingVariant.custom_attribute_value ?? ''}
+                    onChange={(e) => updateVariant(editIndex, 'custom_attribute_value', e.target.value)}
+                    placeholder="Ex: Couro"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">SKU</Label>
