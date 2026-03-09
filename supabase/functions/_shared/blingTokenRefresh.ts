@@ -57,13 +57,17 @@ export async function getValidTokenSafe(supabase: any): Promise<string> {
     }
 
     // Optimistic lock: only update if refresh_token hasn't changed since we read it
+    const updatePayload: Record<string, string> = {
+      bling_access_token: tokenData.access_token,
+      bling_token_expires_at: new Date(Date.now() + (tokenData.expires_in || 21600) * 1000).toISOString(),
+    };
+    // Only overwrite refresh_token if the API returned a new one (avoid null overwrite)
+    if (tokenData.refresh_token) {
+      updatePayload.bling_refresh_token = tokenData.refresh_token;
+    }
     const { data: updateResult, error: updateError } = await supabase
       .from("store_settings")
-      .update({
-        bling_access_token: tokenData.access_token,
-        bling_refresh_token: tokenData.refresh_token,
-        bling_token_expires_at: new Date(Date.now() + (tokenData.expires_in || 21600) * 1000).toISOString(),
-      } as any)
+      .update(updatePayload as any)
       .eq("id", settings.id)
       .eq("bling_refresh_token", oldRefreshToken)
       .select("id");

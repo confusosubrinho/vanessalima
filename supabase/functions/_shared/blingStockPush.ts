@@ -217,9 +217,9 @@ export async function cancelBlingOrder(
       return { success: false, error: errMsg };
     }
 
-    // Consume response body to prevent Deno resource leak
-    await response.body?.cancel().catch(() => {});
-    console.log(`[bling-auto] Bling order ${blingOrderId} cancelled for order ${orderId}`);
+    // Consume response body and log result
+    const cancelData = await response.json().catch(() => ({}));
+    console.log(`[bling-auto] Bling order ${blingOrderId} cancelled for order ${orderId}`, JSON.stringify(cancelData).substring(0, 200));
     return { success: true };
   } catch (err: any) {
     console.error(`[bling-auto] Cancel error for order ${orderId}:`, err.message);

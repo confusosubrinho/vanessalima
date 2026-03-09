@@ -384,11 +384,18 @@ async function syncStockOnly(supabase: any, headers: any, productId: string, bli
   let stockUpdated = false;
   if (detail.variacoes?.length) {
     const varIds = detail.variacoes.map((v: any) => v.id);
-    const idsParam = varIds.map((id: number) => `idsProdutos[]=${id}`).join("&");
-    await sleep(300);
-    const stockRes = await fetchWithTimeout(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
-    const stockJson = await stockRes.json();
-    for (const s of (stockJson?.data || [])) {
+    // Batch IDs in groups of 50 to avoid URL length limits (Error 414)
+    const BATCH_SIZE = 50;
+    const allStockData: any[] = [];
+    for (let i = 0; i < varIds.length; i += BATCH_SIZE) {
+      const batch = varIds.slice(i, i + BATCH_SIZE);
+      const idsParam = batch.map((id: number) => `idsProdutos[]=${id}`).join("&");
+      await sleep(300);
+      const stockRes = await fetchWithTimeout(`${BLING_API_URL}/estoques/saldos?${idsParam}`, { headers });
+      const stockJson = await stockRes.json();
+      allStockData.push(...(stockJson?.data || []));
+    }
+    for (const s of allStockData) {
       const varBlingId = s.produto?.id;
       const qty = s.saldoVirtualTotal ?? 0;
       if (varBlingId) {
