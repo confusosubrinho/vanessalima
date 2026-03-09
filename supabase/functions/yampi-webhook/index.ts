@@ -141,7 +141,17 @@ Deno.serve(async (req) => {
           if (subtotalOrder <= 0) subtotalOrder = totalAmount;
           const trackingCode = resourceData?.tracking_code || resourceData?.tracking?.code || null;
 
-          await supabase.from("orders").update({
+          // Fix #6: Extract shipping_method from approved payload (update path)
+          const shippingOptRaw = resourceData?.shipping_option || {};
+          const shippingOptData = shippingOptRaw?.data || shippingOptRaw;
+          const shippingMethodUpdate =
+            (resourceData?.shipping_option_name as string) ||
+            (shippingOptData?.name as string) ||
+            (resourceData?.delivery_option?.name as string) ||
+            (resourceData?.shipping_method as string) ||
+            null;
+
+          const updatePayload: Record<string, unknown> = {
             subtotal: subtotalOrder,
             total_amount: totalAmount,
             shipping_cost: shippingCost,
@@ -163,7 +173,10 @@ Deno.serve(async (req) => {
             tracking_code: trackingCode,
             status: "processing",
             external_reference: yampiOrderId,
-          } as Record<string, unknown>).eq("id", existingBySession.id);
+          };
+          if (shippingMethodUpdate) updatePayload.shipping_method = shippingMethodUpdate;
+
+          await supabase.from("orders").update(updatePayload).eq("id", existingBySession.id);
 
           // Convert existing reserves to debits, or create new debits
           const { data: existingItems } = await supabase.from("order_items").select("id, product_variant_id, quantity").eq("order_id", existingBySession.id);
