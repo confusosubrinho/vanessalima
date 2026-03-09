@@ -1,60 +1,63 @@
 
 
-# Fix: Enriquecer order_items com nome, SKU e vinculação a produto local
+## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
 
-## Problema
+### Fixes Aplicados
 
-Os logs confirmam que ao sincronizar, o item Yampi tem:
-- `item.sku.data.title` = "Conjunto colar aramado e brinco gota Único Dourado" (nome real)
-- `item.sku.data.sku` = "VLS-CONCOLARA-704-ÚNICO-DOU"  
-- `item.sku_id` = 293742659
-- `item.product` **não existe** no payload
+**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
 
-Mas o código atual:
-1. Busca nome em `productData.name` (que é `{}` porque `item.product` não existe) → `null`
-2. Nunca consulta `product_variants` para vincular `product_id` e `product_variant_id` ao pedido
-3. Extrai "Tamanho / Cor" como variação (nomes dos eixos) em vez dos **valores** ("Único / Dourado")
+**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
 
-## Correções em `yampi-sync-order-status/index.ts`
+**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
 
-### 1. Extrair nome do produto de `skuData.title`
-```typescript
-const productName = (item.name as string) || (skuData.title as string) || 
-  (productData.name as string) || (item.product_name as string) || null;
-```
+**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
 
-### 2. Vincular a produto local (como `yampi-import-order` já faz)
-Após extrair `yampiSkuId`, consultar `product_variants` por `yampi_sku_id` e por `sku` como fallback:
-```typescript
-let localVariant = null;
-if (yampiSkuId) {
-  localVariant = await supabase.from("product_variants")
-    .select("id, product_id, size, color, sku")
-    .eq("yampi_sku_id", yampiSkuId).maybeSingle();
-}
-if (!localVariant && skuSnapshot) {
-  localVariant = await supabase.from("product_variants")
-    .select("id, product_id, size, color, sku")
-    .eq("sku", skuSnapshot).maybeSingle();
-}
-// Se encontrou, buscar nome real do produto local
-if (localVariant?.product_id) {
-  const product = await supabase.from("products").select("name").eq("id", localVariant.product_id).maybeSingle();
-  // Preencher product_id, product_variant_id, product_name, image_snapshot
-}
-```
+**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
 
-### 3. Corrigir extração de variações — usar `value_name` em vez de `name`
-O payload mostra `variations: [{name: "Tamanho", value_name: "Único"}, ...]`. O código já usa `v.value_name` mas o parsing do array `variations` falha porque está dentro de `sku.data.variations` (array direto, não `{data: [...]}`):
-```typescript
-const variationsArr = Array.isArray(skuData.variations) 
-  ? skuData.variations 
-  : (skuData.variations?.data || []);
-```
+### Documentação: Limitação de Cupons (Y33)
 
-### 4. Buscar imagem do produto local quando Yampi não traz
-Se `localVariant.product_id` existe e não há `imageUrl`, buscar de `product_images`.
+**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
 
-## Arquivo modificado
-- `supabase/functions/yampi-sync-order-status/index.ts` (bloco de enriquecimento de items, linhas ~369-465)
+**Workaround recomendado**: Para descontos significativos, considerar:
+1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
+2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
 
+### Não Implementado (Decisão Técnica)
+
+- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
+- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
+- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
+
+---
+
+## Resumo das 4 Rodadas de Auditoria
+
+| Rodada | Fixes | Status |
+|--------|-------|--------|
+| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
+| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
+| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
+| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
+| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
+
+**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
+
+---
+
+## Rodada 5: Yampi Integration Fixes ✅
+
+### Bugs Corrigidos
+
+**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
+
+**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
+
+**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
+
+**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
+
+**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
+
+**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
+
+**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.

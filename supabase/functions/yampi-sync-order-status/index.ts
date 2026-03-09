@@ -394,28 +394,85 @@ Deno.serve(async (req) => {
           : {};
 
         const yampiSkuId = item.sku_id ? Number(item.sku_id) : (skuData.id ? Number(skuData.id) : null);
-        const productName = (productData.name as string) || (item.name as string) || (item.product_name as string) || null;
 
-        // Variant info from variations array or sku fields
-        const variationsArr = (skuData.variations as Record<string, unknown>)?.data as unknown[] || skuData.variations as unknown[] || [];
-        const variationLabels = variationsArr.map((v: any) => v?.value_name || v?.name || v?.value).filter(Boolean);
+        // --- Fix #1: Extract product name from skuData.title (Yampi puts title there, not in item.product) ---
+        let productName = (item.name as string) || (skuData.title as string) ||
+          (productData.name as string) || (item.product_name as string) || null;
+
+        // --- Fix #3: Correct variation extraction - handle both array and {data:[]} formats ---
+        const variationsRaw = skuData.variations;
+        const variationsArr: unknown[] = Array.isArray(variationsRaw)
+          ? variationsRaw
+          : ((variationsRaw as Record<string, unknown>)?.data as unknown[] || []);
+        const variationLabels = variationsArr.map((v: any) => v?.value_name || v?.value).filter(Boolean);
         const variantInfo = variationLabels.length > 0
           ? variationLabels.join(" / ")
           : ([skuData.size, skuData.color].filter(Boolean).join(" / ") ||
-            (item.variant_name as string) || (skuData.title as string) || null);
+            (item.variant_name as string) || null);
 
         // SKU snapshot - deeper extraction
         const skuSnapshot = (skuData.sku as string) || (item.item_sku as string) ||
           (typeof skuRaw === "string" ? skuRaw : null) || null;
 
-        // Image URL
+        // --- Fix #2: Link to local product_variants by yampi_sku_id or sku ---
+        let localProductId: string | null = null;
+        let localVariantId: string | null = null;
+        let localProductName: string | null = null;
+        let localImageUrl: string | null = null;
+
+        if (yampiSkuId) {
+          const { data: byYampiId } = await supabase
+            .from("product_variants")
+            .select("id, product_id")
+            .eq("yampi_sku_id", yampiSkuId)
+            .maybeSingle();
+          if (byYampiId) {
+            localVariantId = byYampiId.id;
+            localProductId = byYampiId.product_id;
+          }
+        }
+        if (!localVariantId && skuSnapshot) {
+          const { data: bySku } = await supabase
+            .from("product_variants")
+            .select("id, product_id")
+            .eq("sku", skuSnapshot)
+            .maybeSingle();
+          if (bySku) {
+            localVariantId = bySku.id;
+            localProductId = bySku.product_id;
+          }
+        }
+
+        // If linked, fetch local product name and primary image
+        if (localProductId) {
+          const { data: localProduct } = await supabase
+            .from("products")
+            .select("name")
+            .eq("id", localProductId)
+            .maybeSingle();
+          if (localProduct?.name) localProductName = localProduct.name;
+
+          // --- Fix #4: Fetch local image if Yampi doesn't provide one ---
+          const { data: localImg } = await supabase
+            .from("product_images")
+            .select("url")
+            .eq("product_id", localProductId)
+            .eq("is_primary", true)
+            .maybeSingle();
+          if (localImg?.url) localImageUrl = localImg.url;
+        }
+
+        // Use local product name if Yampi name is missing or use local as canonical
+        if (!productName && localProductName) productName = localProductName;
+
+        // Image URL - with local fallback
         const skuImagesArr = ((skuData.images as Record<string, unknown>)?.data as unknown[]) || (skuData.images as unknown[]) || [];
         const productImagesArr = ((productData.images as Record<string, unknown>)?.data as unknown[]) || (productData.images as unknown[]) || [];
         const imageUrl = (skuData.image_url as string) ||
           ((skuImagesArr[0] as Record<string, unknown>)?.url as string) ||
           (productData.image_url as string) ||
           ((productImagesArr[0] as Record<string, unknown>)?.url as string) ||
-          (item.image_url as string) || null;
+          (item.image_url as string) || localImageUrl || null;
 
         const unitPrice = item.price != null ? Number(item.price) : (item.unit_price != null ? Number(item.unit_price) : null);
         const qty = item.quantity ? Number(item.quantity) : 1;
@@ -424,7 +481,6 @@ Deno.serve(async (req) => {
         // Match by yampi_sku_id first, then by index position
         let matchedItem = existingItems?.find((ei) => ei.yampi_sku_id && yampiSkuId && ei.yampi_sku_id === yampiSkuId && !usedExistingIds.has(ei.id));
         if (!matchedItem && existingItems && existingItems.length > 0) {
-          // Fallback: match by index position
           const available = existingItems.filter(ei => !usedExistingIds.has(ei.id));
           if (available.length > 0) {
             matchedItem = available[Math.min(idx, available.length - 1)];
@@ -440,15 +496,16 @@ Deno.serve(async (req) => {
         if (totalPrice != null) itemUpdate.total_price = totalPrice;
         if (qty) itemUpdate.quantity = qty;
         if (yampiSkuId) itemUpdate.yampi_sku_id = yampiSkuId;
+        if (localProductId) itemUpdate.product_id = localProductId;
+        if (localVariantId) itemUpdate.product_variant_id = localVariantId;
 
-        console.log(`[yampi-sync] Item[${idx}] resolved: name=${productName}, sku=${skuSnapshot}, variant=${variantInfo}, matched=${matchedItem?.id || "none"}`);
+        console.log(`[yampi-sync] Item[${idx}] resolved: name=${productName}, sku=${skuSnapshot}, variant=${variantInfo}, localProduct=${localProductId || "none"}, localVariant=${localVariantId || "none"}, matched=${matchedItem?.id || "none"}`);
 
         if (Object.keys(itemUpdate).length > 0 && matchedItem) {
           usedExistingIds.add(matchedItem.id);
           await supabase.from("order_items").update(itemUpdate).eq("id", matchedItem.id);
           console.log(`[yampi-sync] Updated order_item ${matchedItem.id} with Yampi data`);
         } else if (Object.keys(itemUpdate).length > 0 && (!existingItems || existingItems.length === 0)) {
-          // No existing items - insert new ones
           await supabase.from("order_items").insert({
             order_id: order.id,
             product_name: productName || "Produto Yampi",
@@ -459,6 +516,8 @@ Deno.serve(async (req) => {
             sku_snapshot: typeof skuSnapshot === "string" ? skuSnapshot : null,
             image_snapshot: imageUrl,
             yampi_sku_id: yampiSkuId,
+            product_id: localProductId,
+            product_variant_id: localVariantId,
           });
           console.log(`[yampi-sync] Inserted new order_item for sku_id ${yampiSkuId}`);
         }
