@@ -351,7 +351,7 @@ export default function Orders() {
   // Sort
   switch (sortBy) {
     case 'oldest':
-      filteredOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      filteredOrders.sort((a, b) => new Date(getOrderDate(a)).getTime() - new Date(getOrderDate(b)).getTime());
       break;
     case 'value-asc':
       filteredOrders.sort((a, b) => Number(a.total_amount) - Number(b.total_amount));
