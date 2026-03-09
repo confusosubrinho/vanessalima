@@ -709,253 +709,59 @@ export default function Orders() {
       )}
 
       {/* Order details dialog */}
-      <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base md:text-lg">Pedido {selectedOrder?.order_number}</DialogTitle>
-          </DialogHeader>
-          {selectedOrder && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground items-center">
-                {(selectedOrder as any).customer_email && (
-                  <span>Email: {(selectedOrder as any).customer_email}</span>
-                )}
-                {(selectedOrder as any).customer_cpf && (
-                  <span>CPF/CNPJ: {(selectedOrder as any).customer_cpf}</span>
-                )}
-                <Badge variant="outline" className="text-xs">{getProviderLabel((selectedOrder as any).provider)}</Badge>
-                {(selectedOrder as any).provider === 'yampi' && ((selectedOrder as any).yampi_order_number || (selectedOrder as any).external_reference) && (
-                  <span className="text-muted-foreground text-xs block mt-1">
-                    {(selectedOrder as any).yampi_order_number ? (
-                      <>Número do pedido na Yampi: <strong className="text-foreground">{(selectedOrder as any).yampi_order_number}</strong> (é o que aparece no painel da Yampi)</>
-                    ) : (
-                      <>ID Yampi (interno): {(selectedOrder as any).external_reference} — use &quot;Sincronizar com Yampi&quot; para preencher o número do pedido.</>
-                    )}
-                  </span>
-                )}
-                {(() => {
-                  const ps = (selectedOrder as any).payment_status;
-                  const st = selectedOrder.status;
-                  const label =
-                    ps === 'refunded' ? 'Reembolsado'
-                    : ps === 'approved' || ['processing','shipped','delivered'].includes(st) ? 'Pagamento aprovado'
-                    : ps === 'pending' || st === 'pending' ? 'Pagamento pendente'
-                    : ps === 'failed' || st === 'cancelled' ? 'Pagamento não efetuado'
-                    : null;
-                  const style =
-                    label === 'Pagamento aprovado' ? 'bg-green-100 text-green-800 border-green-200'
-                    : label === 'Pagamento pendente' ? 'bg-amber-100 text-amber-800 border-amber-200'
-                    : label === 'Pagamento não efetuado' || label === 'Reembolsado' ? 'bg-red-100 text-red-800 border-red-200'
-                    : 'bg-muted';
-                  return label ? <Badge className={style}>{label}</Badge> : null;
-                })()}
-              </div>
-              {/* Pagamento e envio: sempre exibido, com — quando vazio */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
-                <div>
-                  <p className="text-muted-foreground text-xs font-medium">Valor pago</p>
-                  <p className="font-medium">
-                    {selectedOrder.total_amount != null && String(selectedOrder.total_amount) !== ''
-                      ? formatPrice(Number(selectedOrder.total_amount))
-                      : '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs font-medium">Método de pagamento</p>
-                  <p className="font-medium">{(selectedOrder as any).payment_method || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs font-medium">Gateway</p>
-                  <p className="font-medium">{(selectedOrder as any).gateway || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs font-medium">Parcelas</p>
-                  <p className="font-medium">
-                    {(selectedOrder as any).installments != null && (selectedOrder as any).installments > 0
-                      ? `${(selectedOrder as any).installments}x`
-                      : '—'}
-                  </p>
-                </div>
-                <div className="sm:col-span-2 lg:col-span-4">
-                  <p className="text-muted-foreground text-xs font-medium">Método de envio</p>
-                  <p className="font-medium">{(selectedOrder as any).shipping_method || '—'}</p>
-                </div>
-              </div>
-              {orderItemsLoading ? (
-                <p className="text-sm text-muted-foreground">Carregando itens...</p>
-              ) : orderItems && orderItems.length > 0 ? (
-                <div>
-                  <h3 className="font-medium mb-2">Itens do pedido</h3>
-                  <div className="border rounded-md overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs w-14">Foto</TableHead>
-                          <TableHead className="text-xs">Produto</TableHead>
-                          <TableHead className="text-xs w-16">Qtd</TableHead>
-                          <TableHead className="text-xs text-right">Unit.</TableHead>
-                          <TableHead className="text-xs text-right">Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {orderItems.map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell className="p-2">
-                              {(item as any).image_snapshot ? (
-                                <img
-                                  src={(item as any).image_snapshot}
-                                  alt=""
-                                  className="w-10 h-10 object-cover rounded border bg-muted"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded border bg-muted flex items-center justify-center text-muted-foreground">
-                                  <Package className="h-4 w-4" />
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              <span className="font-medium">{(item as any).title_snapshot || item.product_name}</span>
-                              {((item as any).variant_info || (item as any).sku_snapshot) && (
-                                <span className="text-muted-foreground block text-xs mt-0.5">
-                                  {(item as any).variant_info && (
-                                    <span className="block">Variante: {(item as any).variant_info}</span>
-                                  )}
-                                  {(item as any).sku_snapshot && (
-                                    <span className="block">SKU: {(item as any).sku_snapshot}</span>
-                                  )}
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-sm">{item.quantity}</TableCell>
-                            <TableCell className="text-sm text-right">{formatPrice(Number(item.unit_price))}</TableCell>
-                            <TableCell className="text-sm text-right font-medium">{formatPrice(Number(item.total_price))}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h3 className="font-medium mb-2">Endereço de Entrega</h3>
-                  <p>{selectedOrder.shipping_name ?? '—'}</p>
-                  <p className="text-muted-foreground">
-                    {(selectedOrder.shipping_address || selectedOrder.shipping_city || selectedOrder.shipping_zip) ? (
-                      <>
-                        {selectedOrder.shipping_address && <>{selectedOrder.shipping_address}<br /></>}
-                        {(selectedOrder.shipping_city || selectedOrder.shipping_state) && <>{selectedOrder.shipping_city}{selectedOrder.shipping_state ? ` - ${selectedOrder.shipping_state}` : ''}<br /></>}
-                        {selectedOrder.shipping_zip && <>CEP: {selectedOrder.shipping_zip}</>}
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </p>
-                  {selectedOrder.shipping_phone && <p>Tel: {selectedOrder.shipping_phone}</p>}
-                </div>
-                <div>
-                  <h3 className="font-medium mb-2">Resumo</h3>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span>Subtotal:</span>
-                      <span>{formatPrice(Number(selectedOrder.subtotal))}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Frete:</span>
-                      <span>{formatPrice(Number(selectedOrder.shipping_cost))}</span>
-                    </div>
-                    {selectedOrder.discount_amount > 0 && (
-                      <div className="flex justify-between text-primary">
-                        <span>Desconto:</span>
-                        <span>-{formatPrice(Number(selectedOrder.discount_amount))}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-bold pt-2 border-t">
-                      <span>Total:</span>
-                      <span>{formatPrice(Number(selectedOrder.total_amount))}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <TrackingCodeEditor order={selectedOrder} onUpdated={(code) => {
-                setSelectedOrder({ ...selectedOrder, tracking_code: code } as Order);
-                queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-              }} />
-              {selectedOrder.notes && (
-                <div>
-                  <h3 className="font-medium mb-2">Observações</h3>
-                  <p className="text-muted-foreground">{selectedOrder.notes}</p>
-                </div>
-              )}
-              {/* PR6: Timeline do pedido */}
-              <div>
-                <h3 className="font-medium mb-2 flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Timeline
-                </h3>
-                <ul className="text-sm space-y-1 text-muted-foreground">
-                  {(selectedOrder as any).yampi_created_at && (
-                    <li>Data da compra (Yampi): {format(new Date((selectedOrder as any).yampi_created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</li>
-                  )}
-                  <li>Criado em {format(new Date(selectedOrder.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</li>
-                  <li>Última atualização: {format(new Date(selectedOrder.updated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}{(selectedOrder as any).last_webhook_event ? ` (${(selectedOrder as any).last_webhook_event})` : ''}</li>
-                </ul>
-              </div>
-              {/* Sincronizar status com Yampi */}
-              {(selectedOrder as any).provider === 'yampi' && (selectedOrder as any).external_reference && (
-                <div className="pt-2 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => runSyncYampi(selectedOrder.id)}
-                    disabled={syncYampiOrderId !== null}
-                  >
-                    {syncYampiOrderId === selectedOrder.id ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                    Sincronizar com Yampi
-                  </Button>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    Atualiza status, pagamento, rastreio e data da compra a partir da Yampi (use se houve falha ou atraso no webhook).
-                  </p>
-                </div>
-              )}
-              {/* PR6: Conciliação — sync status com Stripe */}
-              {(selectedOrder as any).provider === 'stripe' && (selectedOrder as any).transaction_id && (
-                <div className="pt-2 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => runReconcile(selectedOrder.id)}
-                    disabled={reconcileOrderId !== null}
-                  >
-                    {reconcileOrderId === selectedOrder.id ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                    Conciliar com Stripe
-                  </Button>
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    Consulta o status do pagamento no Stripe e atualiza o pedido (ex.: pagou mas webhook não chegou).
-                  </p>
-                </div>
-              )}
-              <div className="pt-4 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-amber-600 border-amber-200 hover:bg-amber-50"
-                  onClick={() => setOrderToDeleteTest(selectedOrder)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir pedido (modo teste)
-                </Button>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Restaura estoque e remove o pedido. Use apenas em ambiente de teste.
-                </p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {isMobile ? (
+        <Drawer open={!!selectedOrder} onOpenChange={(open) => { if (!open) setSelectedOrder(null); }}>
+          <DrawerContent className="max-h-[85dvh]">
+            <DrawerHeader className="pb-2">
+              <DrawerTitle className="text-base">Pedido {selectedOrder?.order_number}</DrawerTitle>
+            </DrawerHeader>
+            {selectedOrder && (
+              <ScrollArea className="px-4 pb-6 overflow-y-auto flex-1" style={{ maxHeight: 'calc(85dvh - 60px)' }}>
+                <OrderDetailContent
+                  order={selectedOrder}
+                  orderItems={orderItems}
+                  orderItemsLoading={orderItemsLoading}
+                  syncYampiOrderId={syncYampiOrderId}
+                  reconcileOrderId={reconcileOrderId}
+                  onSyncYampi={runSyncYampi}
+                  onReconcile={runReconcile}
+                  onDeleteTest={setOrderToDeleteTest}
+                  onTrackingUpdated={(code) => {
+                    setSelectedOrder({ ...selectedOrder, tracking_code: code } as Order);
+                    queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+                  }}
+                  TrackingEditor={TrackingCodeEditor}
+                />
+              </ScrollArea>
+            )}
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg">Pedido {selectedOrder?.order_number}</DialogTitle>
+            </DialogHeader>
+            {selectedOrder && (
+              <OrderDetailContent
+                order={selectedOrder}
+                orderItems={orderItems}
+                orderItemsLoading={orderItemsLoading}
+                syncYampiOrderId={syncYampiOrderId}
+                reconcileOrderId={reconcileOrderId}
+                onSyncYampi={runSyncYampi}
+                onReconcile={runReconcile}
+                onDeleteTest={setOrderToDeleteTest}
+                onTrackingUpdated={(code) => {
+                  setSelectedOrder({ ...selectedOrder, tracking_code: code } as Order);
+                  queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+                }}
+                TrackingEditor={TrackingCodeEditor}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
 
       <AlertDialog open={!!orderToDeleteTest} onOpenChange={() => !deleteOrderTestMutation.isPending && setOrderToDeleteTest(null)}>
         <AlertDialogContent>
