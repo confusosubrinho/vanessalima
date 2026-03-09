@@ -341,11 +341,9 @@ export default function ProductDetail() {
   const handleColorSelect = (colorName: string) => {
     setSelectedColor(colorName);
     setSelectedSize(null);
-    // Find variant image for this color - look for matching variant with image
-    // For now, cycle to the first image matching the color name in alt text or order
+    setSelectedCustomAttr(null);
     const colorVariant = variants.find(v => v.color === colorName);
     if (colorVariant) {
-      // If variant has a linked image (via alt_text containing color name), select it
       const colorImageIndex = images.findIndex(img => 
         img.alt_text?.toLowerCase().includes(colorName.toLowerCase())
       );
