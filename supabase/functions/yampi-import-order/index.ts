@@ -365,10 +365,11 @@ Deno.serve(async (req) => {
     let productId = (localVariant?.product_id as string) || null;
     if (productId) {
       const { data: p } = await supabase.from("products").select("name").eq("id", productId).maybeSingle();
+      // Always prefer local product name (clean parent name) over Yampi variant title
       if (p?.name) productName = p.name;
     }
-    // If still generic, try SKU title from Yampi
-    if (isGenericName(productName)) {
+    // Only fall back to SKU title if no local product was found and name is still generic
+    if (!productId && isGenericName(productName)) {
       const skuData = ((yampiItem.sku as Record<string, unknown>)?.data as Record<string, unknown>) || (yampiItem.sku as Record<string, unknown>) || {};
       const skuTitle = skuData.title as string;
       if (!isGenericName(skuTitle)) productName = skuTitle!;

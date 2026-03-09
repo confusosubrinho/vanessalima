@@ -475,8 +475,8 @@ Deno.serve(async (req) => {
           if (localImg?.url) localImageUrl = localImg.url;
         }
 
-        // Use local product name if Yampi name is missing/generic
-        if (localProductName && (isGenericName(productName) || !productName)) productName = localProductName;
+        // Always prefer local product name (clean parent name) over Yampi variant title
+        if (localProductName) productName = localProductName;
 
         // Image URL - with local fallback
         const skuImagesArr = ((skuData.images as Record<string, unknown>)?.data as unknown[]) || (skuData.images as unknown[]) || [];
