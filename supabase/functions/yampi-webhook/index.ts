@@ -141,7 +141,17 @@ Deno.serve(async (req) => {
           if (subtotalOrder <= 0) subtotalOrder = totalAmount;
           const trackingCode = resourceData?.tracking_code || resourceData?.tracking?.code || null;
 
-          await supabase.from("orders").update({
+          // Fix #6: Extract shipping_method from approved payload (update path)
+          const shippingOptRaw = resourceData?.shipping_option || {};
+          const shippingOptData = shippingOptRaw?.data || shippingOptRaw;
+          const shippingMethodUpdate =
+            (resourceData?.shipping_option_name as string) ||
+            (shippingOptData?.name as string) ||
+            (resourceData?.delivery_option?.name as string) ||
+            (resourceData?.shipping_method as string) ||
+            null;
+
+          const updatePayload: Record<string, unknown> = {
             subtotal: subtotalOrder,
             total_amount: totalAmount,
             shipping_cost: shippingCost,
@@ -163,7 +173,10 @@ Deno.serve(async (req) => {
             tracking_code: trackingCode,
             status: "processing",
             external_reference: yampiOrderId,
-          } as Record<string, unknown>).eq("id", existingBySession.id);
+          };
+          if (shippingMethodUpdate) updatePayload.shipping_method = shippingMethodUpdate;
+
+          await supabase.from("orders").update(updatePayload).eq("id", existingBySession.id);
 
           // Convert existing reserves to debits, or create new debits
           const { data: existingItems } = await supabase.from("order_items").select("id, product_variant_id, quantity").eq("order_id", existingBySession.id);
@@ -286,6 +299,16 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Fix #6: Extract shipping_method from approved payload
+      const shippingOptionRaw = resourceData?.shipping_option || {};
+      const shippingOptionData = shippingOptionRaw?.data || shippingOptionRaw;
+      const shippingMethodFromPayload =
+        (resourceData?.shipping_option_name as string) ||
+        (shippingOptionData?.name as string) ||
+        (resourceData?.delivery_option?.name as string) ||
+        (resourceData?.shipping_method as string) ||
+        null;
+
       // Create the order with UTM data
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -306,9 +329,11 @@ Deno.serve(async (req) => {
           provider: "yampi",
           gateway,
           payment_method: paymentMethod,
+          payment_status: "approved",
           installments,
           transaction_id: transactionId,
           tracking_code: trackingCode,
+          shipping_method: shippingMethodFromPayload,
           status: "processing",
           external_reference: yampiOrderId,
           checkout_session_id: sessionId,
@@ -541,7 +566,8 @@ Deno.serve(async (req) => {
         }
 
         // Only update status, do NOT re-process payment or stock
-        await supabase.from("orders").update({ status: newLocalStatus }).eq("id", existingOrder.id);
+        // Fix #5: Intermediate statuses (in_production, etc.) imply payment approved
+        await supabase.from("orders").update({ status: newLocalStatus, payment_status: "approved" } as Record<string, unknown>).eq("id", existingOrder.id);
         await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: `status_update_${statusValue}`, event_hash: statusHash, payload });
         console.log("[yampi-webhook] Order status updated:", existingOrder.id, statusValue, "→", newLocalStatus);
       }
@@ -702,7 +728,7 @@ Deno.serve(async (req) => {
       }
 
       if (existingOrder) {
-        await supabase.from("orders").update({ status: "delivered" }).eq("id", existingOrder.id);
+        await supabase.from("orders").update({ status: "delivered", payment_status: "approved" } as Record<string, unknown>).eq("id", existingOrder.id);
         await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: effectiveEvent, event_hash: deliveredHash, payload });
         console.log("[yampi-webhook] Order delivered:", existingOrder.id);
       }

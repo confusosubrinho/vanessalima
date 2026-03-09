@@ -166,9 +166,10 @@ Deno.serve(async (req) => {
   const customer = (yampiOrder.customer as Record<string, unknown>) || {};
   const customerData = (customer.data as Record<string, unknown>) || customer;
   const customerEmail = (customerData.email as string) || null;
-  const firstName = (customerData.first_name as string) || "";
-  const lastName = (customerData.last_name as string) || "";
-  const customerName = `${firstName} ${lastName}`.trim() || "Cliente Yampi";
+  // Fix #3: Prioritize 'name' field over first_name/last_name (consistent with webhook and batch)
+  const customerName = (customerData.name as string)?.trim()
+    || ((customerData.first_name as string) ? `${(customerData.first_name as string).trim()} ${((customerData.last_name as string) || "").trim()}`.trim() : null)
+    || "Cliente Yampi";
   const customerPhone = ((customerData.phone as Record<string, unknown>)?.full_number as string) || (customerData.phone as string) || null;
   const customerCpf = (customerData.cpf as string) || (customerData.cnpj as string) || null;
 
@@ -568,7 +569,7 @@ async function importSingleOrder(
     status: localStatus, external_reference: yId, yampi_order_number: yampiOrderNumber,
     payment_status: yampiStatus === "refunded" ? "refunded" : (localStatus === "cancelled" ? "failed" : (localStatus === "pending" ? "pending" : "approved")),
     tracking_code: (yampiOrder.tracking_code as string) || null,
-    shipping_method: (yampiOrder.shipping_option_name as string) || ((yampiOrder.shipping_option as Record<string, unknown>)?.name as string) || null,
+    shipping_method: (yampiOrder.shipping_option_name as string) || ((yampiOrder.shipping_option as Record<string, unknown>)?.name as string) || (((yampiOrder.shipping_option as Record<string, unknown>)?.data as Record<string, unknown>)?.name as string) || ((yampiOrder.delivery_option as Record<string, unknown>)?.name as string) || null,
     yampi_created_at: (yampiOrder.created_at as string) ? new Date(yampiOrder.created_at as string).toISOString() : null,
     coupon_code: couponCode,
     notes: `Importado batch da Yampi (ID ${yId})`,
