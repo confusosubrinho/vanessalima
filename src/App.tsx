@@ -87,7 +87,10 @@ const Reviews = lazy(() => lazyRetry(() => import("./pages/admin/Reviews")));
 const Team = lazy(() => lazyRetry(() => import("./pages/admin/Team")));
 const CheckoutSettings = lazy(() => lazyRetry(() => import("./pages/admin/CheckoutSettings")));
 const CommerceHealth = lazy(() => lazyRetry(() => import("./pages/admin/CommerceHealth")));
+const BlogAdmin = lazy(() => lazyRetry(() => import("./pages/admin/BlogAdmin")));
 const CheckoutStart = lazy(() => lazyRetry(() => import("./pages/CheckoutStart")));
+const BlogPage = lazy(() => lazyRetry(() => import("./pages/BlogPage")));
+const BlogPostPage = lazy(() => lazyRetry(() => import("./pages/BlogPostPage")));
 const CheckoutReturn = lazy(() => lazyRetry(() => import("./pages/CheckoutReturn")));
 
 // Lazy load non-critical floating components
