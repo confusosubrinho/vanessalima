@@ -8,6 +8,9 @@ import { HelpHint } from '@/components/HelpHint';
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { exportToCSV } from '@/lib/csv';
+
+/** Returns the effective order date: prefers yampi_created_at (original purchase), falls back to created_at */
+const getOrderDate = (o: any): string => (o.yampi_created_at as string) || o.created_at;
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -329,12 +332,12 @@ export default function Orders() {
 
   // Date filter
   if (dateFrom) {
-    filteredOrders = filteredOrders.filter(o => new Date(o.created_at) >= dateFrom);
+    filteredOrders = filteredOrders.filter(o => new Date(getOrderDate(o)) >= dateFrom);
   }
   if (dateTo) {
     const endOfDay = new Date(dateTo);
     endOfDay.setHours(23, 59, 59, 999);
-    filteredOrders = filteredOrders.filter(o => new Date(o.created_at) <= endOfDay);
+    filteredOrders = filteredOrders.filter(o => new Date(getOrderDate(o)) <= endOfDay);
   }
 
   // Value filter
@@ -348,7 +351,7 @@ export default function Orders() {
   // Sort
   switch (sortBy) {
     case 'oldest':
-      filteredOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      filteredOrders.sort((a, b) => new Date(getOrderDate(a)).getTime() - new Date(getOrderDate(b)).getTime());
       break;
     case 'value-asc':
       filteredOrders.sort((a, b) => Number(a.total_amount) - Number(b.total_amount));
@@ -358,7 +361,7 @@ export default function Orders() {
       break;
     case 'newest':
     default:
-      filteredOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      filteredOrders.sort((a, b) => new Date(getOrderDate(b)).getTime() - new Date(getOrderDate(a)).getTime());
       break;
   }
 
@@ -386,7 +389,7 @@ export default function Orders() {
       frete: o.shipping_cost,
       desconto: o.discount_amount,
       total: o.total_amount,
-      data: new Date(o.created_at).toLocaleDateString('pt-BR'),
+      data: new Date(getOrderDate(o)).toLocaleDateString('pt-BR'),
       rastreio: o.tracking_code || '',
     }));
     exportToCSV(exportData, 'pedidos');
@@ -606,7 +609,7 @@ export default function Orders() {
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span className="truncate mr-2">{order.shipping_name}</span>
-                  <span className="shrink-0">{formatDate(order.created_at)}</span>
+                  <span className="shrink-0">{formatDate(getOrderDate(order))}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-sm">{formatPrice(Number(order.total_amount))}</span>
@@ -672,7 +675,7 @@ export default function Orders() {
                         <p className="text-sm text-muted-foreground">{order.shipping_city} - {order.shipping_state}</p>
                       </div>
                     </TableCell>
-                    <TableCell>{formatDate(order.created_at)}</TableCell>
+                    <TableCell>{formatDate(getOrderDate(order))}</TableCell>
                     <TableCell className="font-medium">{formatPrice(Number(order.total_amount))}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs font-normal">{getProviderLabel((order as any).provider)}</Badge>
