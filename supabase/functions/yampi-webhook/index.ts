@@ -286,6 +286,16 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Fix #6: Extract shipping_method from approved payload
+      const shippingOptionRaw = resourceData?.shipping_option || {};
+      const shippingOptionData = shippingOptionRaw?.data || shippingOptionRaw;
+      const shippingMethodFromPayload =
+        (resourceData?.shipping_option_name as string) ||
+        (shippingOptionData?.name as string) ||
+        (resourceData?.delivery_option?.name as string) ||
+        (resourceData?.shipping_method as string) ||
+        null;
+
       // Create the order with UTM data
       const { data: order, error: orderError } = await supabase
         .from("orders")
@@ -306,9 +316,11 @@ Deno.serve(async (req) => {
           provider: "yampi",
           gateway,
           payment_method: paymentMethod,
+          payment_status: "approved",
           installments,
           transaction_id: transactionId,
           tracking_code: trackingCode,
+          shipping_method: shippingMethodFromPayload,
           status: "processing",
           external_reference: yampiOrderId,
           checkout_session_id: sessionId,
