@@ -1,63 +1,56 @@
 
 
-## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
+# Auditoria UX — Rodada 10 (Somente grau ALTO)
 
-### Fixes Aplicados
+## UX 1 — ALTO: MyAccount campo Estado é input livre (mesmo bug já corrigido no Checkout)
+`MyAccount.tsx` linha 383-386: o campo "Estado" no endereço é um `<Input maxLength={2}>`. O Checkout já foi corrigido com `<Select>` das 27 UFs na rodada anterior, mas MyAccount continua aceitando valores inválidos.
 
-**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
+**Correção:** Substituir por `<Select>` com as 27 UFs, idêntico ao Checkout.
 
-**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
+## UX 2 — ALTO: MyAccount telefone sem máscara
+`MyAccount.tsx` linha 248-252: o campo "Telefone" é um `<Input>` sem formatação. O Checkout aplica `formatPhone` para máscara `(00) 00000-0000`, mas o perfil aceita qualquer texto. Dados inconsistentes no banco.
 
-**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
+**Correção:** Aplicar `formatPhone` do `@/lib/validators` no onChange.
 
-**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
+## UX 3 — ALTO: Imagens no resumo do Checkout usam URL crua (imagens quebradas)
+`Checkout.tsx` linhas 1038 e 1501: `item.product.images?.[0]?.url` é usado diretamente como `src` sem passar por `resolveImageUrl()`. Imagens com caminhos relativos ou de CDN externo ficam quebradas no resumo do pedido.
 
-**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
+**Correção:** Importar e aplicar `resolveImageUrl()` nas duas ocorrências.
 
-### Documentação: Limitação de Cupons (Y33)
+## UX 4 — ALTO: Checkout carrinho vazio mostra página sem layout/branding
+`Checkout.tsx` linha 947-958: quando o carrinho está vazio, retorna uma `<div>` sem header, footer ou logo. O usuário vê uma tela branca com texto centralizado, sem identidade visual ou navegação.
 
-**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
+**Correção:** Envolver o estado vazio em layout mínimo com logo e link para home, consistente com o header do checkout.
 
-**Workaround recomendado**: Para descontos significativos, considerar:
-1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
-2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
+## UX 5 — ALTO: WhatsApp float sobrepõe sticky bar e bottom bar no mobile
+`WhatsAppFloat.tsx` linha 40: posição `bottom-24` no mobile. Com a `StickyAddToCart` (ProductDetail) e o fixed bottom bar (Cart), o botão do WhatsApp fica sobreposto ou inacessível.
 
-### Não Implementado (Decisão Técnica)
+**Correção:** Detectar se está em `/carrinho` ou `/produto/*` e ajustar `bottom` dinamicamente para evitar sobreposição com as barras fixas.
 
-- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
-- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
-- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
+## UX 6 — ALTO: MyAccount não permite trocar senha
+`MyAccount.tsx`: nenhuma funcionalidade de alteração de senha. O formulário só contém nome, email (disabled) e telefone. Usuários que querem trocar a senha precisam fazer logout e usar "esqueci minha senha".
+
+**Correção:** Adicionar seção "Alterar Senha" na aba "Meus Dados" com campos senha atual + nova senha + confirmação, usando `supabase.auth.updateUser()`.
+
+## UX 7 — ALTO: Checkout não pré-preenche dados do perfil do usuário logado
+`Checkout.tsx`: o formulário restaura dados do `sessionStorage`, mas nunca consulta a tabela `profiles` do usuário logado. Clientes recorrentes precisam digitar nome, telefone, CPF e endereço toda vez.
+
+**Correção:** Verificar sessão do usuário e buscar `profiles` para pré-preencher `formData` (nome, telefone, endereço, cidade, estado, CEP) com fallback para sessionStorage.
+
+## UX 8 — ALTO: Itens do carrinho não linkam para a página do produto
+`Cart.tsx`: a imagem e o nome do produto no carrinho não são clicáveis. O usuário não consegue revisar detalhes do produto (descrição, outras variantes) sem navegar manualmente.
+
+**Correção:** Envolver imagem + nome do produto em `<Link to={/produto/${item.product.slug}}>` em cada item do carrinho.
 
 ---
 
-## Resumo das 4 Rodadas de Auditoria
+## Arquivos Modificados
 
-| Rodada | Fixes | Status |
-|--------|-------|--------|
-| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
-| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
-| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
-| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
-| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
+- **`src/pages/MyAccount.tsx`** — Select para UF, máscara de telefone, seção de alteração de senha
+- **`src/pages/Checkout.tsx`** — resolveImageUrl no resumo, empty state com branding, prefill de perfil
+- **`src/pages/Cart.tsx`** — Links para produto nos itens do carrinho
+- **`src/components/store/WhatsAppFloat.tsx`** — Posicionamento dinâmico para evitar sobreposição
 
-**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
+## Sem alteração de regras de negócio
+Todas as correções são visuais/UX. Nenhuma lógica de pagamento, precificação ou processamento existente será alterada.
 
----
-
-## Rodada 5: Yampi Integration Fixes ✅
-
-### Bugs Corrigidos
-
-**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
-
-**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
-
-**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
-
-**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
-
-**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
-
-**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
-
-**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
