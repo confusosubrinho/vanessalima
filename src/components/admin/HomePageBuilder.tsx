@@ -18,7 +18,7 @@ import {
   GripVertical, Settings, Trash2, Plus, Lock,
   Image as ImageIcon, LayoutGrid, ShoppingBag, Star,
   Mail, CheckSquare, Ruler, Camera, PanelTop,
-  Rows3
+  Rows3, BookOpen
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
