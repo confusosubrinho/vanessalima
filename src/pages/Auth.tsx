@@ -41,6 +41,8 @@ export default function Auth() {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
+  const { data: storePublicSettings } = useStoreSettingsPublic();
+  const logoUrl = storePublicSettings?.header_logo_url || storePublicSettings?.logo_url || defaultLogo;
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
