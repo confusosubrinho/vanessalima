@@ -86,27 +86,41 @@ export function InstagramFeed() {
   useEffect(() => {
     if (!videos) return;
     const cleanups: (() => void)[] = [];
-    videoRefs.current.forEach((video, id) => {
-      const idx = videos.findIndex(v => v.id === id);
-      if (idx === activeIndex) {
-        const playWhenReady = () => {
-          video.play().catch(() => {});
-        };
-        if (video.readyState >= 2) {
-          playWhenReady();
-        } else {
-          const onCanPlay = () => {
-            video.removeEventListener('canplay', onCanPlay);
-            playWhenReady();
+
+    // Small delay to ensure refs are registered after render
+    const timer = setTimeout(() => {
+      videoRefs.current.forEach((video, id) => {
+        const idx = videos.findIndex(v => v.id === id);
+        if (idx === activeIndex) {
+          // Force load if needed
+          if (video.preload !== 'auto') video.preload = 'auto';
+          if (!video.src && video.dataset.src) video.src = video.dataset.src;
+          
+          const playWhenReady = () => {
+            video.muted = true; // ensure muted for autoplay policy
+            video.play().catch(() => {});
           };
-          video.addEventListener('canplay', onCanPlay);
-          cleanups.push(() => video.removeEventListener('canplay', onCanPlay));
+          if (video.readyState >= 2) {
+            playWhenReady();
+          } else {
+            video.load(); // force reload
+            const onCanPlay = () => {
+              video.removeEventListener('canplay', onCanPlay);
+              playWhenReady();
+            };
+            video.addEventListener('canplay', onCanPlay);
+            cleanups.push(() => video.removeEventListener('canplay', onCanPlay));
+          }
+        } else {
+          video.pause();
         }
-      } else {
-        video.pause();
-      }
-    });
-    return () => cleanups.forEach(fn => fn());
+      });
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      cleanups.forEach(fn => fn());
+    };
   }, [activeIndex, videos]);
 
   // No auto-advance - manual scroll only
