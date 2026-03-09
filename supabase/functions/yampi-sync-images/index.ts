@@ -143,36 +143,43 @@ async function convertAndUploadAsPng(
     return null;
   }
 
-  // For WebP: conversão real via Supabase Image Transformation (Pro+).
-  // Pedir JPEG via Accept para a Yampi aceitar (sem format=origin para permitir conversão).
-  const renderUrl = `${supabaseUrl}/storage/v1/render/image/public/product-media/${relativePath}?width=1200&quality=85`;
+  // Para WebP: conversão real via Supabase Image Transformation (Pro+).
+  // Usar format=jpeg explicitamente para garantir conversão real.
+  const renderUrl = `${supabaseUrl}/storage/v1/render/image/public/product-media/${relativePath}?width=1200&quality=85&format=jpeg`;
   try {
     const renderRes = await fetchWithTimeout(renderUrl, {
-      headers: { Accept: "image/jpeg, image/png;q=0.9" },
+      headers: { Accept: "image/jpeg" },
       redirect: "follow",
     }, 25_000);
     if (renderRes.ok) {
       const renderType = renderRes.headers.get("content-type") || "";
       const renderBytes = new Uint8Array(await renderRes.arrayBuffer());
-      const ext = renderType.includes("png") ? "png" : "jpg";
-      const renderPath = `yampi-converted/${productId}/${imageIndex}.${ext}`;
-      const { error } = await supabase.storage.from("product-media").upload(renderPath, renderBytes, {
-        contentType: renderType || "image/jpeg",
-        upsert: true,
-      });
-      if (!error) {
-        const { data: urlData } = supabase.storage.from("product-media").getPublicUrl(renderPath);
-        const uploadedUrl = urlData?.publicUrl || null;
-        
-        // Y32: Validate uploaded URL is accessible
-        if (uploadedUrl && await validateUrlAccessible(uploadedUrl)) {
-          console.log(`[YAMPI-IMG] Converted via render: ${uploadedUrl}`);
-          return uploadedUrl;
+
+      // Verificar se a conversão foi REAL — o content-type deve ser JPEG/PNG, não WebP
+      const isRealConversion = renderType.includes("jpeg") || renderType.includes("jpg") || renderType.includes("png");
+      if (!isRealConversion) {
+        console.warn(`[YAMPI-IMG] Render returned content-type "${renderType}" instead of JPEG — conversion not real, skipping to fallback`);
+      } else {
+        const ext = renderType.includes("png") ? "png" : "jpg";
+        const renderPath = `yampi-converted/${productId}/${imageIndex}.${ext}`;
+        const { error } = await supabase.storage.from("product-media").upload(renderPath, renderBytes, {
+          contentType: renderType,
+          upsert: true,
+        });
+        if (!error) {
+          const { data: urlData } = supabase.storage.from("product-media").getPublicUrl(renderPath);
+          const uploadedUrl = urlData?.publicUrl || null;
+          
+          // Y32: Validate uploaded URL is accessible
+          if (uploadedUrl && await validateUrlAccessible(uploadedUrl)) {
+            console.log(`[YAMPI-IMG] Converted via render (real JPEG): ${uploadedUrl}`);
+            return uploadedUrl;
+          }
+          console.warn(`[YAMPI-IMG] Rendered URL not accessible: ${uploadedUrl}`);
+          return null;
         }
-        console.warn(`[YAMPI-IMG] Rendered URL not accessible: ${uploadedUrl}`);
-        return null;
+        console.error(`[YAMPI-IMG] Upload rendered failed: ${error.message}`);
       }
-      console.error(`[YAMPI-IMG] Upload rendered failed: ${error.message}`);
     } else {
       console.warn(`[YAMPI-IMG] Render returned ${renderRes.status} (Image Transformation pode exigir plano Pro)`);
     }
