@@ -1,15 +1,17 @@
 import { useState, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatPrice, formatDate } from '@/lib/formatters';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, Eye, Mail, Phone, Calendar, DollarSign, ArrowUpDown, ShoppingBag, Download, Upload, Loader2, CheckCircle, AlertCircle, Users, MoreHorizontal } from 'lucide-react';
+import { Search, Eye, Mail, Phone, Calendar, DollarSign, ArrowUpDown, ShoppingBag, Download, Upload, Loader2, CheckCircle, AlertCircle, Users, MoreHorizontal, MessageCircle, Pencil, Save, X, MapPin, Package, Cake } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AdminEmptyState } from '@/components/admin/AdminEmptyState';
 import { exportToCSV, parseCSV, readFileAsText } from '@/lib/csv';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import {
   Table,
   TableBody,
@@ -19,11 +21,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   Select,
   SelectContent,
@@ -41,6 +43,30 @@ import { Customer } from '@/types/database';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+
+const statusLabels: Record<string, string> = {
+  pending: 'Pendente',
+  processing: 'Processando',
+  paid: 'Pago',
+  shipped: 'Enviado',
+  delivered: 'Entregue',
+  cancelled: 'Cancelado',
+};
+const statusColors: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  processing: 'bg-blue-100 text-blue-800',
+  paid: 'bg-green-100 text-green-800',
+  shipped: 'bg-purple-100 text-purple-800',
+  delivered: 'bg-emerald-100 text-emerald-800',
+  cancelled: 'bg-red-100 text-red-800',
+};
+
+function getWhatsAppNumber(phone: string | null) {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('55')) return digits;
+  return '55' + digits;
+}
 
 export default function Customers() {
   const queryClient = useQueryClient();
@@ -619,46 +645,253 @@ export default function Customers() {
         );
       })()}
 
-      {/* Customer details dialog */}
-      <Dialog open={!!selectedCustomer} onOpenChange={() => setSelectedCustomer(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Detalhes do Cliente</DialogTitle>
-          </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-medium text-lg">{selectedCustomer.full_name}</h3>
-                <p className="text-muted-foreground">Cliente desde {formatDate(selectedCustomer.created_at)}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <a href={`mailto:${selectedCustomer.email}`} className="text-primary hover:underline">
-                  {selectedCustomer.email}
-                </a>
-              </div>
-              {selectedCustomer.phone && (
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <a href={`tel:${selectedCustomer.phone}`} className="text-primary hover:underline">
-                    {selectedCustomer.phone}
-                  </a>
+      {/* Customer details sheet */}
+      <CustomerDetailSheet
+        customer={selectedCustomer}
+        onClose={() => setSelectedCustomer(null)}
+      />
+    </div>
+  );
+}
+
+function CustomerDetailSheet({ customer, onClose }: { customer: Customer | null; onClose: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editBirthday, setEditBirthday] = useState('');
+
+  // Fetch orders with items when customer is selected
+  const { data: orders, isLoading: ordersLoading } = useQuery({
+    queryKey: ['customer-orders', customer?.id],
+    enabled: !!customer,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('id, order_number, status, total_amount, created_at, yampi_created_at, shipping_address, shipping_city, shipping_state, shipping_zip, shipping_name, payment_method, order_items(product_name, quantity, unit_price, image_snapshot, variant_info)')
+        .eq('customer_id', customer!.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async (fields: { full_name: string; phone: string | null; birthday: string | null }) => {
+      const { error } = await supabase
+        .from('customers')
+        .update(fields)
+        .eq('id', customer!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: 'Cliente atualizado!' });
+      queryClient.invalidateQueries({ queryKey: ['admin-customers'] });
+      setEditing(false);
+    },
+    onError: (err: any) => {
+      toast({ title: 'Erro ao atualizar', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const startEditing = () => {
+    if (!customer) return;
+    setEditName(customer.full_name);
+    setEditPhone(customer.phone || '');
+    setEditBirthday(customer.birthday || '');
+    setEditing(true);
+  };
+
+  const handleSave = () => {
+    updateMutation.mutate({
+      full_name: editName,
+      phone: editPhone || null,
+      birthday: editBirthday || null,
+    });
+  };
+
+  // Derive address from most recent order
+  const latestOrder = orders?.[0];
+  const address = latestOrder
+    ? `${latestOrder.shipping_address}, ${latestOrder.shipping_city} - ${latestOrder.shipping_state}, ${latestOrder.shipping_zip}`
+    : null;
+
+  const avgTicket = customer && customer.total_orders > 0
+    ? Number(customer.total_spent) / customer.total_orders
+    : 0;
+
+  const firstOrderDate = orders?.length ? orders[orders.length - 1].yampi_created_at || orders[orders.length - 1].created_at : null;
+  const lastOrderDate = orders?.length ? orders[0].yampi_created_at || orders[0].created_at : null;
+
+  const getOrderDate = (o: any): string => (o.yampi_created_at as string) || o.created_at;
+
+  return (
+    <Sheet open={!!customer} onOpenChange={() => onClose()}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Detalhes do Cliente</SheetTitle>
+        </SheetHeader>
+        {customer && (
+          <div className="space-y-5 mt-4">
+            {/* Info section */}
+            <div className="space-y-2">
+              {editing ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Nome</label>
+                    <Input value={editName} onChange={e => setEditName(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Telefone</label>
+                    <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Data de nascimento</label>
+                    <Input type="date" value={editBirthday} onChange={e => setEditBirthday(e.target.value)} />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending}>
+                      {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
+                      Salvar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={updateMutation.isPending}>
+                      <X className="h-4 w-4 mr-1" /> Cancelar
+                    </Button>
+                  </div>
                 </div>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold text-lg">{customer.full_name}</h3>
+                      <p className="text-sm text-muted-foreground">Cliente desde {formatDate(customer.created_at)}</p>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={startEditing}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="truncate">{customer.email}</span>
+                  </div>
+                  {customer.phone && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span>{customer.phone}</span>
+                    </div>
+                  )}
+                  {customer.birthday && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Cake className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span>{format(new Date(customer.birthday + 'T12:00:00'), 'dd/MM/yyyy')}</span>
+                    </div>
+                  )}
+                  {address && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground">{address}</span>
+                    </div>
+                  )}
+                </>
               )}
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total de Pedidos</p>
-                  <p className="text-2xl font-bold">{selectedCustomer.total_orders}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Gasto</p>
-                  <p className="text-2xl font-bold">{formatPrice(Number(selectedCustomer.total_spent))}</p>
-                </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2">
+              {customer.phone && (
+                <Button size="sm" variant="outline" className="text-green-600 border-green-200 hover:bg-green-50" asChild>
+                  <a href={`https://wa.me/${getWhatsAppNumber(customer.phone)}?text=${encodeURIComponent(`Olá ${customer.full_name}!`)}`} target="_blank" rel="noopener noreferrer">
+                    <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp
+                  </a>
+                </Button>
+              )}
+              <Button size="sm" variant="outline" asChild>
+                <a href={`mailto:${customer.email}`}>
+                  <Mail className="h-4 w-4 mr-1" /> Email
+                </a>
+              </Button>
+            </div>
+
+            <Separator />
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="text-center">
+                <p className="text-2xl font-bold">{customer.total_orders}</p>
+                <p className="text-xs text-muted-foreground">Pedidos</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold">{formatPrice(Number(customer.total_spent))}</p>
+                <p className="text-xs text-muted-foreground">Total gasto</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold">{formatPrice(avgTicket)}</p>
+                <p className="text-xs text-muted-foreground">Ticket médio</p>
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+
+            {firstOrderDate && lastOrderDate && (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Primeira compra: {formatDate(firstOrderDate)}</span>
+                <span>Última: {formatDate(lastOrderDate)}</span>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Purchase History */}
+            <div>
+              <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                <Package className="h-4 w-4" /> Histórico de Compras
+              </h4>
+              {ordersLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : !orders?.length ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Nenhum pedido encontrado.</p>
+              ) : (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                  {orders.map((order) => (
+                    <div key={order.id} className="border rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">#{order.order_number}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[order.status] || 'bg-muted text-muted-foreground'}`}>
+                            {statusLabels[order.status] || order.status}
+                          </span>
+                        </div>
+                        <span className="font-semibold text-sm">{formatPrice(Number(order.total_amount))}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{formatDate(getOrderDate(order))}</p>
+                      {/* Order items */}
+                      {(order as any).order_items?.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          {(order as any).order_items.map((item: any, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs">
+                              {item.image_snapshot && (
+                                <img src={item.image_snapshot} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="truncate">{item.product_name}</p>
+                                {item.variant_info && <p className="text-muted-foreground">{item.variant_info}</p>}
+                              </div>
+                              <span className="shrink-0 text-muted-foreground">{item.quantity}x {formatPrice(Number(item.unit_price))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
   );
 }

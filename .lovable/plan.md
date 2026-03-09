@@ -1,50 +1,63 @@
 
 
-# Enrich Customer Detail Panel
+## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
 
-## Current State
-The customer detail dialog (`Customers.tsx` lines 622-661) shows only: name, email, phone, total orders, and total spent. No address, no purchase history, no action buttons.
+### Fixes Aplicados
 
-The `customers` table has: `id`, `email`, `full_name`, `phone`, `birthday`, `total_orders`, `total_spent`, `user_id`.
+**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
 
-Address data lives on `orders` (shipping_address, shipping_city, shipping_state, shipping_zip). Products purchased live on `order_items` joined via `orders.customer_id`.
+**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
 
-## Plan
+**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
 
-### 1. Fetch related data when customer dialog opens
-When `selectedCustomer` is set, run two additional queries:
-- **Orders**: `orders` where `customer_id = selectedCustomer.id`, select key fields + `order_items(product_name, quantity, unit_price, image_snapshot, variant_info)`. Limited to last 20 orders, ordered by date desc.
-- **Address**: Extract from the most recent order's shipping fields (no separate address table exists).
+**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
 
-Use a `useQuery` with `enabled: !!selectedCustomer` so it only fires when the dialog opens.
+**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
 
-### 2. Expand the detail dialog to a larger sheet/dialog with sections
+### Documentação: Limitação de Cupons (Y33)
 
-**Customer Info Section** (editable):
-- Name, email, phone, birthday (with inline edit capability via a pencil/edit button)
-- Last known address (from most recent order)
+**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
 
-**Stats Section**:
-- Total orders, total spent, average ticket (total_spent / total_orders)
-- First and last purchase dates
+**Workaround recomendado**: Para descontos significativos, considerar:
+1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
+2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
 
-**Action Buttons Row**:
-- **WhatsApp**: green button → `wa.me/{phone}?text=Olá {name}!` (using `getWhatsAppNumber`)
-- **Email**: button → `mailto:{email}`
-- **Edit**: toggle inline editing of name/phone/birthday
+### Não Implementado (Decisão Técnica)
 
-**Purchase History Section**:
-- Scrollable list of recent orders with: date, order number, status badge, total, and nested product names with quantities
-- Each order links to `/admin/pedidos` (or opens order detail)
+- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
+- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
+- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
 
-### 3. Edit functionality
-- `useMutation` to update `customers` table (name, phone, birthday)
-- Save button appears when editing, with `disabled={mutation.isPending}` for double-click protection
+---
 
-### 4. Update Customer type
-Add `birthday` to the `Customer` interface in `types/database.ts` (it exists in the DB but is missing from the type).
+## Resumo das 4 Rodadas de Auditoria
 
-## Files Modified
-- `src/types/database.ts` — add `birthday` field to Customer interface
-- `src/pages/admin/Customers.tsx` — expand detail dialog with orders query, address, action buttons, edit form, purchase history
+| Rodada | Fixes | Status |
+|--------|-------|--------|
+| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
+| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
+| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
+| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
+| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
 
+**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
+
+---
+
+## Rodada 5: Yampi Integration Fixes ✅
+
+### Bugs Corrigidos
+
+**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
+
+**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
+
+**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
+
+**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
+
+**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
+
+**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
+
+**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
