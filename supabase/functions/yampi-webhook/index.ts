@@ -85,7 +85,6 @@ Deno.serve(async (req) => {
         event_type: "yampi_approved",
         event_hash: approvedHash,
         payload: { yampi_order_id: yampiOrderId, transaction_id: transactionId },
-        appmax_order_id: yampiOrderId,
       });
 
       // #5 Idempotency: check if order already exists by external_reference
