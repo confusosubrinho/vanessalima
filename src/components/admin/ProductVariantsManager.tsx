@@ -387,6 +387,28 @@ export function ProductVariantsManager({
               />
             </div>
           </div>
+          {/* Custom Attribute (optional) */}
+          <div className="border-t pt-3 mt-1">
+            <Label className="text-xs font-medium text-muted-foreground">Atributo Personalizado (opcional)</Label>
+            <div className="grid grid-cols-2 gap-3 mt-1.5">
+              <div>
+                <Label className="text-xs">Nome do atributo</Label>
+                <Input
+                  value={bulkCustomAttrName}
+                  onChange={(e) => setBulkCustomAttrName(e.target.value)}
+                  placeholder="Ex: Material, Estampa"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Valores (vírgula)</Label>
+                <Input
+                  value={bulkCustomAttrValues}
+                  onChange={(e) => setBulkCustomAttrValues(e.target.value)}
+                  placeholder="Ex: Couro, Sintético"
+                />
+              </div>
+            </div>
+          </div>
           <Button type="button" onClick={handleBulkAdd} className="w-full" size="sm">
             <Plus className="h-4 w-4 mr-1" /> Adicionar
           </Button>
