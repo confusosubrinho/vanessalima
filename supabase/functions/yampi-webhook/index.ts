@@ -579,6 +579,37 @@ Deno.serve(async (req) => {
           await supabase.from("orders").update({ payment_status: "refunded" } as Record<string, unknown>).eq("id", existingOrder.id);
         }
 
+        // Fix #3: Restore stock if order had already debited inventory (processing or later)
+        if (["processing", "shipped", "delivered"].includes(existingOrder.status)) {
+          const { data: movements } = await supabase
+            .from("inventory_movements")
+            .select("variant_id, quantity, type")
+            .eq("order_id", existingOrder.id)
+            .in("type", ["debit", "reserve"]);
+
+          for (const mov of movements || []) {
+            const { data: alreadyReleased } = await supabase
+              .from("inventory_movements")
+              .select("id")
+              .eq("order_id", existingOrder.id)
+              .eq("variant_id", mov.variant_id)
+              .in("type", ["release", "refund"])
+              .maybeSingle();
+
+            if (!alreadyReleased) {
+              const releaseType = mov.type === "debit" ? "refund" : "release";
+              await supabase.rpc("increment_stock", { p_variant_id: mov.variant_id, p_quantity: mov.quantity });
+              await supabase.from("inventory_movements").insert({
+                variant_id: mov.variant_id,
+                order_id: existingOrder.id,
+                type: releaseType,
+                quantity: mov.quantity,
+              });
+            }
+          }
+          console.log("[yampi-webhook] Stock restored for refunded order:", existingOrder.id);
+        }
+
         // Update existing payment record
         const { data: existingPayment } = await supabase
           .from("payments").select("id").eq("order_id", existingOrder.id).maybeSingle();
