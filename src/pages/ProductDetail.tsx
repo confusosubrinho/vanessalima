@@ -875,6 +875,30 @@ export default function ProductDetail() {
                 })}
               </div>
             </div>
+
+            {/* Custom Attribute Selector */}
+            {hasCustomAttr && (
+              <div>
+                <label className="block font-medium mb-2">{customAttrName}{selectedCustomAttr && `: ${selectedCustomAttr}`}</label>
+                <div className="flex flex-wrap gap-2">
+                  {customAttrValues.map((value) => (
+                    <button
+                      key={value}
+                      onClick={() => setSelectedCustomAttr(value)}
+                      className={`min-w-12 h-12 px-3 rounded-lg border-2 font-medium transition-colors ${
+                        selectedCustomAttr === value
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border hover:border-primary'
+                      }`}
+                      aria-label={`${customAttrName} ${value}`}
+                      aria-pressed={selectedCustomAttr === value}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             </div>{/* close variantSectionRef */}
 
             <div>
