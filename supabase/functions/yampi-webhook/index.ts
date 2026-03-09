@@ -566,7 +566,8 @@ Deno.serve(async (req) => {
         }
 
         // Only update status, do NOT re-process payment or stock
-        await supabase.from("orders").update({ status: newLocalStatus }).eq("id", existingOrder.id);
+        // Fix #5: Intermediate statuses (in_production, etc.) imply payment approved
+        await supabase.from("orders").update({ status: newLocalStatus, payment_status: "approved" } as Record<string, unknown>).eq("id", existingOrder.id);
         await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: `status_update_${statusValue}`, event_hash: statusHash, payload });
         console.log("[yampi-webhook] Order status updated:", existingOrder.id, statusValue, "→", newLocalStatus);
       }

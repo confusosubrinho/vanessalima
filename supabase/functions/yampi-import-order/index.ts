@@ -569,7 +569,7 @@ async function importSingleOrder(
     status: localStatus, external_reference: yId, yampi_order_number: yampiOrderNumber,
     payment_status: yampiStatus === "refunded" ? "refunded" : (localStatus === "cancelled" ? "failed" : (localStatus === "pending" ? "pending" : "approved")),
     tracking_code: (yampiOrder.tracking_code as string) || null,
-    shipping_method: (yampiOrder.shipping_option_name as string) || ((yampiOrder.shipping_option as Record<string, unknown>)?.name as string) || null,
+    shipping_method: (yampiOrder.shipping_option_name as string) || ((yampiOrder.shipping_option as Record<string, unknown>)?.name as string) || (((yampiOrder.shipping_option as Record<string, unknown>)?.data as Record<string, unknown>)?.name as string) || ((yampiOrder.delivery_option as Record<string, unknown>)?.name as string) || null,
     yampi_created_at: (yampiOrder.created_at as string) ? new Date(yampiOrder.created_at as string).toISOString() : null,
     coupon_code: couponCode,
     notes: `Importado batch da Yampi (ID ${yId})`,
