@@ -1498,7 +1498,7 @@ export default function Checkout() {
                   return (
                     <div key={item.variant.id} className="flex gap-3 items-start">
                       <img
-                        src={item.product.images?.[0]?.url || '/placeholder.svg'}
+                        src={resolveImageUrl(item.product.images?.[0]?.url) || '/placeholder.svg'}
                         alt={item.product.name}
                         className="w-16 h-16 object-cover rounded"
                       />
