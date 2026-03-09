@@ -5,6 +5,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { ProductCard } from '@/components/store/ProductCard';
 import { Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Product } from '@/types/database';
