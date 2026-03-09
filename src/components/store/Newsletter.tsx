@@ -23,10 +23,10 @@ export function Newsletter() {
       if (error) {
         // Unique constraint = already subscribed
         if (error.code === '23505') {
-          toast({
-            title: '📧 Você já está cadastrado!',
-            description: 'Este email já recebeu o cupom de desconto.',
-          });
+        toast({
+          title: '📧 Você já está cadastrado!',
+          description: 'Este email já está recebendo nossas novidades.',
+        });
         } else {
           throw error;
         }
