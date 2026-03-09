@@ -337,7 +337,7 @@ export default function Orders() {
   if (dateTo) {
     const endOfDay = new Date(dateTo);
     endOfDay.setHours(23, 59, 59, 999);
-    filteredOrders = filteredOrders.filter(o => new Date(o.created_at) <= endOfDay);
+    filteredOrders = filteredOrders.filter(o => new Date(getOrderDate(o)) <= endOfDay);
   }
 
   // Value filter
