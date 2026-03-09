@@ -405,7 +405,7 @@ export default function Checkout() {
 
       const { data: existingOrder } = await supabase
         .from('orders')
-        .select('id, order_number, status')
+        .select('id, order_number, status, access_token')
         .eq('idempotency_key', idempotencyKey)
         .maybeSingle();
 

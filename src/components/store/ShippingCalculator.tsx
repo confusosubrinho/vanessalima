@@ -19,7 +19,9 @@ export function ShippingCalculator({ compact = false, products }: ShippingCalcul
   const [hasCalculated, setHasCalculated] = useState(false);
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(399);
 
-  // Load shipping options if there's already a saved CEP
+  // Recálculo intencional apenas na mudança de CEP (UX consciente).
+  // Não adicionamos `items` ao dependency array para evitar chamadas repetidas ao
+  // backend a cada alteração de quantidade. O frete será recalculado quando um novo CEP for informado.
   useEffect(() => {
     if (shippingZip && shippingZip.replace(/\D/g, '').length === 8 && !hasCalculated) {
       calculateShipping(shippingZip.replace(/\D/g, ''));
