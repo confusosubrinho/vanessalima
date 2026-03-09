@@ -56,6 +56,10 @@ Deno.serve(async (req) => {
       else if (["cancelled", "canceled", "refused", "refunded"].includes(statusValue)) effectiveEvent = "order.cancelled";
       else if (["shipped", "sent", "sending"].includes(statusValue)) effectiveEvent = "order.shipped";
       else if (["delivered"].includes(statusValue)) effectiveEvent = "order.delivered";
+      else if (["processing", "in_production", "in_separation", "ready_for_shipping"].includes(statusValue)) {
+        console.log("[yampi-webhook] order.status.updated with processing-like status:", statusValue, "— treating as paid");
+        effectiveEvent = "order.paid";
+      }
     }
 
     // ===== PAYMENT APPROVED -> UPDATE EXISTING (by session) OR CREATE ORDER =====
