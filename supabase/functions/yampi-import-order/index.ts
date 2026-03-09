@@ -328,7 +328,13 @@ Deno.serve(async (req) => {
     const quantity = Number(yampiItem.quantity || 1);
     const unitPrice = Number(yampiItem.price || yampiItem.price_sale || yampiItem.unit_price || 0);
     const yampiProduct = (yampiItem.product as Record<string, unknown>) || {};
-    const itemName = (yampiItem.name as string) || (yampiItem.product_name as string) || (yampiProduct.name as string) || "Produto";
+    const isGenericName = (n: unknown): boolean => {
+      if (!n || typeof n !== "string") return true;
+      const lower = n.trim().toLowerCase();
+      return lower === "produto" || lower === "produto yampi" || lower === "";
+    };
+    const rawImportName = (yampiItem.name as string) || (yampiItem.product_name as string) || (yampiProduct.name as string) || null;
+    let itemName = isGenericName(rawImportName) ? "Produto" : rawImportName!;
     const itemSku = (yampiItem.sku as string) || (yampiItem.sku_code as string) || (yampiItem.code as string) || ((yampiItem.sku as Record<string, unknown>)?.sku as string) || null;
     const yampiItemImage = (yampiItem.image as Record<string, unknown>) || (yampiProduct.image as Record<string, unknown>) || {};
     const itemImageUrl = (yampiItemImage.url as string) || (yampiItemImage.src as string) || (yampiItem.image_url as string) || null;
