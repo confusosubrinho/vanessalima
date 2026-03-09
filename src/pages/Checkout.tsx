@@ -20,6 +20,7 @@ import { HelpHint } from '@/components/HelpHint';
 import { CouponInput } from '@/components/store/CouponInput';
 import defaultLogo from '@/assets/logo.png';
 import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
+import { resolveImageUrl } from '@/lib/imageUrl';
 import { Helmet } from 'react-helmet-async';
 import { useStoreSettingsPublic } from '@/hooks/useStoreContact';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
