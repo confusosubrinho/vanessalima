@@ -540,7 +540,8 @@ async function importSingleOrder(
 
   const yampiStatus = String((yampiOrder.status as any)?.data?.alias || yampiOrder.status_alias || yampiOrder.status || "");
   let localStatus = "processing";
-  if (["shipped", "sent"].includes(yampiStatus)) localStatus = "shipped";
+  if (["paid", "approved", "payment_approved", "processing", "in_production", "in_separation", "ready_for_shipping", "invoiced"].includes(yampiStatus)) localStatus = "processing";
+  else if (["shipped", "sent"].includes(yampiStatus)) localStatus = "shipped";
   else if (["delivered"].includes(yampiStatus)) localStatus = "delivered";
   else if (["cancelled", "refused", "refunded"].includes(yampiStatus)) localStatus = "cancelled";
   else if (["pending", "waiting_payment"].includes(yampiStatus)) localStatus = "pending";
