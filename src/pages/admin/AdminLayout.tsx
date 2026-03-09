@@ -107,6 +107,7 @@ const allMenuItems: MenuItem[] = [
       { title: 'Tema Visual', url: '/admin/tema' },
       { title: 'Redes Sociais', url: '/admin/redes-sociais' },
       { title: 'Páginas Institucionais', url: '/admin/paginas' },
+      { title: 'Blog', url: '/admin/blog' },
     ]
   },
   { 
