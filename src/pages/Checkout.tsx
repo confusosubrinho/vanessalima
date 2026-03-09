@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Check, ChevronRight, Truck, CreditCard, MapPin, ArrowLeft, Plus, Minus, Loader2, Copy } from 'lucide-react';
+import { Check, ChevronRight, Truck, CreditCard, MapPin, ArrowLeft, Plus, Minus, Loader2, Copy, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,8 +18,16 @@ import { usePricingConfig } from '@/hooks/usePricingConfig';
 import { getInstallmentOptions, formatCurrency as formatPricingCurrency, type PricingConfig } from '@/lib/pricingEngine';
 import { HelpHint } from '@/components/HelpHint';
 import { CouponInput } from '@/components/store/CouponInput';
-import logo from '@/assets/logo.png';
+import defaultLogo from '@/assets/logo.png';
 import { getCartItemUnitPrice, hasSaleDiscount } from '@/lib/cartPricing';
+import { Helmet } from 'react-helmet-async';
+import { useStoreSettingsPublic } from '@/hooks/useStoreContact';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
+const BRAZILIAN_STATES = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA',
+  'PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'
+];
 import { isCouponValidForLocation } from '@/lib/couponDiscount';
 import { generateRequestId, invokeCheckoutFunction } from '@/lib/checkoutClient';
 import { StripePaymentForm, useStripeConfig } from '@/components/store/StripePaymentForm';
