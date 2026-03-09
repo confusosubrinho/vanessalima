@@ -270,6 +270,8 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
             sku: v.sku || '',
             is_active: v.is_active ?? true,
             image_url: linkedImage?.url,
+            custom_attribute_name: v.custom_attribute_name || '',
+            custom_attribute_value: v.custom_attribute_value || '',
           };
         }));
       }
