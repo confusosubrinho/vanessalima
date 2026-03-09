@@ -332,7 +332,8 @@ export default function Checkout() {
       finalTotal = fullPart * (1 - pixDiscountPct) + salePart + shippingCost;
     } else {
       const pixDiscountPct = pc.pix_discount / 100;
-      finalTotal = total * (1 - pixDiscountPct);
+      // Apply PIX discount only to product value, not shipping
+      finalTotal = (subtotal - discount) * (1 - pixDiscountPct) + shippingCost;
     }
   } else {
     finalTotal = total;
