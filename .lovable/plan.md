@@ -1,63 +1,53 @@
 
 
-## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
+# Auditoria UX — Rodada 8 (Somente grau ALTO)
 
-### Fixes Aplicados
+## UX 1 — ALTO: Checkout usa logo estático local em vez do configurado no admin
+`Checkout.tsx` linha 21 importa `import logo from '@/assets/logo.png'` e exibe na linha 926. O logo do checkout nunca reflete o logo configurado no painel admin. Diferente do Header e Footer que usam `store_settings_public`, o checkout mostra sempre o asset local antigo.
 
-**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
+**Correção:** Usar `useStoreSettingsPublic()` para buscar o logo dinâmico, com fallback para o asset local.
 
-**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
+## UX 2 — ALTO: Checkout sem Helmet/SEO — título da aba fica genérico
+`Checkout.tsx` não possui `<Helmet>` em nenhum lugar do arquivo (1504 linhas). A aba do navegador fica com o título padrão do `index.html` durante todo o checkout, sem indicação de etapa.
 
-**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
+**Correção:** Adicionar `<Helmet><title>Checkout — {step label} | Loja</title></Helmet>` dinâmico por step.
 
-**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
+## UX 3 — ALTO: Checkout resumo do pedido não visível em mobile
+O "Resumo do Pedido" (linha 1401-1498) está dentro de `lg:col-span-1` no grid `lg:grid-cols-3`. Em mobile, ele fica abaixo de todo o formulário, exigindo scroll longo. O usuário não vê o que está comprando durante as etapas de identificação/envio/pagamento.
 
-**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
+**Correção:** Adicionar um resumo colapsável (Collapsible) fixo no topo do mobile, mostrando total + quantidade de itens com toggle para expandir detalhes.
 
-### Documentação: Limitação de Cupons (Y33)
+## UX 4 — ALTO: Checkout step labels invisíveis em mobile
+Linha 958: `<span className="hidden sm:inline font-medium">{step.label}</span>` — os nomes dos steps (Identificação, Entrega, Pagamento) ficam ocultos em mobile, mostrando apenas ícones pequenos. O usuário não sabe em qual etapa está.
 
-**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
+**Correção:** Mostrar pelo menos o label do step ativo em mobile. Usar `sm:inline` nos inativos mas sempre mostrar o ativo.
 
-**Workaround recomendado**: Para descontos significativos, considerar:
-1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
-2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
+## UX 5 — ALTO: Carrinho sidebar (Header) sem limite de estoque ao incrementar
+Linha 396 no Header: o botão `+` no carrinho do header chama `updateQuantity(item.variant.id, item.quantity + 1)` sem verificar estoque. Diferente do Cart.tsx que verifica `freshStockData`, o mini-cart permite adicionar infinitamente.
 
-### Não Implementado (Decisão Técnica)
+**Correção:** Passar `stock_quantity` do variant e bloquear incremento quando `quantity >= stock_quantity`.
 
-- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
-- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
-- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
+## UX 6 — ALTO: ProductCard preço PIX não mostra o valor final, só o percentual
+Linhas 220-223 do ProductCard: quando há desconto PIX, mostra apenas `"{pixDiscountPercent}% off no PIX"` sem exibir o valor final com desconto. O cliente precisa calcular mentalmente. Concorrentes mostram `"R$ XX,XX no PIX"`.
 
----
+**Correção:** Exibir `formatPrice(pixPrice)` junto com a indicação de desconto, ex: `"R$ 189,90 no PIX"`.
 
-## Resumo das 4 Rodadas de Auditoria
+## UX 7 — ALTO: Checkout não salva progresso — refresh perde todos os dados
+Ao atualizar a página durante o checkout (F5 ou conexão instável), todos os dados preenchidos (nome, email, CPF, endereço) são perdidos. O state é todo `useState` sem persistência. Em mobile, isso é especialmente comum.
 
-| Rodada | Fixes | Status |
-|--------|-------|--------|
-| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
-| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
-| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
-| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
-| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
+**Correção:** Persistir `formData` e `currentStep` em `sessionStorage` com debounce. Restaurar ao montar o componente.
 
-**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
+## UX 8 — ALTO: Checkout campo Estado é input livre em vez de Select
+Linha 1115-1123: o campo "Estado" é um `<Input>` com `maxLength={2}` e placeholder "UF". Não há validação nem lista predefinida. Usuários podem digitar valores inválidos ("SS", "XX"), causando erros no processamento do pedido.
 
----
+**Correção:** Substituir por `<Select>` com as 27 UFs brasileiras predefinidas.
 
-## Rodada 5: Yampi Integration Fixes ✅
+## Arquivos Modificados
 
-### Bugs Corrigidos
+- **`src/pages/Checkout.tsx`** — Logo dinâmico, Helmet, resumo mobile colapsável, step labels mobile, persistência sessionStorage, Select para UF
+- **`src/components/store/Header.tsx`** — Limite de estoque no mini-cart
+- **`src/components/store/ProductCard.tsx`** — Valor PIX visível
 
-**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
+## Sem alteração de regras de negócio
+Todas as correções são visuais/UX. Nenhuma lógica de pagamento, precificação ou processamento existente será alterada.
 
-**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
-
-**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
-
-**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
-
-**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
-
-**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
-
-**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
