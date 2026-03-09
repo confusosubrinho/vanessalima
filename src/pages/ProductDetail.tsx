@@ -355,11 +355,13 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     const hasColors = colors.length > 0;
-    if (!selectedSize || (hasColors && !selectedColor)) {
-      const missing = !selectedSize && hasColors && !selectedColor
-        ? 'cor e tamanho'
-        : !selectedSize ? 'tamanho' : 'cor';
-      setVariantWarning(`Selecione ${missing === 'cor e tamanho' ? 'a ' : 'o '}${missing}`);
+    const missingParts: string[] = [];
+    if (hasColors && !selectedColor) missingParts.push('cor');
+    if (!selectedSize) missingParts.push('tamanho');
+    if (hasCustomAttr && !selectedCustomAttr) missingParts.push(customAttrName!.toLowerCase());
+    
+    if (missingParts.length > 0) {
+      setVariantWarning(`Selecione ${missingParts.join(' e ')}`);
       scrollToVariants();
       setTimeout(() => setVariantWarning(''), 4000);
       return;
@@ -369,11 +371,15 @@ export default function ProductDetail() {
     let variant;
     if (selectedColor) {
       variant = variants.find(v => 
-        v.size === selectedSize && v.color === selectedColor && v.is_active && v.stock_quantity > 0
+        v.size === selectedSize && v.color === selectedColor && 
+        (!hasCustomAttr || v.custom_attribute_value === selectedCustomAttr) &&
+        v.is_active && v.stock_quantity > 0
       );
     } else {
       variant = variants.find(v => 
-        v.size === selectedSize && (!v.color || v.color === '') && v.is_active && v.stock_quantity > 0
+        v.size === selectedSize && (!v.color || v.color === '') && 
+        (!hasCustomAttr || v.custom_attribute_value === selectedCustomAttr) &&
+        v.is_active && v.stock_quantity > 0
       );
     }
 
@@ -400,9 +406,10 @@ export default function ProductDetail() {
     
     // Premium toast with product info
     const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
+    const variantLabel = `Tam. ${variant.size}${variant.color ? ' - ' + variant.color : ''}${variant.custom_attribute_name && variant.custom_attribute_value ? ' - ' + variant.custom_attribute_name + ': ' + variant.custom_attribute_value : ''}`;
     setAddedToast({
       name: product.name,
-      variant: `Tam. ${variant.size}${variant.color ? ' - ' + variant.color : ''}`,
+      variant: variantLabel,
       image: resolveImageUrl(primaryImage?.url),
     });
   };
