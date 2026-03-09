@@ -309,6 +309,7 @@ export default function Checkout() {
 
   // Use pricing engine for installments
   // BUG FIX: Use total from CartContext (single source of truth) instead of recalculating locally
+  const shippingCost = selectedShipping?.price || 0;
 
   // PIX total: when pix_discount_applies_to_sale_products is false, apply discount only to full-price items
   let finalTotal: number;
