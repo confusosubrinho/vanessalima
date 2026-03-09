@@ -111,17 +111,18 @@ export interface Banner {
    updated_at: string;
  }
  
- export interface Customer {
-   id: string;
-   user_id: string | null;
-   email: string;
-   full_name: string;
-   phone: string | null;
-   total_orders: number;
-   total_spent: number;
-   created_at: string;
-   updated_at: string;
- }
+  export interface Customer {
+    id: string;
+    user_id: string | null;
+    email: string;
+    full_name: string;
+    phone: string | null;
+    birthday: string | null;
+    total_orders: number;
+    total_spent: number;
+    created_at: string;
+    updated_at: string;
+  }
  
  export interface Order {
    id: string;
