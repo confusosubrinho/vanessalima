@@ -194,21 +194,23 @@ export function ErrorLogsPanel() {
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
                   {!log.is_resolved && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-green-600"
-                      onClick={() => resolveMutation.mutate(log.id)}
-                      title="Marcar como resolvido"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-green-600"
+                    onClick={() => resolveMutation.mutate(log.id)}
+                    disabled={resolveMutation.isPending}
+                    title="Marcar como resolvido"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                  </Button>
+                )}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-destructive"
                     onClick={() => deleteMutation.mutate(log.id)}
+                    disabled={deleteMutation.isPending}
                     title="Remover"
                   >
                     <Trash2 className="h-4 w-4" />

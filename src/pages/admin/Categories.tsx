@@ -284,8 +284,8 @@ export default function Categories() {
             <AlertDialogDescription>Esta ação é irreversível. A categoria será removida permanentemente.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (categoryToDelete) { deleteMutation.mutate(categoryToDelete); setCategoryToDelete(null); } }}>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={deleteMutation.isPending} onClick={() => { if (categoryToDelete) { deleteMutation.mutate(categoryToDelete); setCategoryToDelete(null); } }}>
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

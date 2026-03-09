@@ -434,7 +434,7 @@ export function TestimonialsManager() {
                     <p className="text-xs text-muted-foreground truncate max-w-[200px] hidden sm:block">{item.testimonial}</p>
                     <div className="flex gap-1 flex-shrink-0">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(item)}><Pencil className="h-3.5 w-3.5" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteMutation.mutate(item.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(item.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>
                 </CardContent>

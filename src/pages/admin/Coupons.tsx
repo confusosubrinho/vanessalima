@@ -406,8 +406,8 @@ export default function Coupons() {
             <AlertDialogDescription>Esta ação é irreversível. O cupom será removido permanentemente.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (couponToDelete) { deleteMutation.mutate(couponToDelete); setCouponToDelete(null); } }}>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={deleteMutation.isPending} onClick={() => { if (couponToDelete) { deleteMutation.mutate(couponToDelete); setCouponToDelete(null); } }}>
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

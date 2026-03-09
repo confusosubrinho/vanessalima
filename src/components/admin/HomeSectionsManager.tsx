@@ -242,7 +242,7 @@ export function HomeSectionsManager() {
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openDialog(section)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteMutation.mutate(section.id)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(section.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>

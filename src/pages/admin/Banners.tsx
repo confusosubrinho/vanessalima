@@ -362,8 +362,8 @@ export default function Banners() {
             <AlertDialogDescription>Esta ação é irreversível. O banner será removido permanentemente.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (bannerToDelete) { deleteMutation.mutate(bannerToDelete); setBannerToDelete(null); } }}>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={deleteMutation.isPending} onClick={() => { if (bannerToDelete) { deleteMutation.mutate(bannerToDelete); setBannerToDelete(null); } }}>
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

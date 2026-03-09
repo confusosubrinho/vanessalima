@@ -126,12 +126,12 @@ export default function Reviews() {
   const renderActions = (r: ReviewRow) => (
     <div className={`flex ${isMobile ? 'flex-wrap gap-1.5 mt-2' : 'flex-col gap-1 shrink-0'}`}>
       {r.status !== 'published' && (
-        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => updateStatus.mutate({ ids: [r.id], status: 'published' })}>
+        <Button size="sm" variant="outline" className="text-xs h-7" disabled={updateStatus.isPending} onClick={() => updateStatus.mutate({ ids: [r.id], status: 'published' })}>
           <CheckCircle className="h-3 w-3 mr-1" />Publicar
         </Button>
       )}
       {r.status !== 'rejected' && (
-        <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" onClick={() => updateStatus.mutate({ ids: [r.id], status: 'rejected' })}>
+        <Button size="sm" variant="outline" className="text-xs h-7 text-destructive" disabled={updateStatus.isPending} onClick={() => updateStatus.mutate({ ids: [r.id], status: 'rejected' })}>
           <XCircle className="h-3 w-3 mr-1" />Rejeitar
         </Button>
       )}
