@@ -341,7 +341,7 @@ Deno.serve(async (req) => {
             try {
               const unitPrice = Number(variant.sale_price ?? variant.base_price ?? productPrice) || 0;
               const unitCost = Number(variant.base_price ?? productCost) || 0;
-              const variantSku = variant.sku || `${product.sku || product.id.slice(0, 8)}-${variant.size || "U"}-${variant.color || "U"}`.replace(/\s+/g, "-").slice(0, 64);
+              const variantSku = variant.sku || `${product.sku || product.id.slice(0, 8)}-${variant.size || "U"}-${variant.color || "U"}${variant.custom_attribute_value ? `-${variant.custom_attribute_value.substring(0, 3).toUpperCase()}` : ""}`.replace(/\s+/g, "-").slice(0, 64);
 
               const variationsValuesIds: number[] = [];
 
@@ -351,6 +351,10 @@ Deno.serve(async (req) => {
               }
               if (variant.color?.trim()) {
                 const mapping = valueMap[`color:${variant.color.trim()}`];
+                if (mapping?.yampi_value_id) variationsValuesIds.push(mapping.yampi_value_id);
+              }
+              if (variant.custom_attribute_name?.trim() && variant.custom_attribute_value?.trim()) {
+                const mapping = valueMap[`${variant.custom_attribute_name.trim()}:${variant.custom_attribute_value.trim()}`];
                 if (mapping?.yampi_value_id) variationsValuesIds.push(mapping.yampi_value_id);
               }
 
