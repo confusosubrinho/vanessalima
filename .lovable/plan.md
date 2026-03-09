@@ -1,63 +1,52 @@
 
 
-## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
+# Auditoria de Bugs e Melhorias — Rodada 3
 
-### Fixes Aplicados
+## Bugs Encontrados
 
-**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
+### BUG 1 — MÉDIO: useEffect duplicado para limpar shipping no Checkout.tsx
+Linhas 829-836 e 838-845 contêm dois `useEffect` com lógica idêntica (limpar shipping quando CEP do form difere do cart). O primeiro tem `setSelectedShipping` no dependency array, o segundo não. O segundo é redundante e executa a mesma ação sem a dependência correta. Gera execução dupla desnecessária.
 
-**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
+**Correção:** Remover o segundo `useEffect` (linhas 838-845), mantendo apenas o primeiro que já tem o dependency array correto.
 
-**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
+### BUG 2 — MÉDIO: CheckoutStart.tsx calcula `totalValue` localmente em vez de usar `total` do CartContext
+Linha 24: `const totalValue = subtotal - discount + shippingCost;`
+O CartContext já fornece `total` calculado corretamente (linha 212 do CartContext). O `CheckoutStart` ignora esse valor e recalcula localmente, criando a mesma inconsistência que foi corrigida no `Checkout.tsx`. Se a lógica de cálculo mudar no CartContext, o total enviado ao servidor estará errado.
 
-**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
+**Correção:** Importar `total` do `useCart()` e usá-lo no lugar de `totalValue`.
 
-**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
+### BUG 3 — BAIXO: PIX `finalTotal` no Checkout inclui frete duas vezes quando `pix_discount_applies_to_sale_products` é true
+Linha 335: `finalTotal = total * (1 - pixDiscountPct);`
+Aqui `total` já inclui `shippingCost` (do CartContext: `subtotal - discount + shippingCost`). Aplicar o desconto PIX sobre `total` aplica o desconto também sobre o frete. O correto seria aplicar o desconto PIX apenas sobre o valor dos produtos (subtotal - discount) e somar o frete depois.
 
-### Documentação: Limitação de Cupons (Y33)
+**Correção:** Mudar para `finalTotal = (subtotal - discount) * (1 - pixDiscountPct) + shippingCost;` — aplicando desconto PIX somente sobre produtos, não sobre frete.
 
-**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
+### BUG 4 — BAIXO: `ShippingCalculator` useEffect tem dependency array incompleto
+Linha 23-27: O `useEffect` que auto-calcula frete quando há CEP salvo depende de `[shippingZip]` mas chama `calculateShipping` que usa `items` e `subtotal` do contexto. Se o carrinho mudar (items adicionados/removidos), o frete não é recalculado automaticamente. Não é um crash, mas pode exibir frete desatualizado.
 
-**Workaround recomendado**: Para descontos significativos, considerar:
-1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
-2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
+**Correção:** Não alterar este efeito (recalcular frete a cada mudança de item seria ruim para UX). Apenas adicionar um comentário de documentação explicando que o recálculo é intencional apenas na mudança de CEP.
 
-### Não Implementado (Decisão Técnica)
+### BUG 5 — BAIXO: `integrations_checkout` query no Checkout.tsx pode falhar silenciosamente
+Linha 114: `supabase.from('integrations_checkout')` — esta tabela não aparece no schema fornecido. Se a tabela não existir, a query retorna erro silenciosamente e `activeProvider` fica `undefined`, fazendo o checkout cair no fluxo Appmax por padrão. Funciona, mas mascara erros de configuração.
 
-- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
-- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
-- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
+**Correção:** Adicionar `console.warn` quando a query falha para facilitar debugging.
 
----
+## Melhorias Propostas
 
-## Resumo das 4 Rodadas de Auditoria
+### MELHORIA 1 — Remover useEffect duplicado
+Eliminar o efeito redundante das linhas 838-845 do Checkout.tsx.
 
-| Rodada | Fixes | Status |
-|--------|-------|--------|
-| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
-| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
-| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
-| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
-| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
+### MELHORIA 2 — Unificar total no CheckoutStart
+Usar `total` do CartContext em vez de recalcular `totalValue`.
 
-**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
+### MELHORIA 3 — Corrigir desconto PIX sobre frete
+Aplicar desconto PIX apenas sobre subtotal - discount, não sobre frete.
 
----
+## Arquivos Modificados
 
-## Rodada 5: Yampi Integration Fixes ✅
+- **`src/pages/Checkout.tsx`** — Remover useEffect duplicado, corrigir cálculo PIX sobre frete
+- **`src/pages/CheckoutStart.tsx`** — Usar `total` do CartContext
 
-### Bugs Corrigidos
+## Sem alteração de regras de negócio
+Todas as correções são defensivas. O fluxo de checkout, pagamento e processamento de pedidos permanece inalterado.
 
-**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
-
-**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
-
-**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
-
-**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
-
-**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
-
-**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
-
-**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
