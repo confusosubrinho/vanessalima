@@ -111,11 +111,16 @@ Deno.serve(async (req) => {
       if (sessionId) {
         const { data: existingBySession } = await supabase
           .from("orders")
-          .select("id, order_number")
+          .select("id, order_number, status")
           .eq("checkout_session_id", sessionId)
           .maybeSingle();
 
         if (existingBySession) {
+          // Bug fix #4: If order already fully processed, skip re-processing payment/stock
+          if (["processing", "shipped", "delivered"].includes(existingBySession.status)) {
+            console.log("[yampi-webhook] Order already processed with status", existingBySession.status, "— skipping re-processing:", existingBySession.id);
+            return jsonOk({ ok: true, order_id: existingBySession.id, duplicate: true, status: existingBySession.status });
+          }
           // Bug fix: unwrap customer.data wrapper (Yampi API may wrap customer in .data)
           const rawCustomer = resourceData?.customer || resourceData?.buyer || {};
           const customer = rawCustomer?.data || rawCustomer;
