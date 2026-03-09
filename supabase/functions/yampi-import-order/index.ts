@@ -596,14 +596,45 @@ async function importSingleOrder(
 
     let localVariant: Record<string, unknown> | null = null;
     if (skuId) {
-      const { data: v } = await supabase.from("product_variants").select("id, product_id, sku").eq("yampi_sku_id", skuId).maybeSingle();
+      const { data: v } = await supabase.from("product_variants").select("id, product_id, size, color, sku").eq("yampi_sku_id", skuId).maybeSingle();
+      localVariant = v;
+    }
+    // Fallback: match by SKU code
+    const itemSku = (item.sku as string) || (item.sku_code as string) || (item.code as string) || ((item.sku as Record<string, unknown>)?.sku as string) || null;
+    if (!localVariant && itemSku && String(itemSku).trim()) {
+      const { data: v } = await supabase.from("product_variants").select("id, product_id, size, color, sku").eq("sku", String(itemSku).trim()).maybeSingle();
       localVariant = v;
     }
 
+    // Resolve product name and image for snapshots
+    let productName = itemName;
+    let productId = (localVariant?.product_id as string) || null;
+    if (productId) {
+      const { data: p } = await supabase.from("products").select("name").eq("id", productId).maybeSingle();
+      if (p) productName = p.name;
+    }
+
+    let imageSnapshot: string | null = null;
+    const yampiItemImage = (item.image as Record<string, unknown>) || ((item.product as Record<string, unknown>)?.image as Record<string, unknown>) || {};
+    const itemImageUrl = (yampiItemImage.url as string) || (yampiItemImage.src as string) || (item.image_url as string) || null;
+    if (productId) {
+      const { data: img } = await supabase.from("product_images").select("url").eq("product_id", productId).eq("is_primary", true).limit(1).maybeSingle();
+      imageSnapshot = img?.url || null;
+    }
+    if (!imageSnapshot && itemImageUrl) imageSnapshot = itemImageUrl;
+
+    const variantDisplay = localVariant ? [localVariant.size, localVariant.color].filter(Boolean).join(" / ") : "";
+    const skuDisplay = itemSku || (localVariant?.sku as string) || "";
+    const variantInfo = [variantDisplay, skuDisplay].filter(Boolean).join(" • ") || (itemSku || null);
+
     await supabase.from("order_items").insert({
-      order_id: order.id, product_id: (localVariant?.product_id as string) || null,
-      product_variant_id: (localVariant?.id as string) || null, product_name: itemName,
+      order_id: order.id, product_id: productId,
+      product_variant_id: (localVariant?.id as string) || null, product_name: productName,
+      variant_info: variantInfo,
       quantity, unit_price: unitPrice, total_price: unitPrice * quantity,
+      title_snapshot: productName,
+      image_snapshot: imageSnapshot,
+      sku_snapshot: itemSku || (localVariant?.sku as string) || null,
       yampi_sku_id: skuId,
     });
 

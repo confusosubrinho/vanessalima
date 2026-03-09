@@ -56,6 +56,10 @@ Deno.serve(async (req) => {
       else if (["cancelled", "canceled", "refused", "refunded"].includes(statusValue)) effectiveEvent = "order.cancelled";
       else if (["shipped", "sent", "sending"].includes(statusValue)) effectiveEvent = "order.shipped";
       else if (["delivered"].includes(statusValue)) effectiveEvent = "order.delivered";
+      else if (["processing", "in_production", "in_separation", "ready_for_shipping"].includes(statusValue)) {
+        console.log("[yampi-webhook] order.status.updated with processing-like status:", statusValue, "— treating as paid");
+        effectiveEvent = "order.paid";
+      }
     }
 
     // ===== PAYMENT APPROVED -> UPDATE EXISTING (by session) OR CREATE ORDER =====
@@ -81,7 +85,6 @@ Deno.serve(async (req) => {
         event_type: "yampi_approved",
         event_hash: approvedHash,
         payload: { yampi_order_id: yampiOrderId, transaction_id: transactionId },
-        appmax_order_id: yampiOrderId,
       });
 
       // #5 Idempotency: check if order already exists by external_reference
@@ -141,6 +144,7 @@ Deno.serve(async (req) => {
             provider: "yampi",
             gateway,
             payment_method: paymentMethod,
+            payment_status: "approved",
             installments,
             transaction_id: transactionId,
             tracking_code: trackingCode,
@@ -645,8 +649,13 @@ Deno.serve(async (req) => {
         await supabase.from("order_events").insert({ order_id: existingOrder.id, event_type: effectiveEvent, event_hash: cancelHash, payload });
 
         // Y30: Insert email automation log for cancellation
-        const customerEmail = resourceData?.customer?.email || resourceData?.email || null;
-        const customerName = resourceData?.customer?.name || resourceData?.customer_name || "Cliente";
+        // Fix: unwrap customer.data wrapper (Yampi API may wrap customer in .data)
+        const rawCancelCustomer = resourceData?.customer || resourceData?.buyer || {};
+        const cancelCustomer = (rawCancelCustomer as Record<string, unknown>)?.data || rawCancelCustomer;
+        const customerEmail = (cancelCustomer as Record<string, unknown>)?.email || resourceData?.email || null;
+        const customerName = (cancelCustomer as Record<string, unknown>)?.name
+          || ((cancelCustomer as Record<string, unknown>)?.first_name ? `${(cancelCustomer as Record<string, unknown>).first_name} ${(cancelCustomer as Record<string, unknown>)?.last_name || ""}`.trim() : null)
+          || resourceData?.customer_name || "Cliente";
         const { data: cancelAutomation } = await supabase.from("email_automations")
           .select("id").eq("trigger_event", "order_cancelled").eq("is_active", true).limit(1).maybeSingle();
         if (customerEmail) {
