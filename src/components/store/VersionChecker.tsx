@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { APP_VERSION } from '@/lib/appVersion';
 
-const RELOAD_KEY = 'version_check_reloaded';
+const PENDING_UPDATE_KEY = 'pending_version_update';
 
 export function VersionChecker() {
   const shown = useRef(false);
@@ -23,11 +23,10 @@ export function VersionChecker() {
         const serverVersion = (data as { app_version?: string } | null)?.app_version;
         if (!serverVersion || serverVersion === '' || serverVersion === APP_VERSION || shown.current) return;
 
-        const alreadyReloadedFor = sessionStorage.getItem(RELOAD_KEY);
-        if (alreadyReloadedFor === serverVersion) return;
+        // Already flagged this version
+        if (sessionStorage.getItem(PENDING_UPDATE_KEY) === serverVersion) return;
 
         shown.current = true;
-        sessionStorage.setItem(RELOAD_KEY, serverVersion);
 
         // Clear lazy-retry flags so the fresh load can retry if needed
         try {
@@ -55,7 +54,9 @@ export function VersionChecker() {
           const keys = await caches.keys();
           await Promise.all(keys.map(k => caches.delete(k)));
         }
-        window.location.reload();
+
+        // Flag for reload on next navigation instead of reloading now
+        sessionStorage.setItem(PENDING_UPDATE_KEY, serverVersion);
       } catch {
         // Silently fail
       }
