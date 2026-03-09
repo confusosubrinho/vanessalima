@@ -393,7 +393,11 @@ export function Header() {
                                     <Minus className="h-3 w-3" />
                                   </Button>
                                   <span className="w-5 text-center text-xs">{item.quantity}</span>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => updateQuantity(item.variant.id, item.quantity + 1)}>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
+                                    const maxQty = item.variant.stock_quantity || 99;
+                                    if (item.quantity >= maxQty) return;
+                                    updateQuantity(item.variant.id, item.quantity + 1);
+                                  }} disabled={item.quantity >= (item.variant.stock_quantity || 99)}>
                                     <Plus className="h-3 w-3" />
                                   </Button>
                                 </div>

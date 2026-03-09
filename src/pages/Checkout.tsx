@@ -1196,14 +1196,19 @@ export default function Checkout() {
                       </div>
                       <div>
                         <Label htmlFor="state">Estado *</Label>
-                        <Input
-                          id="state"
-                          name="state"
+                        <Select
                           value={formData.state}
-                          onChange={handleMaskedChange}
-                          placeholder="UF"
-                          maxLength={2}
-                        />
+                          onValueChange={(value) => setFormData(prev => ({ ...prev, state: value }))}
+                        >
+                          <SelectTrigger id="state">
+                            <SelectValue placeholder="Selecione o estado" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {BRAZILIAN_STATES.map(uf => (
+                              <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </div>
