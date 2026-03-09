@@ -28,7 +28,7 @@ function CookieConsentInner(_props: Record<string, never>, ref: React.ForwardedR
   if (!visible) return null;
 
   return (
-    <div ref={ref} className="fixed top-4 left-4 right-4 md:top-auto md:bottom-4 md:left-auto md:right-4 md:max-w-sm z-50 animate-fade-in">
+    <div ref={ref} className="fixed bottom-4 left-4 right-4 md:left-auto md:max-w-sm z-[9999] animate-fade-in">
       <div className="bg-background border border-border rounded-xl shadow-lg p-4 space-y-3">
         <p className="text-sm text-muted-foreground leading-relaxed">
           Usamos cookies para melhorar sua experiência. Ao continuar navegando, você concorda com nossa{' '}
