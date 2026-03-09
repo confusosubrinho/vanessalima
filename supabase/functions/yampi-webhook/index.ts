@@ -144,6 +144,7 @@ Deno.serve(async (req) => {
             provider: "yampi",
             gateway,
             payment_method: paymentMethod,
+            payment_status: "approved",
             installments,
             transaction_id: transactionId,
             tracking_code: trackingCode,
