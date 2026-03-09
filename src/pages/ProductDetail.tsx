@@ -917,6 +917,10 @@ export default function ProductDetail() {
                   <span className="w-10 md:w-12 text-center font-medium" aria-live="polite">{quantity}</span>
                   <Button variant="ghost" size="icon" className="h-8 w-8 md:h-10 md:w-10" onClick={() => {
                     const maxStock = selectedVariant?.stock_quantity || 99;
+                    if (quantity >= maxStock) {
+                      toast({ title: 'Limite de estoque', description: `Máximo de ${maxStock} unidades disponíveis.`, variant: 'destructive' });
+                      return;
+                    }
                     setQuantity(Math.min(quantity + 1, maxStock));
                   }} aria-label="Aumentar quantidade">
                     <Plus className="h-4 w-4" />
