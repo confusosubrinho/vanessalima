@@ -150,6 +150,8 @@ export default function OrderConfirmation() {
   const [orderStatus, setOrderStatus] = useState(confirmState.status || 'pending');
   const [isLoading, setIsLoading] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState<string | null>(null);
+  const { data: storePublicSettings } = useStoreSettingsPublic();
+  const logoUrl = storePublicSettings?.header_logo_url || storePublicSettings?.logo_url || defaultLogo;
 
   // Fetch store whatsapp
   useEffect(() => {
