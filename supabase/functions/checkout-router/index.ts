@@ -356,8 +356,12 @@ Deno.serve(async (req) => {
         return jsonRes({ success: false, provider, channel, experience, action: "redirect", error: errMsg }, 400, corsHeaders);
       }
       const yampiSessionId = yampiData.session_id as string | undefined;
+      const yampiLinkId = yampiData.yampi_link_id as string | undefined;
       if (orderId && yampiSessionId) {
-        await supabase.from("orders").update({ checkout_session_id: yampiSessionId }).eq("id", orderId);
+        // Fix #2: Save external_reference with Yampi link ID for pre-linking (prevents duplicate orders)
+        const orderUpdate: Record<string, unknown> = { checkout_session_id: yampiSessionId };
+        if (yampiLinkId) orderUpdate.external_reference = String(yampiLinkId);
+        await supabase.from("orders").update(orderUpdate).eq("id", orderId);
       }
       // Bug fix: Replace Stripe placeholder {CHECKOUT_SESSION_ID} with actual session ID for Yampi
       let finalSuccessUrl = successUrl;

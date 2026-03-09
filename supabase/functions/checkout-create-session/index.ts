@@ -339,15 +339,19 @@ Deno.serve(async (req) => {
 
         if (!linkData) throw new Error(lastError);
 
-        const redirectUrl = (linkData?.data as Record<string, unknown> | undefined)?.link_url
+        const linkDataInner = linkData?.data as Record<string, unknown> | undefined;
+        const redirectUrl = linkDataInner?.link_url
           || linkData?.link_url
-          || (linkData?.data as Record<string, unknown> | undefined)?.checkout_url
-          || (linkData?.data as Record<string, unknown> | undefined)?.url
+          || linkDataInner?.checkout_url
+          || linkDataInner?.url
           || linkData?.checkout_url
           || linkData?.url
           || "";
 
-        return jsonRes({ session_id: sessionId, redirect_url: redirectUrl });
+        // Fix #1: Extract Yampi payment link ID to enable pre-linking
+        const yampiLinkId = linkDataInner?.id || linkData?.id || null;
+
+        return jsonRes({ session_id: sessionId, redirect_url: redirectUrl, yampi_link_id: yampiLinkId });
       } catch (yampiErr: unknown) {
         const msg = yampiErr instanceof Error ? yampiErr.message : "Erro Yampi";
 
