@@ -1,63 +1,75 @@
 
 
-## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
+# Melhorias e Correções: Sincronização Yampi — Status e Dados de Pedidos
 
-### Fixes Aplicados
+## Bugs Encontrados
 
-**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
+### Bug 1: Delivered event não garante `payment_status: "approved"`
+**Arquivo:** `yampi-webhook/index.ts` linha 705
 
-**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
+O handler de `delivered` faz apenas `update({ status: "delivered" })` mas não define `payment_status: "approved"`. Se um pedido foi criado com `payment_status: "pending"` e a Yampi pula direto para `delivered` (sem enviar `shipped` antes), o pedido fica como entregue com pagamento pendente. O handler de `shipped` já foi corrigido (linha 672), mas `delivered` não.
 
-**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
+### Bug 2: Webhook `approved` cria pedido novo sem `payment_status`
+**Arquivo:** `yampi-webhook/index.ts` linhas 290-326
 
-**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
+Quando o webhook cria um pedido novo (sem session_id correspondente), o insert não inclui `payment_status: "approved"`. O campo fica como `null` ou o default da tabela. Compare com o update da linha 160 que corretamente seta `payment_status: "approved"`.
 
-**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
+### Bug 3: Import single não extrai `customerName` priorizando `name`
+**Arquivo:** `yampi-import-order/index.ts` linhas 169-171
 
-### Documentação: Limitação de Cupons (Y33)
+A importação single usa `firstName + lastName` mas não verifica `customerData.name` primeiro. O webhook (linha 131-134) e o batch (linha 519-521) já priorizam `name`, mas o single import não, resultando em nomes inconsistentes quando a Yampi envia o campo `name` preenchido em vez de `first_name`/`last_name`.
 
-**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
+### Bug 4: Batch import não extrai `shipping_method` dos dados expandidos
+**Arquivo:** `yampi-import-order/index.ts` linha 571
 
-**Workaround recomendado**: Para descontos significativos, considerar:
-1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
-2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
+O batch usa `(yampiOrder.shipping_option as Record<string, unknown>)?.name` mas não tenta `.data.name` (a Yampi pode encapsular o objeto em `.data`). O single import (linha 226-236) já trata esse unwrap, mas o batch não.
 
-### Não Implementado (Decisão Técnica)
+### Bug 5: Webhook `status_update` não garante `payment_status: "approved"`
+**Arquivo:** `yampi-webhook/index.ts` linha 544
 
-- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
-- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
-- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
+Quando um pedido recebe status intermediário como `in_production`, o handler atualiza apenas `status` mas ignora `payment_status`. Se o pedido estava como `pending` (pagamento pendente), ele continua mostrando pagamento pendente mesmo quando a Yampi indica que está em produção (o que implica pagamento aprovado).
 
----
+### Bug 6: Webhook não extrai `shipping_method` no evento `approved`
+**Arquivo:** `yampi-webhook/index.ts` linhas 144-166 e 290-326
 
-## Resumo das 4 Rodadas de Auditoria
+Nos dois blocos de `approved` (update e insert), o `shipping_method` não é extraído do payload. A Yampi pode enviar `shipping_option_name` ou `shipping_option.name` no payload de pagamento aprovado, mas esses dados são ignorados.
 
-| Rodada | Fixes | Status |
-|--------|-------|--------|
-| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
-| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
-| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
-| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
-| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
-
-**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
+### Bug 7: Campo `customer_name` do import single perde nome quando tem acentos/espaços estranhos
+Menor, mas `firstName + lastName` sem `.trim()` individual pode gerar espaços duplos.
 
 ---
 
-## Rodada 5: Yampi Integration Fixes ✅
+## Plano de Correções
 
-### Bugs Corrigidos
+### Correção 1: Delivered handler — garantir `payment_status: "approved"`
+No bloco de delivered (linha 705), mudar de `{ status: "delivered" }` para `{ status: "delivered", payment_status: "approved" }`.
 
-**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
+### Correção 2: Webhook approved insert — adicionar `payment_status`
+No insert de pedido novo (linha 292-326), adicionar `payment_status: "approved"` ao objeto insert.
 
-**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
+### Correção 3: Import single — priorizar `name` sobre `first_name`
+Mudar linhas 169-171 para verificar `customerData.name` primeiro, igual ao webhook e batch.
 
-**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
+### Correção 4: Batch import — unwrap `shipping_option.data.name`
+Na linha 571, adicionar fallback para `(yampiOrder.shipping_option as Record<string, unknown>)?.data?.name`.
 
-**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
+### Correção 5: Status update handler — setar `payment_status: "approved"`
+Na linha 544, quando `statusValue` é intermediário (in_production etc.), setar `payment_status: "approved"` junto com o status, pois esses status implicam pagamento aprovado.
 
-**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
+### Correção 6: Webhook approved — extrair `shipping_method`
+Nos dois blocos de approved, extrair `shipping_method` do payload usando a mesma lógica do import (`shipping_option_name || shipping_option.name || delivery_option.name`).
 
-**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
+---
 
-**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
+## Arquivos a Modificar
+
+| Arquivo | Mudanças |
+|---------|----------|
+| `supabase/functions/yampi-webhook/index.ts` | Fix #1 (delivered+payment_status), #2 (insert+payment_status), #5 (status_update+payment_status), #6 (shipping_method no approved) |
+| `supabase/functions/yampi-import-order/index.ts` | Fix #3 (customerName priorizar name), #4 (batch shipping_method unwrap) |
+
+## Impacto
+- Pedidos nunca ficam com `payment_status` inconsistente após transições de status
+- Nomes de clientes extraídos corretamente em todos os fluxos
+- Método de envio preservado desde o momento do pagamento
+
