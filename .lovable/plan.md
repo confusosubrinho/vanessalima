@@ -1,74 +1,63 @@
 
 
-# Auditoria UX Completa — Rodada 7
+## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
 
-## Problemas de UX Identificados
+### Fixes Aplicados
 
-### UX 1 — ALTO: Página "Minha Conta" sem Helmet/SEO e sem loading state
-`MyAccount.tsx` linha 141: quando `loading` é true, retorna `null` — tela em branco sem skeleton ou spinner. Além disso, não há `<Helmet>` para definir título da página. O usuário vê uma tela completamente vazia enquanto a sessão é verificada.
+**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
 
-**Correção:** Adicionar skeleton/spinner durante o loading. Adicionar `<Helmet>` com título "Minha Conta | Loja".
+**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
 
-### UX 2 — ALTO: Auth.tsx não mostra "Esqueci minha senha"
-A página de login (Auth.tsx) não oferece opção de recuperação de senha. Usuários que esqueceram a senha ficam sem alternativa, causando abandono. Nenhum link ou botão para reset.
+**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
 
-**Correção:** Adicionar link "Esqueci minha senha" abaixo do campo de senha no formulário de login, com fluxo que chama `supabase.auth.resetPasswordForEmail()`.
+**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
 
-### UX 3 — MÉDIO: SearchPreview sem navegação por teclado
-O dropdown de resultados de busca (SearchPreview.tsx) não suporta navegação por setas do teclado. Usuários de desktop não conseguem navegar pelos resultados sem usar o mouse. Este item foi identificado na rodada anterior mas não implementado.
+**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
 
-**Correção:** Adicionar state `highlightedIndex`, listener `onKeyDown` no input para ArrowUp/ArrowDown/Enter, e highlight visual no item selecionado.
+### Documentação: Limitação de Cupons (Y33)
 
-### UX 4 — MÉDIO: MyAccount pedidos sem detalhes expandíveis
-Os pedidos em "Minha Conta" (linha 228-252) mostram apenas número, data, status e total. Não há como ver os itens do pedido sem sair da página. Os `order_items` são carregados mas não exibidos.
+**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
 
-**Correção:** Adicionar um Collapsible/Accordion em cada pedido que expande para mostrar os itens (nome, quantidade, preço unitário).
+**Workaround recomendado**: Para descontos significativos, considerar:
+1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
+2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
 
-### UX 5 — MÉDIO: Cart.tsx carrinho vazio sem sugestões de produtos
-O carrinho vazio (linhas 57-69) mostra apenas ícone + texto + botão "Continuar Comprando". Não aproveita a oportunidade de exibir produtos vistos recentemente ou populares para reconversão. Identificado na rodada anterior mas não implementado.
+### Não Implementado (Decisão Técnica)
 
-**Correção:** Adicionar `CartProductSuggestions` ou um carrossel de "Mais vendidos" abaixo da mensagem de carrinho vazio.
+- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
+- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
+- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
 
-### UX 6 — BAIXO: Auth.tsx não tem Helmet
-A página de autenticação não define `<title>` via Helmet, ficando com o título padrão do `index.html`.
+---
 
-**Correção:** Adicionar `<Helmet><title>Entrar | Loja</title></Helmet>`.
+## Resumo das 4 Rodadas de Auditoria
 
-### UX 7 — BAIXO: MyAccount endereço sem auto-preenchimento por CEP
-Na aba "Endereço" do MyAccount (linhas 259-311), o campo CEP não tem auto-preenchimento via API de CEP, ao contrário do Checkout que usa `lookupCEP`. O usuário precisa preencher tudo manualmente.
+| Rodada | Fixes | Status |
+|--------|-------|--------|
+| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
+| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
+| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
+| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
+| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
 
-**Correção:** Adicionar `onBlur` no campo CEP que chama `lookupCEP` e preenche cidade, estado e endereço automaticamente.
+**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
 
-## Melhorias para Implementação
+---
 
-### MELHORIA 1 — Loading state e Helmet no MyAccount
-Adicionar spinner/skeleton enquanto verifica sessão + `<Helmet>`.
+## Rodada 5: Yampi Integration Fixes ✅
 
-### MELHORIA 2 — "Esqueci minha senha" no Auth.tsx
-Adicionar link + dialog com input de email + chamada `resetPasswordForEmail`.
+### Bugs Corrigidos
 
-### MELHORIA 3 — Navegação por teclado no SearchPreview
-`highlightedIndex` + `onKeyDown` (ArrowUp/Down/Enter/Escape).
+**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
 
-### MELHORIA 4 — Detalhes expandíveis nos pedidos do MyAccount
-Collapsible com lista de itens do pedido.
+**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
 
-### MELHORIA 5 — Sugestões no carrinho vazio
-Reutilizar `CartProductSuggestions` quando `items.length === 0`.
+**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
 
-### MELHORIA 6 — Helmet no Auth.tsx
-Adicionar meta tags de título.
+**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
 
-### MELHORIA 7 — Auto-preenchimento de endereço por CEP no MyAccount
-Reutilizar `lookupCEP` no campo de CEP da aba Endereço.
+**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
 
-## Arquivos Modificados
+**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
 
-- **`src/pages/MyAccount.tsx`** — Loading skeleton, Helmet, detalhes de pedidos expandíveis, auto-preenchimento CEP
-- **`src/pages/Auth.tsx`** — Esqueci minha senha + Helmet
-- **`src/components/store/SearchPreview.tsx`** — Navegação por teclado
-- **`src/pages/Cart.tsx`** — Sugestões no carrinho vazio
-
-## Sem alteração de regras de negócio
-Todas as correções são visuais/UX. Nenhuma lógica de pagamento, autenticação ou processamento existente será alterada.
-
+**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.

@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, Loader2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,9 @@ export function SearchPreview({ onSearch, onFocus, className }: SearchPreviewPro
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -46,6 +48,11 @@ export function SearchPreview({ onSearch, onFocus, className }: SearchPreviewPro
     if (query.length < 2) setIsOpen(false);
   }, [debouncedQuery, isFetched, query.length]);
 
+  // Reset highlight when results change
+  useEffect(() => {
+    setHighlightedIndex(-1);
+  }, [results]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (query.trim()) {
@@ -53,6 +60,34 @@ export function SearchPreview({ onSearch, onFocus, className }: SearchPreviewPro
       setIsOpen(false);
     }
   };
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!isOpen || results.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev < results.length - 1 ? prev + 1 : 0));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedIndex(prev => (prev > 0 ? prev - 1 : results.length - 1));
+        break;
+      case 'Enter':
+        if (highlightedIndex >= 0 && highlightedIndex < results.length) {
+          e.preventDefault();
+          const product = results[highlightedIndex];
+          setIsOpen(false);
+          setQuery('');
+          navigate(`/produto/${product.slug}`);
+        }
+        break;
+      case 'Escape':
+        setIsOpen(false);
+        setHighlightedIndex(-1);
+        break;
+    }
+  }, [isOpen, results, highlightedIndex, navigate]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -74,7 +109,12 @@ export function SearchPreview({ onSearch, onFocus, className }: SearchPreviewPro
               if (query.length >= 2 && results.length > 0) setIsOpen(true);
               onFocus?.();
             }}
+            onKeyDown={handleKeyDown}
             className="w-full h-12 pl-5 pr-12 text-base rounded-full border-2 border-muted bg-muted/50 focus:bg-background focus:border-primary"
+            role="combobox"
+            aria-expanded={isOpen}
+            aria-autocomplete="list"
+            aria-activedescendant={highlightedIndex >= 0 ? `search-result-${highlightedIndex}` : undefined}
           />
           {query.length > 0 && (
             <button
@@ -106,21 +146,26 @@ export function SearchPreview({ onSearch, onFocus, className }: SearchPreviewPro
 
       {/* Search Results Preview */}
       {isOpen && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-background border rounded-lg shadow-xl z-50 max-h-[400px] overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-background border rounded-lg shadow-xl z-50 max-h-[400px] overflow-y-auto" role="listbox">
           <div className="p-2">
-            {results.map((product) => {
+            {results.map((product, index) => {
               const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
               const hasDiscount = product.sale_price && product.sale_price < product.base_price;
 
               return (
                 <Link
                   key={product.id}
+                  id={`search-result-${index}`}
                   to={`/produto/${product.slug}`}
                   onClick={() => {
                     setIsOpen(false);
                     setQuery('');
                   }}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted transition-colors"
+                  className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                    index === highlightedIndex ? 'bg-accent' : 'hover:bg-muted'
+                  }`}
+                  role="option"
+                  aria-selected={index === highlightedIndex}
                 >
                   <img
                     src={resolveImageUrl(primaryImage?.url)}
