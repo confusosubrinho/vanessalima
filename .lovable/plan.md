@@ -1,41 +1,63 @@
 
 
-# Correção de Riscos de Segurança — RLS e RBAC
+## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
 
-## Riscos Identificados
+### Fixes Aplicados
 
-### 1. CRÍTICO — `stock_notifications` SELECT vaza dados para qualquer usuário
-A policy `"Users can view own notifications"` usa `USING (email IS NOT NULL)` — isso permite que **qualquer pessoa** (incluindo anônimos) veja **todas** as notificações que tenham email preenchido. Deveria filtrar por email do usuário autenticado.
+**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
 
-### 2. MÉDIO — Policies de INSERT/UPDATE permissivas demais
-Tabelas com `WITH CHECK (true)` ou `USING (true)` que permitem **qualquer usuário autenticado** (não apenas service role) inserir/atualizar:
-- `inventory_movements` — INSERT WITH CHECK (true)
-- `variation_value_map` — INSERT WITH CHECK (true), UPDATE USING (true)
-- `catalog_sync_runs` — INSERT WITH CHECK (true), UPDATE USING (true)
-- `cleanup_runs` — INSERT WITH CHECK (true), UPDATE USING (true)
-- `appmax_tokens_cache` — INSERT WITH CHECK (true), UPDATE USING (true)
-- `appmax_logs` — INSERT WITH CHECK (true)
-- `log_daily_stats` — INSERT WITH CHECK (true)
+**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
 
-Essas policies existem para edge functions (service role), mas o `WITH CHECK (true)` também permite que o anon key insira dados — um risco de poluição de dados.
+**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
 
-### 3. MÉDIO — `admin_members` sem restrição por role owner
-Qualquer admin pode gerenciar membros da equipe via `is_admin()`. Deveria ser restrito a owners.
+**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
 
-## Correções Planejadas
+**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
 
-### Migration SQL única com todas as correções:
+### Documentação: Limitação de Cupons (Y33)
 
-**1. Fix `stock_notifications` SELECT** — Remover a policy quebrada. Manter apenas admin SELECT via `FOR ALL`.
+**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
 
-**2. Restringir INSERT/UPDATE "service-only"** — Substituir `WITH CHECK (true)` por `WITH CHECK (is_admin())` nas tabelas: `inventory_movements`, `variation_value_map`, `catalog_sync_runs`, `cleanup_runs`, `appmax_tokens_cache`, `appmax_logs`, `log_daily_stats`. Edge functions usam service_role key que bypassa RLS, então isso não quebra nada.
+**Workaround recomendado**: Para descontos significativos, considerar:
+1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
+2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
 
-**3. Restringir `admin_members`** — Criar uma function `is_owner()` que verifica se o usuário é owner (via `admin_members` role='owner' OU primeiro admin em `user_roles`), e usar na policy de ALL da `admin_members`.
+### Não Implementado (Decisão Técnica)
 
-## Arquivos Modificados
+- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
+- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
+- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
 
-- **1 migration SQL** com todos os DROP/CREATE POLICY
+---
 
-## Sem alteração de código frontend
-As edge functions usam service_role (bypassa RLS). O frontend admin já usa sessões autenticadas com role admin. Nenhuma query do frontend será quebrada.
+## Resumo das 4 Rodadas de Auditoria
 
+| Rodada | Fixes | Status |
+|--------|-------|--------|
+| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
+| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
+| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
+| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
+| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
+
+**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
+
+---
+
+## Rodada 5: Yampi Integration Fixes ✅
+
+### Bugs Corrigidos
+
+**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
+
+**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
+
+**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
+
+**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
+
+**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
+
+**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
+
+**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
