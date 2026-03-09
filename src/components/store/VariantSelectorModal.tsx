@@ -106,7 +106,7 @@ export function VariantSelectorModal({ product, open, onOpenChange }: VariantSel
               {pricingConfig && (() => {
                 const hasSale = !!(product.sale_price && product.sale_price < product.base_price);
                 const pixDiscount = pricingConfig.pix_discount || 0;
-                const showPix = pixDiscount > 0 && (!hasSale || pricingConfig.pix_on_sale !== false);
+                const showPix = pixDiscount > 0 && (!hasSale || pricingConfig.pix_discount_applies_to_sale_products !== false);
                 const pixPrice = showPix ? currentPrice * (1 - pixDiscount / 100) : null;
                 const display = getInstallmentDisplay(currentPrice, pricingConfig, hasSale);
                 return (
