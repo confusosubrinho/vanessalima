@@ -75,6 +75,7 @@ function SectionConfigSheet({
     instagram_feed:   redirectMessage('Inspire-se'),
     testimonials:     redirectMessage('Avaliações'),
     newsletter:       <p className="text-sm text-muted-foreground">Esta seção é configurada automaticamente.</p>,
+    blog:             redirectMessage('Blog'),
   };
 
   return (

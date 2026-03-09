@@ -62,6 +62,7 @@ const SECTION_COMPONENTS: Record<string, ComponentType<any>> = {
   instagram_feed: InstagramFeed,
   testimonials: CustomerTestimonials,
   newsletter: Newsletter,
+  blog: BlogSection,
 };
 
 const Index = () => {
