@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
         // ─── Get variants ───
         let variantsQuery = supabase
           .from("product_variants")
-          .select("id, sku, size, color, color_hex, stock_quantity, base_price, sale_price, is_active, yampi_sku_id, price_modifier")
+          .select("id, sku, size, color, color_hex, stock_quantity, base_price, sale_price, is_active, yampi_sku_id, price_modifier, custom_attribute_name, custom_attribute_value")
           .eq("product_id", product.id);
         if (onlyActive) variantsQuery = variantsQuery.eq("is_active", true);
 
