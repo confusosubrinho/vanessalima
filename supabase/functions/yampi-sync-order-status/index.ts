@@ -198,10 +198,11 @@ Deno.serve(async (req) => {
   };
   // --- Debug: log payload structure ---
   console.log("[yampi-sync] Yampi payload keys:", Object.keys(yampiOrder));
-  console.log("[yampi-sync] transactions raw:", JSON.stringify(yampiOrder.transactions).slice(0, 800));
-  console.log("[yampi-sync] items raw:", JSON.stringify(yampiOrder.items).slice(0, 800));
+  console.log("[yampi-sync] transactions raw:", (JSON.stringify(yampiOrder.transactions) || "").slice(0, 800));
+  console.log("[yampi-sync] items raw:", (JSON.stringify(yampiOrder.items) || "").slice(0, 800));
   console.log("[yampi-sync] shipping_option:", JSON.stringify(yampiOrder.shipping_option));
-  console.log("[yampi-sync] shipments:", JSON.stringify(yampiOrder.shipments).slice(0, 500));
+  console.log("[yampi-sync] shipment_service:", yampiOrder.shipment_service);
+  console.log("[yampi-sync] shipments:", (JSON.stringify(yampiOrder.shipments) || "").slice(0, 500));
 
   const transactions = ((yampiOrder.transactions as Record<string, unknown>)?.data as unknown[]) || (yampiOrder.transactions as unknown[]) || [];
   const firstTx = (transactions[0] as Record<string, unknown>) || {};
@@ -215,7 +216,8 @@ Deno.serve(async (req) => {
   const shipmentsData = ((yampiOrder.shipments as Record<string, unknown>)?.data as unknown[]) || [];
   const firstShipment = (shipmentsData[0] as Record<string, unknown>) || {};
   const shippingOption = (yampiOrder.shipping_option as Record<string, unknown>) || {};
-  const shippingMethodName = (firstShipment.service_name as string) ||
+  const shippingMethodName = (yampiOrder.shipment_service as string) ||
+    (firstShipment.service_name as string) ||
     (firstShipment.name as string) ||
     (yampiOrder.shipping_option_name as string) ||
     (shippingOption.name as string) ||
