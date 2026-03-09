@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
         const { data: existingBySession } = await supabase
           .from("orders")
           .select("id, order_number, status")
-          .eq("checkout_session_id", sessionId)
+          .eq("checkout_session_id", reconciledSessionId)
           .maybeSingle();
 
         if (existingBySession) {
