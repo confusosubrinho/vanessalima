@@ -87,7 +87,10 @@ const Reviews = lazy(() => lazyRetry(() => import("./pages/admin/Reviews")));
 const Team = lazy(() => lazyRetry(() => import("./pages/admin/Team")));
 const CheckoutSettings = lazy(() => lazyRetry(() => import("./pages/admin/CheckoutSettings")));
 const CommerceHealth = lazy(() => lazyRetry(() => import("./pages/admin/CommerceHealth")));
+const BlogAdmin = lazy(() => lazyRetry(() => import("./pages/admin/BlogAdmin")));
 const CheckoutStart = lazy(() => lazyRetry(() => import("./pages/CheckoutStart")));
+const BlogPage = lazy(() => lazyRetry(() => import("./pages/BlogPage")));
+const BlogPostPage = lazy(() => lazyRetry(() => import("./pages/BlogPostPage")));
 const CheckoutReturn = lazy(() => lazyRetry(() => import("./pages/CheckoutReturn")));
 
 // Lazy load non-critical floating components
@@ -225,6 +228,10 @@ const App = () => {
               <Route path="/promocoes" element={<ProductListingPage />} />
               <Route path="/novidades" element={<ProductListingPage />} />
 
+              {/* Blog */}
+              <Route path="/blog" element={<BlogPage />} />
+              <Route path="/blog/:slug" element={<BlogPostPage />} />
+
               <Route path="/rastreio" element={<RastreioPage />} />
               <Route path="/pedido-confirmado/:orderId" element={<OrderConfirmation />} />
               <Route path="/pedido-confirmado" element={<OrderConfirmation />} />
@@ -264,6 +271,7 @@ const App = () => {
                 <Route path="equipe" element={<Team />} />
                 <Route path="checkout-transparente" element={<CheckoutSettings />} />
                 <Route path="commerce-health" element={<CommerceHealth />} />
+                <Route path="blog" element={<BlogAdmin />} />
               </Route>
               <Route path="/admin/integrations/appmax/callback" element={<AppmaxCallback />} />
               

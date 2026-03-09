@@ -7,6 +7,7 @@ import { SocialIcons } from './SocialIcons';
 import { useStoreContact, formatPhone } from '@/hooks/useStoreContact';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
 import { FeedbackPreferencesDialog } from './FeedbackPreferencesDialog';
+import { useBlogSettings } from '@/hooks/useBlog';
 
 interface PaymentMethod {
   id: string;
@@ -29,6 +30,7 @@ interface SecuritySeal {
 
 export function Footer() {
   const { data: contact } = useStoreContact();
+  const { data: blogSettings } = useBlogSettings();
   const storeName = contact?.store_name || 'Loja';
   const logoFromSettings = contact?.header_logo_url || contact?.logo_url;
   const logoSrc =
@@ -99,6 +101,9 @@ export function Footer() {
               <li><Link to="/politica-privacidade" className="hover:text-primary transition-colors">Política de Privacidade</Link></li>
               <li><Link to="/termos" className="hover:text-primary transition-colors">Termos de Uso</Link></li>
               <li><Link to="/trocas" className="hover:text-primary transition-colors">Trocas e Devoluções</Link></li>
+              {blogSettings?.is_active && (
+                <li><Link to="/blog" className="hover:text-primary transition-colors">Blog</Link></li>
+              )}
             </ul>
           </div>
 
