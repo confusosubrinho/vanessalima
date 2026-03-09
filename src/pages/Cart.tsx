@@ -205,7 +205,9 @@ export default function Cart() {
               <h2 className="font-bold text-lg">Resumo do Pedido</h2>
 
               {/* Shipping calculator */}
-              <ShippingCalculator compact />
+              <div id="shipping-calculator">
+                <ShippingCalculator compact />
+              </div>
 
               {/* Coupon */}
               <CouponInput compact />
