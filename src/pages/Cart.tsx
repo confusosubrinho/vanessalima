@@ -77,7 +77,8 @@ export default function Cart() {
 
   return (
     <StoreLayout>
-      <div className="container-custom py-8">
+      <Helmet><title>Carrinho de Compras | Vanessa Lima Shoes</title></Helmet>
+      <div className="container-custom py-8 pb-28 lg:pb-8">
         <div className="flex items-center gap-2 sm:gap-4 mb-6 sm:mb-8">
           <Button variant="ghost" size="icon" asChild>
             <Link to="/">
