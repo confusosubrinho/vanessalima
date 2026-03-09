@@ -251,7 +251,7 @@ export function Header() {
 
             {/* Logo */}
             <Link to="/" className="flex-shrink-0">
-              <img key={logo} src={logo} alt="Vanessa Lima Shoes" className="h-8 md:h-12" decoding="async" width={120} height={40} />
+              <img key={logo} src={logo} alt="Vanessa Lima Shoes" className="h-10 md:h-12 w-auto object-contain" decoding="async" />
             </Link>
           </div>
 
