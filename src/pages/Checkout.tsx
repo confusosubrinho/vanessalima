@@ -1020,6 +1020,35 @@ export default function Checkout() {
         </div>
       </div>
 
+      {/* UX 3: Mobile collapsible order summary */}
+      <div className="lg:hidden bg-background border-b">
+        <div className="container-custom">
+          <Collapsible open={mobileSummaryOpen} onOpenChange={setMobileSummaryOpen}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full py-3">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
+              </div>
+              <span className="font-bold text-primary">{formatPrice(displayTotal)}</span>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="pb-3 space-y-2 border-t pt-3">
+                {items.map((item) => (
+                  <div key={item.variant.id} className="flex gap-2 items-center text-sm">
+                    <img src={item.product.images?.[0]?.url || '/placeholder.svg'} alt={item.product.name} className="w-10 h-10 object-cover rounded" />
+                    <div className="flex-1 min-w-0">
+                      <p className="line-clamp-1 text-xs font-medium">{item.product.name}</p>
+                      <p className="text-[11px] text-muted-foreground">Tam: {item.variant.size} · Qtd: {item.quantity}</p>
+                    </div>
+                    <span className="text-xs font-medium">{formatPrice(getCartItemUnitPrice(item) * item.quantity)}</span>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      </div>
+
       {/* Main content */}
       <div className="container-custom py-8">
         <div className="grid lg:grid-cols-3 gap-8">
