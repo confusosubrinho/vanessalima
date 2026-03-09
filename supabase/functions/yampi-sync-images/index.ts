@@ -11,12 +11,14 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface ImageLog {
   sku_id: number;
+  variant_id: string;
   product_id: string;
   product_name?: string;
   source_url: string;
   sent_url: string;
   yampi_returned_url: string | null;
   converted: boolean;
+  image_source: "variant" | "primary" | "product" | "none";
   status: "success" | "error" | "skipped";
   error?: string;
 }
