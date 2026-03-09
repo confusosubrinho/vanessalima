@@ -226,6 +226,32 @@ export default function Checkout() {
     return () => { if (persistTimerRef.current) clearTimeout(persistTimerRef.current); };
   }, [formData, currentStep]);
 
+  // UX 7 (R10): Prefill from user profile
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('full_name, phone, address, city, state, zip_code')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+        if (!prof) return;
+        setFormData((prev: typeof formData) => ({
+          ...prev,
+          name: prev.name || prof.full_name || '',
+          email: prev.email || session.user.email || '',
+          phone: prev.phone || prof.phone || '',
+          cep: prev.cep || prof.zip_code || '',
+          address: prev.address || prof.address || '',
+          city: prev.city || prof.city || '',
+          state: prev.state || prof.state || '',
+        }));
+      } catch {}
+    })();
+  }, []);
+
   // Collect customer IP
   useEffect(() => {
     try {

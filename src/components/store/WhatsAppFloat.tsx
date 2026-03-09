@@ -31,6 +31,13 @@ function WhatsAppFloatInner(_props: Record<string, never>, ref: React.ForwardedR
   const message = getMessageForRoute(location.pathname);
   const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
+  // Dynamic bottom positioning to avoid overlap with sticky bars on cart/product pages
+  const isCartPage = location.pathname === '/carrinho';
+  const isProductPage = location.pathname.startsWith('/produto/');
+  const bottomClass = (isCartPage || isProductPage)
+    ? 'bottom-36 sm:bottom-6 md:bottom-6'
+    : 'bottom-24 sm:bottom-6 md:bottom-6';
+
   return (
     <a
       ref={ref}
