@@ -2510,6 +2510,8 @@ export type Database = {
           color: string | null
           color_hex: string | null
           created_at: string
+          custom_attribute_name: string | null
+          custom_attribute_value: string | null
           id: string
           is_active: boolean | null
           price_modifier: number | null
@@ -2526,6 +2528,8 @@ export type Database = {
           color?: string | null
           color_hex?: string | null
           created_at?: string
+          custom_attribute_name?: string | null
+          custom_attribute_value?: string | null
           id?: string
           is_active?: boolean | null
           price_modifier?: number | null
@@ -2542,6 +2546,8 @@ export type Database = {
           color?: string | null
           color_hex?: string | null
           created_at?: string
+          custom_attribute_name?: string | null
+          custom_attribute_value?: string | null
           id?: string
           is_active?: boolean | null
           price_modifier?: number | null

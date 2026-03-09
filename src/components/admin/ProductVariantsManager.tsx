@@ -36,6 +36,9 @@ export interface VariantItem {
   depth?: string;
   base_price?: string;
   sale_price?: string;
+  // Custom attribute support
+  custom_attribute_name?: string;
+  custom_attribute_value?: string;
 }
 
 interface ProductVariantsManagerProps {
@@ -110,11 +113,13 @@ const COMMON_COLORS: { name: string; hex: string }[] = [
   { name: 'Menta', hex: '#99F6E4' },
 ];
 
-function generateSku(parentSku: string, size: string, color: string): string {
+function generateSku(parentSku: string, size: string, color: string, customValue?: string): string {
   const base = parentSku || 'SKU';
   const sizePart = size.replace(/\s+/g, '').toUpperCase();
-  const colorPart = color ? color.substring(0, 3).toUpperCase() : '';
-  return colorPart ? `${base}-${sizePart}-${colorPart}` : `${base}-${sizePart}`;
+  const parts = [base, sizePart];
+  if (color) parts.push(color.substring(0, 3).toUpperCase());
+  if (customValue) parts.push(customValue.substring(0, 3).toUpperCase());
+  return parts.join('-');
 }
 
 export function ProductVariantsManager({
@@ -138,16 +143,18 @@ export function ProductVariantsManager({
   const [bulkStock, setBulkStock] = useState('10');
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [customColors, setCustomColors] = useState<{ name: string; hex: string }[]>([]);
-
+  // Custom attribute for bulk add
+  const [bulkCustomAttrName, setBulkCustomAttrName] = useState('');
+  const [bulkCustomAttrValues, setBulkCustomAttrValues] = useState('');
   const allColors = useMemo(() => [...COMMON_COLORS, ...customColors], [customColors]);
 
   const checkDuplicateSku = (sku: string, excludeIndex?: number): boolean => {
     return variants.some((v, i) => i !== excludeIndex && v.sku === sku && sku !== '');
   };
 
-  const checkDuplicateVariant = (size: string, color: string | null, excludeIndex?: number): boolean => {
+  const checkDuplicateVariant = (size: string, color: string | null, customValue?: string | null, excludeIndex?: number): boolean => {
     return variants.some((v, i) => 
-      i !== excludeIndex && v.size === size && (v.color || '') === (color || '')
+      i !== excludeIndex && v.size === size && (v.color || '') === (color || '') && (v.custom_attribute_value || '') === (customValue || '')
     );
   };
 
@@ -179,22 +186,23 @@ export function ProductVariantsManager({
     const updated = [...variants];
     updated[index] = { ...updated[index], [field]: value };
 
-    // Validate duplicate variant by size+color
-    if (field === 'size' || field === 'color') {
+    // Validate duplicate variant by size+color+custom
+    if (field === 'size' || field === 'color' || field === 'custom_attribute_value') {
       const size = field === 'size' ? value : updated[index].size;
       const color = field === 'color' ? value : updated[index].color;
+      const customVal = field === 'custom_attribute_value' ? value : updated[index].custom_attribute_value;
       
-      if (size && checkDuplicateVariant(size, color || '', index)) {
+      if (size && checkDuplicateVariant(size, color || '', customVal || '', index)) {
         toast({
           title: 'Variante duplicada!',
-          description: `Já existe uma variante ${size}${color ? ' - ' + color : ''}`,
+          description: `Já existe uma variante ${size}${color ? ' - ' + color : ''}${customVal ? ' - ' + customVal : ''}`,
           variant: 'destructive',
         });
         return;
       }
 
       if (size) {
-        updated[index].sku = generateSku(parentSku, size, color);
+        updated[index].sku = generateSku(parentSku, size, color, customVal);
       }
     }
 
@@ -215,7 +223,7 @@ export function ProductVariantsManager({
         ...updated[index],
         color: color.name,
         color_hex: color.hex,
-        sku: generateSku(parentSku, updated[index].size, color.name),
+        sku: generateSku(parentSku, updated[index].size, color.name, updated[index].custom_attribute_value),
       };
       onChange(updated);
     }
@@ -239,7 +247,7 @@ export function ProductVariantsManager({
         ...updated[assignToEditIndex],
         color: newColor.name,
         color_hex: newColor.hex,
-        sku: generateSku(parentSku, updated[assignToEditIndex].size, newColor.name),
+        sku: generateSku(parentSku, updated[assignToEditIndex].size, newColor.name, updated[assignToEditIndex].custom_attribute_value),
       };
       onChange(updated);
     } else {
@@ -252,18 +260,23 @@ export function ProductVariantsManager({
   const handleBulkAdd = () => {
     if (!bulkSizes.trim()) return;
     const sizes = bulkSizes.split(',').map(s => s.trim()).filter(Boolean);
+    const customValues = bulkCustomAttrValues.trim()
+      ? bulkCustomAttrValues.split(',').map(v => v.trim()).filter(Boolean)
+      : [''];
 
-    // Validate duplicate variants by size+color BEFORE creating
-    const duplicateSizes: string[] = [];
+    // Validate duplicate variants by size+color+custom BEFORE creating
+    const duplicateCombos: string[] = [];
     for (const size of sizes) {
-      if (variants.some(v => v.size === size && (v.color || '') === (bulkColor || ''))) {
-        duplicateSizes.push(size);
+      for (const customVal of customValues) {
+        if (variants.some(v => v.size === size && (v.color || '') === (bulkColor || '') && (v.custom_attribute_value || '') === (customVal || ''))) {
+          duplicateCombos.push(`${size}${bulkColor ? '-' + bulkColor : ''}${customVal ? '-' + customVal : ''}`);
+        }
       }
     }
-    if (duplicateSizes.length > 0) {
+    if (duplicateCombos.length > 0) {
       toast({
         title: 'Variantes duplicadas',
-        description: `Já existem variantes para: ${duplicateSizes.join(', ')}${bulkColor ? ' na cor ' + bulkColor : ''}`,
+        description: `Já existem variantes para: ${duplicateCombos.slice(0, 3).join(', ')}${duplicateCombos.length > 3 ? '...' : ''}`,
         variant: 'destructive',
       });
       return;
@@ -275,24 +288,29 @@ export function ProductVariantsManager({
       return;
     }
 
-    const newVariants: VariantItem[] = sizes.map(size => {
-      const sku = generateSku(parentSku, size, bulkColor);
-      return {
-        size,
-        color: bulkColor,
-        color_hex: bulkColorHex,
-        stock_quantity: stockValue,
-        price_modifier: 0,
-        sku,
-        is_active: true,
-        weight: parentWeight,
-        width: parentWidth,
-        height: parentHeight,
-        depth: parentDepth,
-        base_price: parentBasePrice,
-        sale_price: parentSalePrice,
-      };
-    });
+    const newVariants: VariantItem[] = [];
+    for (const size of sizes) {
+      for (const customVal of customValues) {
+        const sku = generateSku(parentSku, size, bulkColor, customVal || undefined);
+        newVariants.push({
+          size,
+          color: bulkColor,
+          color_hex: bulkColorHex,
+          stock_quantity: stockValue,
+          price_modifier: 0,
+          sku,
+          is_active: true,
+          weight: parentWeight,
+          width: parentWidth,
+          height: parentHeight,
+          depth: parentDepth,
+          base_price: parentBasePrice,
+          sale_price: parentSalePrice,
+          custom_attribute_name: bulkCustomAttrName.trim() || undefined,
+          custom_attribute_value: customVal || undefined,
+        });
+      }
+    }
 
     // Check for SKU duplicates
     const allSkus = [...variants.map(v => v.sku), ...newVariants.map(v => v.sku)];
@@ -304,6 +322,8 @@ export function ProductVariantsManager({
 
     onChange([...variants, ...newVariants]);
     setBulkSizes('');
+    setBulkCustomAttrName('');
+    setBulkCustomAttrValues('');
     toast({ title: `${newVariants.length} variante(s) adicionada(s)` });
   };
 
@@ -367,6 +387,28 @@ export function ProductVariantsManager({
               />
             </div>
           </div>
+          {/* Custom Attribute (optional) */}
+          <div className="border-t pt-3 mt-1">
+            <Label className="text-xs font-medium text-muted-foreground">Atributo Personalizado (opcional)</Label>
+            <div className="grid grid-cols-2 gap-3 mt-1.5">
+              <div>
+                <Label className="text-xs">Nome do atributo</Label>
+                <Input
+                  value={bulkCustomAttrName}
+                  onChange={(e) => setBulkCustomAttrName(e.target.value)}
+                  placeholder="Ex: Material, Estampa"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Valores (vírgula)</Label>
+                <Input
+                  value={bulkCustomAttrValues}
+                  onChange={(e) => setBulkCustomAttrValues(e.target.value)}
+                  placeholder="Ex: Couro, Sintético"
+                />
+              </div>
+            </div>
+          </div>
           <Button type="button" onClick={handleBulkAdd} className="w-full" size="sm">
             <Plus className="h-4 w-4 mr-1" /> Adicionar
           </Button>
@@ -395,7 +437,7 @@ export function ProductVariantsManager({
                       <span className="w-3.5 h-3.5 rounded-full border shrink-0" style={{ backgroundColor: variant.color_hex }} />
                     )}
                     <span className="text-sm font-medium truncate">
-                      {variant.size || '—'}{variant.color ? ` · ${variant.color}` : ''}
+                      {variant.size || '—'}{variant.color ? ` · ${variant.color}` : ''}{variant.custom_attribute_value ? ` · ${variant.custom_attribute_value}` : ''}
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
@@ -514,6 +556,28 @@ export function ProductVariantsManager({
                 </div>
               </div>
 
+              {/* Custom Attribute */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Nome do Atributo</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editingVariant.custom_attribute_name ?? ''}
+                    onChange={(e) => updateVariant(editIndex, 'custom_attribute_name', e.target.value)}
+                    placeholder="Ex: Material"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Valor do Atributo</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editingVariant.custom_attribute_value ?? ''}
+                    onChange={(e) => updateVariant(editIndex, 'custom_attribute_value', e.target.value)}
+                    placeholder="Ex: Couro"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">SKU</Label>
@@ -530,7 +594,7 @@ export function ProductVariantsManager({
                       className="shrink-0 h-9 w-9"
                       title="Gerar SKU"
                       onClick={() => {
-                        const newSku = generateSku(parentSku, editingVariant.size, editingVariant.color);
+                        const newSku = generateSku(parentSku, editingVariant.size, editingVariant.color, editingVariant.custom_attribute_value);
                         updateVariant(editIndex, 'sku', newSku);
                         toast({ title: 'SKU gerado!' });
                       }}

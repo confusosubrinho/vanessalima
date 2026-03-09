@@ -74,6 +74,8 @@ export interface Product {
    sku: string | null;
    is_active: boolean;
    created_at: string;
+   custom_attribute_name?: string | null;
+   custom_attribute_value?: string | null;
  }
  
 export interface Banner {

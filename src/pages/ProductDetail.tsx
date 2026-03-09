@@ -53,6 +53,7 @@ export default function ProductDetail() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedCustomAttr, setSelectedCustomAttr] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('description');
   const [showNotifyModal, setShowNotifyModal] = useState(false);
@@ -105,6 +106,7 @@ export default function ProductDetail() {
   useEffect(() => {
     setSelectedSize(null);
     setSelectedColor(null);
+    setSelectedCustomAttr(null);
     setQuantity(1);
     setSelectedImage(0);
     setActiveTab('description');
@@ -257,14 +259,30 @@ export default function ProductDetail() {
   });
   const colors = [...new Map(validVariants.filter(v => v.color).map(v => [v.color, { name: v.color!, hex: v.color_hex }])).values()];
   
-  // Filter sizes available for selected color
+  // Extract custom attributes from variants
+  const customAttrName = (() => {
+    const names = variants.filter(v => v.custom_attribute_name).map(v => v.custom_attribute_name!);
+    return names.length > 0 ? names[0] : null;
+  })();
+
+  const customAttrValues = (() => {
+    if (!customAttrName) return [] as string[];
+    let filtered = validVariants.filter(v => v.custom_attribute_name === customAttrName && v.custom_attribute_value);
+    if (selectedColor) filtered = filtered.filter(v => v.color === selectedColor);
+    if (selectedSize) filtered = filtered.filter(v => v.size === selectedSize);
+    return [...new Set(filtered.map(v => v.custom_attribute_value!))];
+  })();
+
+  const hasCustomAttr = customAttrName && customAttrValues.length > 0;
+
+  // Filter sizes available for selected color + custom attr
   const availableSizes = selectedColor
-    ? [...new Set(validVariants.filter(v => v.color === selectedColor).map(v => v.size))].sort((a, b) => {
+    ? [...new Set(validVariants.filter(v => v.color === selectedColor && (!hasCustomAttr || !selectedCustomAttr || v.custom_attribute_value === selectedCustomAttr)).map(v => v.size))].sort((a, b) => {
         const numA = Number(a); const numB = Number(b);
         if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
         return a.localeCompare(b);
       })
-    : [...new Set(validVariants.map(v => v.size))].sort((a, b) => {
+    : [...new Set(validVariants.filter(v => !hasCustomAttr || !selectedCustomAttr || v.custom_attribute_value === selectedCustomAttr).map(v => v.size))].sort((a, b) => {
         const numA = Number(a); const numB = Number(b);
         if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
         return a.localeCompare(b);
@@ -284,14 +302,22 @@ export default function ProductDetail() {
     }).format(price);
   };
 
-  // Determine selected variant considering colors
+  // Determine selected variant considering colors + custom attr
   const hasColors = colors.length > 0;
   const selectedVariant = selectedSize
     ? (hasColors && selectedColor
-        ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
+        ? (hasCustomAttr && selectedCustomAttr
+            ? variants.find(v => v.size === selectedSize && v.color === selectedColor && v.custom_attribute_value === selectedCustomAttr)
+            : hasCustomAttr
+              ? null
+              : variants.find(v => v.size === selectedSize && v.color === selectedColor))
         : hasColors
           ? null // Force color selection when colors exist
-          : variants.find(v => v.size === selectedSize))
+          : (hasCustomAttr && selectedCustomAttr
+              ? variants.find(v => v.size === selectedSize && v.custom_attribute_value === selectedCustomAttr)
+              : hasCustomAttr
+                ? null
+                : variants.find(v => v.size === selectedSize)))
     : null;
 
   // Price calculation: prioritize variant-specific pricing
@@ -315,11 +341,9 @@ export default function ProductDetail() {
   const handleColorSelect = (colorName: string) => {
     setSelectedColor(colorName);
     setSelectedSize(null);
-    // Find variant image for this color - look for matching variant with image
-    // For now, cycle to the first image matching the color name in alt text or order
+    setSelectedCustomAttr(null);
     const colorVariant = variants.find(v => v.color === colorName);
     if (colorVariant) {
-      // If variant has a linked image (via alt_text containing color name), select it
       const colorImageIndex = images.findIndex(img => 
         img.alt_text?.toLowerCase().includes(colorName.toLowerCase())
       );
@@ -331,11 +355,13 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     const hasColors = colors.length > 0;
-    if (!selectedSize || (hasColors && !selectedColor)) {
-      const missing = !selectedSize && hasColors && !selectedColor
-        ? 'cor e tamanho'
-        : !selectedSize ? 'tamanho' : 'cor';
-      setVariantWarning(`Selecione ${missing === 'cor e tamanho' ? 'a ' : 'o '}${missing}`);
+    const missingParts: string[] = [];
+    if (hasColors && !selectedColor) missingParts.push('cor');
+    if (!selectedSize) missingParts.push('tamanho');
+    if (hasCustomAttr && !selectedCustomAttr) missingParts.push(customAttrName!.toLowerCase());
+    
+    if (missingParts.length > 0) {
+      setVariantWarning(`Selecione ${missingParts.join(' e ')}`);
       scrollToVariants();
       setTimeout(() => setVariantWarning(''), 4000);
       return;
@@ -345,11 +371,15 @@ export default function ProductDetail() {
     let variant;
     if (selectedColor) {
       variant = variants.find(v => 
-        v.size === selectedSize && v.color === selectedColor && v.is_active && v.stock_quantity > 0
+        v.size === selectedSize && v.color === selectedColor && 
+        (!hasCustomAttr || v.custom_attribute_value === selectedCustomAttr) &&
+        v.is_active && v.stock_quantity > 0
       );
     } else {
       variant = variants.find(v => 
-        v.size === selectedSize && (!v.color || v.color === '') && v.is_active && v.stock_quantity > 0
+        v.size === selectedSize && (!v.color || v.color === '') && 
+        (!hasCustomAttr || v.custom_attribute_value === selectedCustomAttr) &&
+        v.is_active && v.stock_quantity > 0
       );
     }
 
@@ -376,9 +406,10 @@ export default function ProductDetail() {
     
     // Premium toast with product info
     const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
+    const variantLabel = `Tam. ${variant.size}${variant.color ? ' - ' + variant.color : ''}${variant.custom_attribute_name && variant.custom_attribute_value ? ' - ' + variant.custom_attribute_name + ': ' + variant.custom_attribute_value : ''}`;
     setAddedToast({
       name: product.name,
-      variant: `Tam. ${variant.size}${variant.color ? ' - ' + variant.color : ''}`,
+      variant: variantLabel,
       image: resolveImageUrl(primaryImage?.url),
     });
   };
@@ -844,6 +875,30 @@ export default function ProductDetail() {
                 })}
               </div>
             </div>
+
+            {/* Custom Attribute Selector */}
+            {hasCustomAttr && (
+              <div>
+                <label className="block font-medium mb-2">{customAttrName}{selectedCustomAttr && `: ${selectedCustomAttr}`}</label>
+                <div className="flex flex-wrap gap-2">
+                  {customAttrValues.map((value) => (
+                    <button
+                      key={value}
+                      onClick={() => setSelectedCustomAttr(value)}
+                      className={`min-w-12 h-12 px-3 rounded-lg border-2 font-medium transition-colors ${
+                        selectedCustomAttr === value
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border hover:border-primary'
+                      }`}
+                      aria-label={`${customAttrName} ${value}`}
+                      aria-pressed={selectedCustomAttr === value}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             </div>{/* close variantSectionRef */}
 
             <div>

@@ -1,153 +1,42 @@
 
 
-# Plano: Variantes Personalizáveis (Custom Variants)
+## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
 
-## Resumo
+### Fixes Aplicados
 
-Adicionar suporte a variantes personalizáveis além de "Tamanho" e "Cor", permitindo que o admin defina o **nome do tipo de variação** (ex: "Material", "Estampa", "Acabamento") e suas **opções**.
+**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
 
----
+**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
 
-## Mudanças Necessárias
+**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
 
-### 1. Banco de Dados (Migration)
+**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
 
-**Adicionar colunas na tabela `product_variants`:**
+**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
 
-```sql
-ALTER TABLE public.product_variants
-  ADD COLUMN IF NOT EXISTS custom_attribute_name text DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS custom_attribute_value text DEFAULT NULL;
-```
+### Documentação: Limitação de Cupons (Y33)
 
-- `custom_attribute_name`: Nome do atributo personalizado (ex: "Material", "Estampa")
-- `custom_attribute_value`: Valor selecionado (ex: "Couro", "Listrado")
+**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
 
----
+**Workaround recomendado**: Para descontos significativos, considerar:
+1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
+2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
 
-### 2. Admin - ProductVariantsManager
+### Não Implementado (Decisão Técnica)
 
-**Modificações:**
-- Adicionar campos para **Nome do atributo personalizado** e **Valor do atributo**
-- No form de adição em lote: campo opcional "Atributo Personalizado" com nome e valores separados por vírgula
-- No dialog de edição individual: campos para nome/valor do atributo
-- Atualizar geração de SKU para incluir atributo custom
-
-**Interface:**
-```
-┌─────────────────────────────────────────┐
-│  Adicionar variantes em lote            │
-├─────────────────────────────────────────┤
-│  Tamanhos: [34, 35, 36___________]      │
-│  Cor: [Preto ▼]                         │
-│  ─────────────────────────────────      │
-│  Atributo Personalizado (opcional)      │
-│  Nome: [Material___________________]    │
-│  Valores: [Couro, Sintético________]    │
-│  ─────────────────────────────────      │
-│  Estoque: [10]                          │
-│  [ + Adicionar ]                        │
-└─────────────────────────────────────────┘
-```
+- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
+- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
+- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
 
 ---
 
-### 3. Admin - ProductFormDialog
+## Resumo das 4 Rodadas de Auditoria
 
-- Passar as novas props para `ProductVariantsManager`
-- Salvar `custom_attribute_name` e `custom_attribute_value` junto com as variantes
+| Rodada | Fixes | Status |
+|--------|-------|--------|
+| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
+| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
+| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
+| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
 
----
-
-### 4. Interface de Variantes (Admin)
-
-**Lista de variantes exibirá:**
-- Tamanho | Cor | Atributo Custom | Estoque | SKU
-
-**Dialog de edição mostrará:**
-- Campo texto "Nome do Atributo" 
-- Campo texto "Valor do Atributo"
-
----
-
-### 5. Loja - ProductDetail
-
-**Mudanças na seleção de variantes:**
-- Extrair atributos custom únicos das variantes
-- Renderizar seletor adicional quando existir atributo personalizado
-- Filtrar variantes por: cor → tamanho → atributo custom
-
-**Exemplo visual:**
-```
-Cor: ⚫ ⚪ 🔵
-Tamanho: [34] [35] [36] [37]
-Material: [Couro] [Sintético] [Camurça]
-```
-
----
-
-### 6. Carrinho e Pedidos
-
-- `variant_info` já existe e será atualizado para incluir o atributo custom
-- Formato: `"Tam. 36 - Preto - Material: Couro"`
-
----
-
-## Arquivos a Modificar
-
-| Arquivo | Mudança |
-|---------|---------|
-| `migration` (novo) | Adicionar colunas custom |
-| `ProductVariantsManager.tsx` | Campos de atributo personalizado |
-| `ProductFormDialog.tsx` | Passar/salvar atributo custom |
-| `ProductDetail.tsx` | Seletor de atributo custom |
-| `CartContext.tsx` | Incluir atributo custom no variant_info |
-
----
-
-## Detalhes Técnicos
-
-### VariantItem (interface)
-```typescript
-interface VariantItem {
-  // ... existentes
-  custom_attribute_name?: string;
-  custom_attribute_value?: string;
-}
-```
-
-### Geração de SKU
-```typescript
-function generateSku(parentSku, size, color, customValue) {
-  const parts = [parentSku || 'SKU', size];
-  if (color) parts.push(color.substring(0,3).toUpperCase());
-  if (customValue) parts.push(customValue.substring(0,3).toUpperCase());
-  return parts.join('-');
-}
-```
-
-### ProductDetail - Extração de atributos custom
-```typescript
-const customAttributes = useMemo(() => {
-  const attrs = variants
-    .filter(v => v.custom_attribute_name && v.custom_attribute_value)
-    .map(v => ({ name: v.custom_attribute_name, value: v.custom_attribute_value }));
-  // Agrupar por nome de atributo
-  const grouped = {};
-  attrs.forEach(a => {
-    if (!grouped[a.name]) grouped[a.name] = new Set();
-    grouped[a.name].add(a.value);
-  });
-  return grouped;
-}, [variants]);
-```
-
----
-
-## Riscos
-
-| Risco | Mitigação |
-|-------|-----------|
-| BAIXO | Colunas nullable, compatível com variantes existentes |
-| Integrações Yampi/Bling | Ignorar atributo custom na sincronização externa (apenas local) |
-
+**Total**: 38 melhorias identificadas, 34 implementadas, 4 documentadas como decisões técnicas.
