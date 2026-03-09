@@ -64,10 +64,11 @@ export function ShippingCalculator({ compact = false, products }: ShippingCalcul
         console.error('Shipping API error:', data.error);
         // Fallback to basic options if API fails
         setShippingOptions([
-          { name: 'Envio padrão', price: 18, deadline: '8 a 12 dias úteis', company: 'Correios' },
+          { id: 'fallback-standard', name: 'Envio padrão', price: 18, deadline: '8 a 12 dias úteis', company: 'Correios' },
         ]);
       } else {
-        const options: ShippingOption[] = (data?.options || []).map((opt: any) => ({
+        const options: ShippingOption[] = (data?.options || []).map((opt: any, idx: number) => ({
+          id: opt.id || opt.name || `shipping-${idx}`,
           name: opt.name,
           price: opt.price,
           deadline: opt.deadline,
@@ -84,14 +85,14 @@ export function ShippingCalculator({ compact = false, products }: ShippingCalcul
       if (data?.free_shipping_threshold && subtotal >= data.free_shipping_threshold) {
         const cheapest = (data?.options || []).sort((a: any, b: any) => a.price - b.price)[0];
         if (cheapest) {
-          setSelectedShipping({ name: cheapest.name, price: 0, deadline: cheapest.deadline, company: cheapest.company });
+          setSelectedShipping({ id: cheapest.id || cheapest.name || 'free-shipping', name: cheapest.name, price: 0, deadline: cheapest.deadline, company: cheapest.company });
         }
       }
     } catch (err: any) {
       console.error('Shipping calculation error:', err);
       // Fallback
       setShippingOptions([
-        { name: 'Envio padrão', price: 18, deadline: '8 a 12 dias úteis', company: 'Correios' },
+        { id: 'fallback-standard', name: 'Envio padrão', price: 18, deadline: '8 a 12 dias úteis', company: 'Correios' },
       ]);
       setHasCalculated(true);
     } finally {
@@ -151,7 +152,7 @@ export function ShippingCalculator({ compact = false, products }: ShippingCalcul
               return (
                 <button
                   key={option.name}
-                  onClick={() => setSelectedShipping({ ...option, price: finalPrice })}
+                  onClick={() => setSelectedShipping({ id: option.id || option.name, ...option, price: finalPrice })}
                   className={`w-full p-3 rounded-lg border text-left transition-colors ${
                     isSelected 
                       ? 'border-primary bg-primary/5' 
@@ -230,7 +231,7 @@ export function ShippingCalculator({ compact = false, products }: ShippingCalcul
             return (
               <button
                 key={option.name}
-                onClick={() => setSelectedShipping({ ...option, price: finalPrice })}
+                onClick={() => setSelectedShipping({ id: option.id || option.name, ...option, price: finalPrice })}
                 className={`w-full p-4 rounded-lg border text-left transition-all ${
                   isSelected 
                     ? 'border-primary bg-primary/5 shadow-sm' 

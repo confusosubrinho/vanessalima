@@ -3,6 +3,8 @@ import { logAuthError } from './errorLogger';
 import { appLogger } from './appLogger';
 
 let isRecovering = false;
+let intervalId: ReturnType<typeof setInterval> | null = null;
+let initialized = false;
 
 /**
  * Initializes session recovery that handles expired JWTs gracefully.
@@ -10,6 +12,10 @@ let isRecovering = false;
  * so requests fall back to the anon key (which has public read access).
  */
 export function initSessionRecovery() {
+  // Guard against duplicate initialization (e.g. HMR / double import)
+  if (initialized) return;
+  initialized = true;
+  if (intervalId) clearInterval(intervalId);
   supabase.auth.onAuthStateChange(async (event) => {
     if (event === 'TOKEN_REFRESHED') {
       appLogger.info('Auth: token refreshed successfully');
@@ -20,7 +26,7 @@ export function initSessionRecovery() {
   });
 
   // Periodically check session health
-  setInterval(async () => {
+  intervalId = setInterval(async () => {
     if (isRecovering) return;
     
     try {

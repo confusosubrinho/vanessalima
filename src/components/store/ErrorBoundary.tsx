@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { logError } from '@/lib/errorLogger';
 
 interface Props {
   children: ReactNode;
@@ -22,6 +23,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, errorInfo);
+    // Persist render errors to admin dashboard
+    logError({
+      type: 'render_error',
+      message: error.message,
+      stack: error.stack,
+      context: { componentStack: errorInfo.componentStack },
+    });
   }
 
   handleReload = () => {
