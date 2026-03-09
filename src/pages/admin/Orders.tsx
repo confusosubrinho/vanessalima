@@ -332,7 +332,7 @@ export default function Orders() {
 
   // Date filter
   if (dateFrom) {
-    filteredOrders = filteredOrders.filter(o => new Date(o.created_at) >= dateFrom);
+    filteredOrders = filteredOrders.filter(o => new Date(getOrderDate(o)) >= dateFrom);
   }
   if (dateTo) {
     const endOfDay = new Date(dateTo);
