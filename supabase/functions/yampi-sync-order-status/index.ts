@@ -249,6 +249,32 @@ Deno.serve(async (req) => {
     const txTransactionId = (firstTx.transaction_id as string) || (yampiOrder.transaction_id as string) || null;
     const txShippingCost = yampiOrder.value_shipment != null ? Number(yampiOrder.value_shipment) : (yampiOrder.shipping_cost != null ? Number(yampiOrder.shipping_cost) : null);
 
+    // --- Extract customer data ---
+    const customerRaw = yampiOrder.customer as Record<string, unknown> | undefined;
+    const customer = (customerRaw?.data as Record<string, unknown>) || customerRaw || {};
+    const customerName = (customer.name as string) || `${(customer.first_name as string) || ""} ${(customer.last_name as string) || ""}`.trim() || null;
+    const customerEmail = (customer.email as string) || null;
+    const customerCpf = (customer.cpf as string) || (customer.document as string) || null;
+    const customerPhoneObj = customer.phone as Record<string, unknown> | string | undefined;
+    const customerPhone = typeof customerPhoneObj === "string" ? customerPhoneObj : (customerPhoneObj?.full_number as string) || null;
+
+    // --- Extract shipping address ---
+    const shippingAddrRaw = yampiOrder.shipping_address as Record<string, unknown> | undefined;
+    const shippingAddr = (shippingAddrRaw?.data as Record<string, unknown>) || shippingAddrRaw || (customer.address as Record<string, unknown>) || {};
+    const shippingStreet = (shippingAddr.street as string) || (shippingAddr.address as string) || null;
+    const shippingNumber = (shippingAddr.number as string) || "";
+    const shippingComplement = (shippingAddr.complement as string) || "";
+    const shippingNeighborhood = (shippingAddr.neighborhood as string) || "";
+    const fullAddress = [shippingStreet, shippingNumber, shippingComplement, shippingNeighborhood].filter(Boolean).join(", ") || null;
+    const shippingCity = (shippingAddr.city as string) || null;
+    const shippingState = (shippingAddr.state as string) || (shippingAddr.uf as string) || null;
+    const shippingZip = (shippingAddr.zipcode as string) || (shippingAddr.zip_code as string) || (shippingAddr.cep as string) || null;
+
+    // --- Extract financial values ---
+    const subtotal = yampiOrder.value_products != null ? Number(yampiOrder.value_products) : (yampiOrder.subtotal != null ? Number(yampiOrder.subtotal) : null);
+    const totalAmount = yampiOrder.value_total != null ? Number(yampiOrder.value_total) : (yampiOrder.total != null ? Number(yampiOrder.total) : null);
+    const discountAmount = yampiOrder.value_discount != null ? Number(yampiOrder.value_discount) : (yampiOrder.discount != null ? Number(yampiOrder.discount) : null);
+
     const updatePayload: Record<string, unknown> = {
       status: localStatus,
       payment_status: paymentStatus,
@@ -257,12 +283,34 @@ Deno.serve(async (req) => {
       yampi_created_at: yampiCreatedAt,
       yampi_order_number: yampiOrderNumber,
     };
-    // Only set transaction fields if they have values (avoid overwriting with null)
+
+    // Transaction fields (avoid overwriting with null)
     if (txPaymentMethod) updatePayload.payment_method = txPaymentMethod;
     if (txGateway) updatePayload.gateway = txGateway;
     if (txInstallments) updatePayload.installments = txInstallments;
     if (txTransactionId) updatePayload.transaction_id = txTransactionId;
     if (txShippingCost != null) updatePayload.shipping_cost = txShippingCost;
+
+    // Customer fields
+    if (customerEmail) updatePayload.customer_email = customerEmail;
+    if (customerCpf) updatePayload.customer_cpf = customerCpf;
+
+    // Shipping address fields
+    if (customerName) updatePayload.shipping_name = customerName;
+    if (fullAddress) updatePayload.shipping_address = fullAddress;
+    if (shippingCity) updatePayload.shipping_city = shippingCity;
+    if (shippingState) updatePayload.shipping_state = shippingState;
+    if (shippingZip) updatePayload.shipping_zip = shippingZip;
+    if (customerPhone) updatePayload.shipping_phone = customerPhone;
+
+    // Financial fields
+    if (subtotal != null && subtotal > 0) updatePayload.subtotal = subtotal;
+    if (totalAmount != null && totalAmount > 0) updatePayload.total_amount = totalAmount;
+    if (discountAmount != null) updatePayload.discount_amount = discountAmount;
+
+    // Coupon
+    const couponCode = (yampiOrder.coupon_code as string) || (yampiOrder.coupon as string) || null;
+    if (couponCode) updatePayload.coupon_code = couponCode;
 
     const { error: updateErr } = await supabase
       .from("orders")
@@ -272,6 +320,98 @@ Deno.serve(async (req) => {
     if (updateErr) {
       console.error("[yampi-sync] Update error:", updateErr?.message);
       return jsonRes({ ok: false, error: updateErr?.message || "Erro ao atualizar pedido" }, 500);
+    }
+
+    // --- Enrich order_items from Yampi items ---
+    const yampiItemsRaw = yampiOrder.items as Record<string, unknown> | unknown[] | undefined;
+    const yampiItems = (Array.isArray(yampiItemsRaw) ? yampiItemsRaw : (yampiItemsRaw?.data as unknown[])) || [];
+    if (yampiItems.length > 0) {
+      // Fetch existing order items
+      const { data: existingItems } = await supabase
+        .from("order_items")
+        .select("id, yampi_sku_id, product_name")
+        .eq("order_id", order.id);
+
+      for (const rawItem of yampiItems) {
+        const item = rawItem as Record<string, unknown>;
+        const skuData = (item.sku as Record<string, unknown>)?.data as Record<string, unknown> || item.sku as Record<string, unknown> || {};
+        const productData = (item.product as Record<string, unknown>)?.data as Record<string, unknown> || item.product as Record<string, unknown> || {};
+
+        const yampiSkuId = item.sku_id ? Number(item.sku_id) : (skuData.id ? Number(skuData.id) : null);
+        const productName = (productData.name as string) || (item.name as string) || (item.product_name as string) || null;
+        const variantInfo = [skuData.size, skuData.color].filter(Boolean).join(" / ") ||
+          (item.variant_name as string) || (skuData.title as string) || null;
+        const skuSnapshot = (skuData.sku as string) || (item.sku as string) || null;
+        const imageUrl = (skuData.image_url as string) ||
+          ((productData.images as Record<string, unknown>)?.data as unknown[])?.[0] &&
+          (((productData.images as Record<string, unknown>)?.data as Record<string, unknown>[])?.[0]?.url as string) ||
+          (productData.image_url as string) || null;
+        const unitPrice = item.price != null ? Number(item.price) : (item.unit_price != null ? Number(item.unit_price) : null);
+        const qty = item.quantity ? Number(item.quantity) : 1;
+        const totalPrice = item.total != null ? Number(item.total) : (unitPrice != null ? unitPrice * qty : null);
+
+        // Match by yampi_sku_id first, then by position
+        let matchedItem = existingItems?.find((ei) => ei.yampi_sku_id && yampiSkuId && ei.yampi_sku_id === yampiSkuId);
+
+        const itemUpdate: Record<string, unknown> = {};
+        if (productName) itemUpdate.product_name = productName;
+        if (variantInfo) itemUpdate.variant_info = variantInfo;
+        if (typeof skuSnapshot === "string" && skuSnapshot) itemUpdate.sku_snapshot = skuSnapshot;
+        if (imageUrl) itemUpdate.image_snapshot = imageUrl;
+        if (unitPrice != null) itemUpdate.unit_price = unitPrice;
+        if (totalPrice != null) itemUpdate.total_price = totalPrice;
+        if (qty) itemUpdate.quantity = qty;
+        if (yampiSkuId) itemUpdate.yampi_sku_id = yampiSkuId;
+
+        if (Object.keys(itemUpdate).length > 0 && matchedItem) {
+          await supabase.from("order_items").update(itemUpdate).eq("id", matchedItem.id);
+          console.log(`[yampi-sync] Updated order_item ${matchedItem.id} with Yampi data`);
+        } else if (Object.keys(itemUpdate).length > 0 && !matchedItem && existingItems && existingItems.length === 0) {
+          // No existing items - insert new ones
+          await supabase.from("order_items").insert({
+            order_id: order.id,
+            product_name: productName || "Produto Yampi",
+            quantity: qty,
+            unit_price: unitPrice || 0,
+            total_price: totalPrice || 0,
+            variant_info: variantInfo,
+            sku_snapshot: typeof skuSnapshot === "string" ? skuSnapshot : null,
+            image_snapshot: imageUrl,
+            yampi_sku_id: yampiSkuId,
+          });
+          console.log(`[yampi-sync] Inserted new order_item for sku_id ${yampiSkuId}`);
+        }
+      }
+    }
+
+    // --- Upsert payment record ---
+    if (txTransactionId || txPaymentMethod) {
+      const paymentData = {
+        order_id: order.id,
+        provider: "yampi",
+        status: paymentStatus === "approved" ? "succeeded" : paymentStatus,
+        payment_method: txPaymentMethod || null,
+        gateway: txGateway || null,
+        installments: txInstallments || 1,
+        transaction_id: txTransactionId || null,
+        amount: totalAmount || (subtotal || 0) + (txShippingCost || 0),
+      };
+
+      // Check if payment already exists for this order
+      const { data: existingPayment } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("order_id", order.id)
+        .eq("provider", "yampi")
+        .maybeSingle();
+
+      if (existingPayment) {
+        await supabase.from("payments").update(paymentData).eq("id", existingPayment.id);
+        console.log(`[yampi-sync] Updated payment ${existingPayment.id}`);
+      } else {
+        await supabase.from("payments").insert(paymentData);
+        console.log(`[yampi-sync] Inserted new payment for order ${order.id}`);
+      }
     }
   }
 
