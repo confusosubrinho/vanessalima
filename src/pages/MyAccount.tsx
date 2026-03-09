@@ -257,7 +257,7 @@ const BRAZILIAN_STATES = [
                     <Label>Telefone</Label>
                     <Input
                       value={profileForm.phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                      onChange={(e) => setProfileForm({ ...profileForm, phone: formatPhone(e.target.value) })}
                       placeholder="(00) 00000-0000"
                     />
                   </div>
