@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, DragEvent } from 'react';
+import { useState, useCallback, useRef, useMemo, DragEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,14 +13,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { compressImageToWebP } from '@/lib/imageCompressor';
 import { MediaPickerDialog } from '@/components/admin/MediaPickerDialog';
+import { sanitizeHtml } from '@/lib/sanitizeHtml';
 import {
   Plus, Pencil, Trash2, Upload, Eye, EyeOff, FileText, Globe,
-  Image as ImageIcon, X, FolderOpen, Calendar, User,
+  Image as ImageIcon, X, FolderOpen, Calendar, User, Copy, Filter,
 } from 'lucide-react';
 import type { BlogPost, BlogSettings } from '@/hooks/useBlog';
 
@@ -62,7 +62,7 @@ const emptyForm: PostFormData = {
 };
 
 /* ---------- SEO character counter ---------- */
-function SeoCounter({ value, max }: { value: string; max: number }) {
+function SeoCounter({ value, max, label }: { value: string; max: number; label?: string }) {
   const len = value.length;
   const pct = Math.min((len / max) * 100, 100);
   const color = len === 0 ? 'bg-muted' : len <= max * 0.8 ? 'bg-emerald-500' : len <= max ? 'bg-amber-500' : 'bg-destructive';
@@ -71,7 +71,22 @@ function SeoCounter({ value, max }: { value: string; max: number }) {
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-muted-foreground tabular-nums">{len}/{max}</span>
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {label ? `${label}: ` : ''}{len}/{max}
+      </span>
+    </div>
+  );
+}
+
+/* ---------- Content stats (chars + words, no limit bar) ---------- */
+function ContentStats({ value }: { value: string }) {
+  const chars = value.length;
+  const words = value.trim() ? value.trim().split(/\s+/).length : 0;
+  return (
+    <div className="flex items-center gap-3 mt-1">
+      <span className="text-xs text-muted-foreground tabular-nums">{chars} caracteres</span>
+      <span className="text-xs text-muted-foreground">•</span>
+      <span className="text-xs text-muted-foreground tabular-nums">{words} palavras</span>
     </div>
   );
 }
@@ -81,17 +96,28 @@ function formatDateBR(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+type StatusFilter = 'all' | 'published' | 'draft';
+
 export default function BlogAdmin() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [formData, setFormData] = useState<PostFormData>(emptyForm);
+  const [savedSnapshot, setSavedSnapshot] = useState<string>('');
   const [uploading, setUploading] = useState(false);
   const [autoSlug, setAutoSlug] = useState(true);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Track unsaved changes
+  const hasUnsavedChanges = useMemo(
+    () => JSON.stringify(formData) !== savedSnapshot,
+    [formData, savedSnapshot],
+  );
 
   // Blog settings
   const { data: settings } = useQuery({
@@ -115,6 +141,13 @@ export default function BlogAdmin() {
       return (data as BlogPost[]) || [];
     },
   });
+
+  // Filtered posts
+  const filteredPosts = useMemo(() => {
+    if (!posts) return [];
+    if (statusFilter === 'all') return posts;
+    return posts.filter(p => p.status === statusFilter);
+  }, [posts, statusFilter]);
 
   // Toggle blog active
   const toggleBlog = useMutation({
@@ -208,14 +241,21 @@ export default function BlogAdmin() {
 
   const resetForm = () => {
     setFormData(emptyForm);
+    setSavedSnapshot(JSON.stringify(emptyForm));
     setEditingPost(null);
     setAutoSlug(true);
   };
 
-  const handleEdit = (post: BlogPost) => {
+  const openFormWith = (data: PostFormData, post: BlogPost | null = null) => {
     setEditingPost(post);
-    setAutoSlug(false);
-    setFormData({
+    setFormData(data);
+    setSavedSnapshot(JSON.stringify(data));
+    setAutoSlug(!post);
+    setIsDialogOpen(true);
+  };
+
+  const handleEdit = (post: BlogPost) => {
+    const data: PostFormData = {
       title: post.title,
       slug: post.slug,
       excerpt: post.excerpt || '',
@@ -226,8 +266,24 @@ export default function BlogAdmin() {
       seo_title: post.seo_title || '',
       seo_description: post.seo_description || '',
       author_name: post.author_name || '',
-    });
-    setIsDialogOpen(true);
+    };
+    openFormWith(data, post);
+  };
+
+  const handleDuplicate = (post: BlogPost) => {
+    const data: PostFormData = {
+      title: `${post.title} (cópia)`,
+      slug: slugify(`${post.title} copia`),
+      excerpt: post.excerpt || '',
+      content: post.content || '',
+      featured_image_url: post.featured_image_url || '',
+      status: 'draft',
+      published_at: '',
+      seo_title: post.seo_title || '',
+      seo_description: post.seo_description || '',
+      author_name: post.author_name || '',
+    };
+    openFormWith(data);
   };
 
   const handleTitleChange = (title: string) => {
@@ -237,6 +293,10 @@ export default function BlogAdmin() {
       slug: autoSlug ? slugify(title) : prev.slug,
     }));
   };
+
+  // Status filter counts
+  const publishedCount = posts?.filter(p => p.status === 'published').length ?? 0;
+  const draftCount = posts?.filter(p => p.status === 'draft').length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -289,7 +349,15 @@ export default function BlogAdmin() {
 
             <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
               <DialogHeader>
-                <DialogTitle>{editingPost ? 'Editar Post' : 'Novo Post'}</DialogTitle>
+                <div className="flex items-center gap-2">
+                  <DialogTitle>{editingPost ? 'Editar Post' : 'Novo Post'}</DialogTitle>
+                  {hasUnsavedChanges && (
+                    <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      Alterações não salvas
+                    </span>
+                  )}
+                </div>
               </DialogHeader>
               <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(formData); }} className="space-y-4">
                 <Tabs defaultValue="content">
@@ -336,9 +404,23 @@ export default function BlogAdmin() {
                         placeholder="Breve resumo do post..."
                         rows={2}
                       />
+                      <SeoCounter value={formData.excerpt} max={300} label="Resumo" />
                     </div>
                     <div>
-                      <Label>Conteúdo</Label>
+                      <div className="flex items-center justify-between">
+                        <Label>Conteúdo</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1 text-xs h-7"
+                          onClick={() => setShowPreview(true)}
+                          disabled={!formData.content.trim()}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Pré-visualizar
+                        </Button>
+                      </div>
                       <Textarea
                         value={formData.content}
                         onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
@@ -346,6 +428,7 @@ export default function BlogAdmin() {
                         rows={10}
                         className="font-mono text-sm"
                       />
+                      <ContentStats value={formData.content} />
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
@@ -520,6 +603,39 @@ export default function BlogAdmin() {
           </Dialog>
         </CardHeader>
 
+        {/* Status filter tabs */}
+        <div className="px-6 pb-2">
+          <div className="flex items-center gap-1 flex-wrap">
+            <Button
+              variant={statusFilter === 'all' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setStatusFilter('all')}
+            >
+              <Filter className="h-3 w-3" />
+              Todos ({posts?.length ?? 0})
+            </Button>
+            <Button
+              variant={statusFilter === 'published' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setStatusFilter('published')}
+            >
+              <Eye className="h-3 w-3" />
+              Publicados ({publishedCount})
+            </Button>
+            <Button
+              variant={statusFilter === 'draft' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setStatusFilter('draft')}
+            >
+              <EyeOff className="h-3 w-3" />
+              Rascunhos ({draftCount})
+            </Button>
+          </div>
+        </div>
+
         <CardContent>
           {isLoading ? (
             <div className="space-y-3">
@@ -533,15 +649,19 @@ export default function BlogAdmin() {
                 </div>
               ))}
             </div>
-          ) : !posts?.length ? (
+          ) : !filteredPosts.length ? (
             <div className="text-center py-12">
               <FileText className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-              <p className="font-medium mb-1">Nenhum post cadastrado</p>
-              <p className="text-sm text-muted-foreground">Crie o primeiro post do seu blog!</p>
+              <p className="font-medium mb-1">
+                {statusFilter === 'all' ? 'Nenhum post cadastrado' : `Nenhum post ${statusFilter === 'published' ? 'publicado' : 'em rascunho'}`}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {statusFilter === 'all' ? 'Crie o primeiro post do seu blog!' : 'Altere o filtro para ver outros posts.'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
-              {posts.map((post) => (
+              {filteredPosts.map((post) => (
                 <div
                   key={post.id}
                   className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 rounded-xl border bg-card hover:shadow-sm transition-all"
@@ -586,6 +706,15 @@ export default function BlogAdmin() {
 
                   {/* Actions */}
                   <div className="flex gap-1 flex-shrink-0 self-end sm:self-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Duplicar"
+                      onClick={() => handleDuplicate(post)}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(post)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -620,6 +749,31 @@ export default function BlogAdmin() {
           )}
         </CardContent>
       </Card>
+
+      {/* ─── Content Preview Dialog ─── */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Pré-visualização do conteúdo</DialogTitle>
+          </DialogHeader>
+          {formData.featured_image_url && (
+            <img
+              src={formData.featured_image_url}
+              alt=""
+              className="w-full aspect-video object-cover rounded-lg"
+            />
+          )}
+          <h2 className="text-xl font-bold mt-2">{formData.title || 'Sem título'}</h2>
+          {formData.excerpt && (
+            <p className="text-muted-foreground text-sm italic">{formData.excerpt}</p>
+          )}
+          <Separator />
+          <div
+            className="prose prose-sm dark:prose-invert max-w-none"
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(formData.content) }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
