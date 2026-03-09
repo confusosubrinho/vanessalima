@@ -1,63 +1,45 @@
 
 
-## Auditoria Yampi — Rodada 4: IMPLEMENTADO ✅
+# Auditoria de Bugs e Melhorias na Integração Bling
 
-### Fixes Aplicados
+## Bugs Encontrados
 
-**Y31** ✅ `yampi-sync-images` — Todas as chamadas `fetch` substituídas por `fetchWithTimeout` (25s) para evitar travamentos.
+### BUG 1 — Response body consumida duas vezes em `cancelBlingOrder` (MÉDIO)
+Em `blingStockPush.ts` linha 221, quando `response.ok === true`, o código chama `response.body?.cancel()`. Porém o body nunca foi lido (nenhum `await response.json()` ou `await response.text()`). Isso funciona mas desperdiça a resposta do Bling que pode conter dados úteis para log. Não é um crash, mas é inconsistente com o fluxo do `!response.ok` onde o body é lido via `.json()`.
 
-**Y32** ✅ `yampi-sync-images` — Validação de URL acessível após upload no storage antes de enviar à Yampi (função `validateUrlAccessible`).
+### BUG 2 — `syncStockOnly` faz query de estoque sem batching (MÉDIO)
+Em `bling-webhook/index.ts` linhas 386-389, `syncStockOnly` monta TODOS os IDs de variação numa única query string (`idsProdutos[]=X&idsProdutos[]=Y...`). Para produtos com muitas variações (50+), a URL pode exceder limites de URL do Bling, causando erro 414. O `bling-sync` faz batching correto em lotes de 50, mas o webhook não.
 
-**Y36** ✅ `yampi-import-order` batch — Campo `tracking_code` já estava sendo extraído na linha 541. Verificado e confirmado.
+### BUG 3 — `order_events` INSERT policy é `WITH CHECK (true)` (BAIXO)
+A tabela `order_events` tem policy de INSERT com `WITH CHECK (true)` — qualquer usuário autenticado pode inserir eventos. Deveria ser restrito a service role/admins, similar à correção feita nas outras tabelas de serviço.
 
-**Y37** ✅ `checkout-create-session` — Retorna `fallback_reason` ("yampi_skus_not_linked" ou "yampi_api_error") quando faz fallback para checkout nativo.
+### BUG 4 — `stripe_webhook_events` INSERT policy é `WITH CHECK (true)` (BAIXO)
+Mesmo problema do BUG 3 — qualquer usuário pode inserir registros de webhook do Stripe.
 
-**Y38** ✅ `yampi-catalog-sync` — Dimensões (weight, height, width, length) agora herdam do produto pai com fallback para defaults, melhorando cálculo de frete na Yampi.
+### BUG 5 — Token refresh na `blingTokenRefresh.ts` não valida `tokenData.refresh_token` (BAIXO)
+Na linha 47 do refresh, se `tokenData.access_token` existir mas `tokenData.refresh_token` for null/undefined, o update vai gravar `null` no campo `bling_refresh_token`, quebrando futuros refreshes. Deveria manter o refresh_token antigo se o novo não vier.
 
-### Documentação: Limitação de Cupons (Y33)
+## Melhorias Propostas
 
-**Limitação conhecida**: A API Yampi Payment Link não suporta campos de desconto/cupom no payload. Cupons aplicados no site não são transmitidos ao checkout Yampi.
+### MELHORIA 1 — Batching no `syncStockOnly` do webhook
+Aplicar o mesmo padrão de lotes de 50 IDs que já existe no `bling-sync` para evitar URLs longas demais.
 
-**Workaround recomendado**: Para descontos significativos, considerar:
-1. Usar checkout nativo (Stripe/Appmax) para pedidos com cupom
-2. Ou embutir desconto nos preços dos SKUs antes de criar o payment link
+### MELHORIA 2 — Proteger refresh_token contra sobrescrita por null
+Em `blingTokenRefresh.ts`, só atualizar `bling_refresh_token` se o novo valor existir.
 
-### Não Implementado (Decisão Técnica)
+### MELHORIA 3 — Restringir INSERT em `order_events` e `stripe_webhook_events`
+Aplicar `is_admin()` no `WITH CHECK` dessas tabelas de serviço, igual ao que foi feito na migration anterior.
 
-- **Y35**: Sync bidirecional de produtos (Yampi → Site) — Requer redesign significativo. O site permanece como fonte única de verdade.
-- **Y39**: Limpeza de imagens antigas na Yampi — Pode causar inconsistências. Não recomendado sem flag explícita.
-- **Y40**: Separação de campos `yampi_order_id` / `appmax_order_id` — Requer migration e pode afetar queries existentes.
+### MELHORIA 4 — Log de auditoria em `cancelBlingOrder`
+Consumir o body da resposta de sucesso para logar o resultado do cancelamento.
 
----
+## Arquivos Modificados
 
-## Resumo das 4 Rodadas de Auditoria
+- **`supabase/functions/_shared/blingTokenRefresh.ts`** — Proteger refresh_token contra null
+- **`supabase/functions/bling-webhook/index.ts`** — Batching na `syncStockOnly`
+- **`supabase/functions/_shared/blingStockPush.ts`** — Consumir body corretamente no cancel
+- **1 migration SQL** — Restringir INSERT em `order_events` e `stripe_webhook_events`
 
-| Rodada | Fixes | Status |
-|--------|-------|--------|
-| Rodada 1 | Y1-Y10 (preços, CORS, timeouts básicos) | ✅ Implementado |
-| Rodada 2 | Y11-Y21 (webhooks, automações, idempotência) | ✅ Implementado |
-| Rodada 3 | Y22-Y30 (race conditions, inventory, traceability) | ✅ Implementado |
-| Rodada 4 | Y31-Y38 (timeouts, validação URLs, fallback_reason) | ✅ Implementado |
-| Rodada 5 | Y41-Y48 (custom attrs, snapshots, unwrap, payment_status) | ✅ Implementado |
+## Nenhuma regra existente será afetada
+Todas as correções são aditivas ou defensivas. Não alteram lógica de negócio, fluxos de sync ou comportamento de webhook existentes.
 
-**Total**: 48 melhorias identificadas, 42 implementadas, 4 documentadas como decisões técnicas.
-
----
-
-## Rodada 5: Yampi Integration Fixes ✅
-
-### Bugs Corrigidos
-
-**Fix #1** ✅ `yampi-catalog-sync` — Query de variantes agora inclui `custom_attribute_name` e `custom_attribute_value`. Variações customizadas são mapeadas para `variation_value_map` da Yampi.
-
-**Fix #2** ✅ `yampi-webhook` — Bloco de cancelamento agora faz unwrap de `customer.data` igual ao bloco de aprovação, garantindo que emails de cancelamento sejam enviados corretamente.
-
-**Fix #3** ✅ `yampi-webhook` — Campo `payment_status: "approved"` adicionado ao update de pedido existente (by session), alinhando com o fluxo do `yampi-import-order`.
-
-**Fix #4** ✅ `yampi-import-order` — Batch import agora inclui `variant_info`, `title_snapshot`, `image_snapshot` e `sku_snapshot` nos `order_items`, com lookup de variante local e imagem primária.
-
-**Fix #5** ✅ `yampi-webhook` — Removido uso incorreto de `appmax_order_id` para gravar `yampiOrderId` no `order_events`.
-
-**Fix #6** ✅ `yampi-catalog-sync` — SKU gerado para Yampi agora inclui `custom_attribute_value` para evitar duplicatas quando há variantes com mesmo tamanho/cor mas atributos diferentes.
-
-**Melhoria #7** ✅ `yampi-webhook` — `order.status.updated` agora trata status `processing`, `in_production`, `in_separation`, `ready_for_shipping` como eventos de pagamento aprovado.
