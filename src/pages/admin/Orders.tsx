@@ -609,7 +609,7 @@ export default function Orders() {
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span className="truncate mr-2">{order.shipping_name}</span>
-                  <span className="shrink-0">{formatDate(order.created_at)}</span>
+                  <span className="shrink-0">{formatDate(getOrderDate(order))}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-sm">{formatPrice(Number(order.total_amount))}</span>
