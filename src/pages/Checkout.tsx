@@ -825,6 +825,15 @@ export default function Checkout() {
     }
   }, [shippingZip, formData.cep]);
 
+  // BUG FIX: Clear selected shipping when CEP changes between cart and checkout form
+  useEffect(() => {
+    const formCepClean = (formData.cep || "").replace(/\D/g, "");
+    const cartCepClean = (shippingZip || "").replace(/\D/g, "");
+    if (formCepClean.length === 8 && cartCepClean.length === 8 && formCepClean !== cartCepClean) {
+      setSelectedShipping(null);
+    }
+  }, [formData.cep, shippingZip, setSelectedShipping]);
+
   // Clear selected shipping when checkout CEP diverges from cart CEP
   useEffect(() => {
     const formCepClean = formData.cep.replace(/\D/g, '');

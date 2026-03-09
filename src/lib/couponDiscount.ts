@@ -95,10 +95,17 @@ export function isCouponValidForLocation(
   }
 
   if (zipPrefixes.length > 0) {
-    const zipDigits = (shippingZip || "").replace(/\D/g, "").slice(0, 5);
-    if (!zipDigits || !zipPrefixes.some((p) => (p || "").replace(/\D/g, "").slice(0, 5) === zipDigits)) {
-      return false;
-    }
+    // BUG FIX: Use full 8-digit CEP for prefix matching (Brazilian CEPs have 8 digits)
+    const zipDigits = (shippingZip || "").replace(/\D/g, "");
+    if (!zipDigits || zipDigits.length !== 8) return false;
+    
+    // Match prefix: coupon prefix must be a leading substring of the full ZIP
+    const hasMatch = zipPrefixes.some((prefix) => {
+      const prefixDigits = (prefix || "").replace(/\D/g, "");
+      return prefixDigits && zipDigits.startsWith(prefixDigits);
+    });
+    
+    if (!hasMatch) return false;
   }
 
   return true;
