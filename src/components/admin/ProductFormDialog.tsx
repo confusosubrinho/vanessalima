@@ -385,6 +385,8 @@ export function ProductFormDialog({ open, onOpenChange, editingProduct }: Produc
             price_modifier: v.price_modifier || 0,
             sku: v.sku || null,
             is_active: v.is_active,
+            custom_attribute_name: v.custom_attribute_name || null,
+            custom_attribute_value: v.custom_attribute_value || null,
           }));
           const { data: insertedVariants, error: varError } = await supabase.from('product_variants').insert(variantInserts).select('id');
           if (varError) throw varError;
