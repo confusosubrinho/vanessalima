@@ -39,7 +39,7 @@ const BRAZILIAN_STATES = [
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session?.user) {
-        navigate('/auth');
+        navigate('/auth', { state: { from: '/minha-conta' } });
       } else {
         setUser(session.user);
       }
