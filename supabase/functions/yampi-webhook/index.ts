@@ -710,7 +710,11 @@ Deno.serve(async (req) => {
           console.log("[yampi-webhook] Ignorando cancelamento: pedido já está", existingOrder.status, existingOrder.id);
           return jsonOk({ ok: true, event: effectiveEvent, action: "ignored_already_fulfilled" });
         }
-        await supabase.from("orders").update({ status: "cancelled" }).eq("id", existingOrder.id);
+        // Fix #2: Also update payment_status on cancellation
+        const cancelledPaymentStatusForOrder = event.includes("refused") ? "refused"
+          : event.includes("chargeback") ? "chargeback"
+          : "cancelled";
+        await supabase.from("orders").update({ status: "cancelled", payment_status: cancelledPaymentStatusForOrder } as Record<string, unknown>).eq("id", existingOrder.id);
 
         const { data: movements } = await supabase
           .from("inventory_movements")
