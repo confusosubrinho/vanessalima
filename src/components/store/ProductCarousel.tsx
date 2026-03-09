@@ -155,19 +155,8 @@ export function ProductCarousel({
               <ChevronRight className="h-5 w-5" />
             </Button>
 
-            {/* Fade gradients on edges */}
-            <div
-              className="absolute left-0 top-0 bottom-4 w-8 z-[1] pointer-events-none"
-              style={{
-                background: `linear-gradient(to right, ${isDark ? 'hsl(var(--secondary))' : 'hsl(var(--background))'}, transparent)`,
-              }}
-            />
-            <div
-              className="absolute right-0 top-0 bottom-4 w-8 z-[1] pointer-events-none"
-              style={{
-                background: `linear-gradient(to left, ${isDark ? 'hsl(var(--secondary))' : 'hsl(var(--background))'}, transparent)`,
-              }}
-            />
+
+
 
             <div
               ref={scrollRef}
