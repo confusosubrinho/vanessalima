@@ -11,12 +11,14 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface ImageLog {
   sku_id: number;
+  variant_id: string;
   product_id: string;
   product_name?: string;
   source_url: string;
   sent_url: string;
   yampi_returned_url: string | null;
   converted: boolean;
+  image_source: "variant" | "primary" | "product" | "none";
   status: "success" | "error" | "skipped";
   error?: string;
 }
@@ -267,28 +269,23 @@ Deno.serve(async (req) => {
       "Content-Type": "application/json",
     };
 
-    // Get products with synced SKUs (direct query, no RPC dependency)
+    // Get ALL variants with synced SKUs — iterate per SKU, not per product
     const { data: allVariants } = await supabase
       .from("product_variants")
-      .select("product_id, yampi_sku_id, products(name)")
+      .select("id, product_id, yampi_sku_id, products(name)")
       .not("yampi_sku_id", "is", null)
       .eq("is_active", true)
       .order("product_id");
 
-    const seen = new Map<string, { product_id: string; yampi_sku_id: number; product_name: string }>();
-    for (const v of allVariants || []) {
-      if (!seen.has(v.product_id)) {
-        seen.set(v.product_id, {
-          product_id: v.product_id,
-          yampi_sku_id: v.yampi_sku_id,
-          product_name: (v as any).products?.name || "",
-        });
-      }
-    }
-    const productList = Array.from(seen.values());
+    const skuList = (allVariants || []).map((v: any) => ({
+      variant_id: v.id as string,
+      product_id: v.product_id as string,
+      yampi_sku_id: v.yampi_sku_id as number,
+      product_name: v.products?.name || "",
+    }));
 
-    const total = productList.length;
-    const batch = productList.slice(batchOffset, batchOffset + batchLimit);
+    const total = skuList.length;
+    const batch = skuList.slice(batchOffset, batchOffset + batchLimit);
 
     let uploaded = 0;
     let skipped = 0;
@@ -304,12 +301,14 @@ Deno.serve(async (req) => {
           skipped++;
           logs.push({
             sku_id: item.yampi_sku_id,
+            variant_id: item.variant_id,
             product_id: item.product_id,
             product_name: item.product_name,
             source_url: "",
             sent_url: "",
             yampi_returned_url: null,
             converted: false,
+            image_source: "none",
             status: "skipped",
             error: `Já possui ${existing.data.data.length} imagens na Yampi`,
           });
@@ -319,27 +318,53 @@ Deno.serve(async (req) => {
         await delay(500);
       }
 
-      // Get images for this product
-      const { data: images } = await supabase
+      // 1. Try variant-specific images first
+      let imageSource: "variant" | "primary" | "product" | "none" = "none";
+      const { data: variantImages } = await supabase
         .from("product_images")
         .select("url")
-        .eq("product_id", item.product_id)
-        .order("is_primary", { ascending: false })
+        .eq("product_variant_id", item.variant_id)
         .order("display_order", { ascending: true })
         .limit(5);
+
+      let images = variantImages && variantImages.length > 0 ? variantImages : null;
+      if (images) {
+        imageSource = "variant";
+        console.log(`[YAMPI-IMG] SKU ${item.yampi_sku_id}: ${images.length} variant-specific images`);
+      }
+
+      // 2. Fallback: product images (primary first)
+      if (!images) {
+        const { data: productImages } = await supabase
+          .from("product_images")
+          .select("url, is_primary")
+          .eq("product_id", item.product_id)
+          .is("product_variant_id", null)
+          .order("is_primary", { ascending: false })
+          .order("display_order", { ascending: true })
+          .limit(5);
+
+        if (productImages && productImages.length > 0) {
+          images = productImages;
+          imageSource = productImages[0]?.is_primary ? "primary" : "product";
+          console.log(`[YAMPI-IMG] SKU ${item.yampi_sku_id}: fallback to ${imageSource} images (${images.length})`);
+        }
+      }
 
       if (!images || images.length === 0) {
         skipped++;
         logs.push({
           sku_id: item.yampi_sku_id,
+          variant_id: item.variant_id,
           product_id: item.product_id,
           product_name: item.product_name,
           source_url: "(sem imagens)",
           sent_url: "",
           yampi_returned_url: null,
           converted: false,
+          image_source: "none",
           status: "skipped",
-          error: "Produto sem imagens",
+          error: "Variante e produto sem imagens",
         });
         continue;
       }
@@ -369,7 +394,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Y32: Validate accessibility with fetchWithTimeout
+        // Y32: Validate accessibility
         try {
           const check = await fetchWithTimeout(urlToSend, { method: "HEAD", redirect: "follow" }, 10_000);
           if (check.status === 200) {
@@ -387,12 +412,14 @@ Deno.serve(async (req) => {
         skipped++;
         logs.push({
           sku_id: item.yampi_sku_id,
+          variant_id: item.variant_id,
           product_id: item.product_id,
           product_name: item.product_name,
           source_url: firstSourceUrl,
           sent_url: "",
           yampi_returned_url: null,
           converted: false,
+          image_source: imageSource,
           status: "skipped",
           error: "Nenhuma URL de imagem acessível após conversão",
         });
@@ -411,12 +438,14 @@ Deno.serve(async (req) => {
         errors++;
         logs.push({
           sku_id: item.yampi_sku_id,
+          variant_id: item.variant_id,
           product_id: item.product_id,
           product_name: item.product_name,
           source_url: firstSourceUrl,
           sent_url: validUrls[0],
           yampi_returned_url: null,
           converted: didConvert,
+          image_source: imageSource,
           status: "error",
           error: `Yampi ${res.status}: ${JSON.stringify(res.data).slice(0, 500)}`,
         });
@@ -438,15 +467,17 @@ Deno.serve(async (req) => {
       if (didConvert) converted++;
       logs.push({
         sku_id: item.yampi_sku_id,
+        variant_id: item.variant_id,
         product_id: item.product_id,
         product_name: item.product_name,
         source_url: firstSourceUrl,
         sent_url: validUrls[0],
         yampi_returned_url: yampiReturnedUrl,
         converted: didConvert,
+        image_source: imageSource,
         status: "success",
       });
-      console.log(`[YAMPI-IMG] ✅ SKU ${item.yampi_sku_id} <- ${validUrls.length} imgs ${didConvert ? "(converted)" : ""}`);
+      console.log(`[YAMPI-IMG] ✅ SKU ${item.yampi_sku_id} <- ${validUrls.length} imgs (${imageSource}) ${didConvert ? "(converted)" : ""}`);
 
       await delay(2100);
     }
