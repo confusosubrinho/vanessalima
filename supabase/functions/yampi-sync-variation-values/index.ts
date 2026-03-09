@@ -1,10 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Y43: Use fetchWithTimeout to prevent indefinite hangs on Yampi API calls
 async function yampiRequest(
   yampiBase: string,
   headers: Record<string, string>,
@@ -16,7 +18,7 @@ async function yampiRequest(
   const opts: RequestInit = { method, headers };
   if (body) opts.body = JSON.stringify(body);
   console.log(`[YAMPI-VAR] ${method} ${path}`, body ? JSON.stringify(body).slice(0, 500) : "");
-  const res = await fetch(url, opts);
+  const res = await fetchWithTimeout(url, opts, 25_000);
   let data: unknown;
   try { data = await res.json(); } catch { data = null; }
   if (!res.ok) console.error(`[YAMPI-VAR] ERROR ${res.status} ${path}:`, JSON.stringify(data));

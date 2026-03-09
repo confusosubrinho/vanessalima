@@ -41,12 +41,13 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify(log), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      const res = await fetch(`https://api.dooki.com.br/v2/${alias}/catalog/products?limit=1`, {
+      // Y45: Use fetchWithTimeout with 15s timeout for better UX
+      const res = await fetchWithTimeout(`https://api.dooki.com.br/v2/${alias}/catalog/products?limit=1`, {
         headers: {
           "User-Token": userToken,
           "User-Secret-Key": userSecretKey,
         },
-      });
+      }, 15_000);
 
       const data = await res.json();
 

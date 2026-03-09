@@ -129,13 +129,14 @@ Deno.serve(async (req) => {
   let yampiOrder: Record<string, unknown> | null = null;
 
   try {
-    const res = await fetch(searchUrl, {
+    // Y44: Use fetchWithTimeout to prevent indefinite hangs
+    const res = await fetchWithTimeout(searchUrl, {
       headers: {
         "User-Token": userToken2,
         "User-Secret-Key": userSecretKey2,
         Accept: "application/json",
       },
-    });
+    }, 25_000);
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");

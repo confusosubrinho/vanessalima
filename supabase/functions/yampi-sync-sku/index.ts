@@ -80,17 +80,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // If product_id, sync all variants
+    // If product_id, sync all variants (Y42: use fetchWithTimeout, Y47: filter active products)
     if (product_id && !variant_id) {
-      const { data: variants } = await supabase
-        .from("product_variants")
-        .select("id, yampi_sku_id, stock_quantity, base_price, sale_price")
-        .eq("product_id", product_id)
-        .not("yampi_sku_id", "is", null);
-
       const { data: product } = await supabase
         .from("products")
-        .select("base_price, sale_price, yampi_product_id")
+        .select("base_price, sale_price, yampi_product_id, is_active")
         .eq("id", product_id)
         .single();
 
@@ -98,10 +92,24 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "Produto sem yampi_product_id mapeado" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // Y47: Skip inactive products
+      if (!product.is_active) {
+        return new Response(JSON.stringify({ error: "Produto inativo — sincronização ignorada", skipped: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { data: variants } = await supabase
+        .from("product_variants")
+        .select("id, yampi_sku_id, stock_quantity, base_price, sale_price")
+        .eq("product_id", product_id)
+        .not("yampi_sku_id", "is", null);
+
+      const { fetchWithTimeout } = await import("../_shared/fetchWithTimeout.ts");
+
       for (const variant of variants || []) {
         const unitPrice = variant.sale_price ?? variant.base_price ?? product?.sale_price ?? product?.base_price;
         const unitCost = variant.base_price ?? product?.base_price ?? unitPrice;
-        const res = await fetch(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
+        // Y42: Use fetchWithTimeout instead of fetch to prevent indefinite hangs
+        const res = await fetchWithTimeout(`${yampiBase}/catalog/skus/${variant.yampi_sku_id}`, {
           method: "PUT",
           headers: yampiHeaders,
           body: JSON.stringify({
@@ -111,7 +119,7 @@ Deno.serve(async (req) => {
             quantity: variant.stock_quantity,
             quantity_managed: true,
           }),
-        });
+        }, 25_000);
 
         await new Promise(r => setTimeout(r, 350));
 
