@@ -28,7 +28,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const sizeScrollRef = useHorizontalScrollAxisLock();
   const navigatedRef = useRef(false);
   const [variantModalOpen, setVariantModalOpen] = useState(false);
-  const { isFavorite, toggleFavorite, isAuthenticated } = useFavorites();
+  const { isFavorite, toggleFavorite, isAuthenticated, isLoading: favoriteLoading } = useFavorites();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { data: pricingConfig } = usePricingConfig();
