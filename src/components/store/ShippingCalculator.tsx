@@ -92,7 +92,7 @@ export function ShippingCalculator({ compact = false, products }: ShippingCalcul
       console.error('Shipping calculation error:', err);
       // Fallback
       setShippingOptions([
-        { name: 'Envio padrão', price: 18, deadline: '8 a 12 dias úteis', company: 'Correios' },
+        { id: 'fallback-standard', name: 'Envio padrão', price: 18, deadline: '8 a 12 dias úteis', company: 'Correios' },
       ]);
       setHasCalculated(true);
     } finally {
