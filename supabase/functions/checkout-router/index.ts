@@ -382,6 +382,24 @@ Deno.serve(async (req) => {
     }
 
     if (channel === "external" && provider === "stripe") {
+      // Y46: Reserve stock atomically for Stripe external to prevent overselling (same as Yampi external)
+      if (orderId && !existingOrder) {
+        for (const i of itemsInput) {
+          const stockResult = await supabase.rpc("decrement_stock", { p_variant_id: i.variant_id, p_quantity: i.quantity });
+          const stockData = stockResult.data as { success: boolean; error?: string } | null;
+          if (stockData?.success) {
+            await supabase.from("inventory_movements").insert({
+              variant_id: i.variant_id,
+              order_id: orderId,
+              type: "reserve",
+              quantity: i.quantity,
+            });
+          } else {
+            console.warn(`[checkout-router] Stock reserve failed for variant ${i.variant_id}: ${stockData?.error || "unknown"}`);
+          }
+        }
+      }
+
       const targetUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/checkout-stripe-create-intent`;
       const stripeRes = await fetchWithTimeout(
         targetUrl,

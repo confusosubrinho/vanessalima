@@ -480,9 +480,10 @@ async function importSingleOrder(
   if (existingBySession) return { ok: false, yampi_order_id: yampiOrderId, error: `Já existe (checkout): ${existingBySession.order_number}`, order_id: existingBySession.id };
 
   const baseUrl = `https://api.dooki.com.br/v2/${alias}`;
-  const res = await fetch(`${baseUrl}/orders?include=items,customer,shipping_address,transactions&q=${encodeURIComponent(yampiOrderId)}&limit=5`, {
+  // Y44: Use fetchWithTimeout for batch import to prevent indefinite hangs
+  const res = await fetchWithTimeout(`${baseUrl}/orders?include=items,customer,shipping_address,transactions&q=${encodeURIComponent(yampiOrderId)}&limit=5`, {
     headers: { "User-Token": userToken, "User-Secret-Key": userSecretKey, Accept: "application/json" },
-  });
+  }, 25_000);
   if (!res.ok) return { ok: false, yampi_order_id: yampiOrderId, error: `Yampi API ${res.status}` };
 
   const json = await res.json();
