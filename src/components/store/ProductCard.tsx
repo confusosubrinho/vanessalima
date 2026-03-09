@@ -218,9 +218,7 @@ export function ProductCard({ product }: ProductCardProps) {
                 <p className="price-original text-xs line-through text-muted-foreground">{formatPrice(Number(product.base_price))}</p>
                 <p className="text-base font-bold text-primary">{formatPrice(currentPrice)}</p>
                 {applyPix && pixDiscountAmount > 0 ? (
-                  <>
-                    <p className="text-[11px] text-muted-foreground">{pixDiscountPercent}% off no PIX</p>
-                  </>
+                  <p className="text-[11px] font-semibold text-primary">{formatPrice(pixPrice)} no PIX</p>
                 ) : null}
               </>
             ) : (
