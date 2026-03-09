@@ -271,6 +271,7 @@ const App = () => {
                 <Route path="equipe" element={<Team />} />
                 <Route path="checkout-transparente" element={<CheckoutSettings />} />
                 <Route path="commerce-health" element={<CommerceHealth />} />
+                <Route path="blog" element={<BlogAdmin />} />
               </Route>
               <Route path="/admin/integrations/appmax/callback" element={<AppmaxCallback />} />
               
