@@ -962,7 +962,7 @@ export default function ProductDetail() {
                 onClick={() => {
                   if (!isAuthenticated) {
                     toast({ title: 'Faça login para favoritar', description: 'Crie sua conta para salvar seus produtos favoritos.' });
-                    navigate('/auth');
+                    navigate('/auth', { state: { from: `/produto/${product.slug}` } });
                     return;
                   }
                   toggleFavorite(product.id);

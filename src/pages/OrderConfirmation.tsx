@@ -177,7 +177,7 @@ export default function OrderConfirmation() {
 
         const { data } = await client
           .from('orders')
-          .select('id, order_number, status, payment_method, total_amount, created_at')
+          .select('id, order_number, status, payment_method, total_amount, created_at, order_items(id, product_name, variant_info, quantity, unit_price, total_price, image_snapshot)')
           .eq('id', id)
           .single();
         if (data) {
