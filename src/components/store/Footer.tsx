@@ -7,6 +7,7 @@ import { SocialIcons } from './SocialIcons';
 import { useStoreContact, formatPhone } from '@/hooks/useStoreContact';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
 import { FeedbackPreferencesDialog } from './FeedbackPreferencesDialog';
+import { useBlogSettings } from '@/hooks/useBlog';
 
 interface PaymentMethod {
   id: string;
