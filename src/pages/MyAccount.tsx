@@ -390,12 +390,19 @@ const BRAZILIAN_STATES = [
                     </div>
                     <div className="space-y-2">
                       <Label>Estado</Label>
-                      <Input
+                      <Select
                         value={profileForm.state}
-                        onChange={(e) => setProfileForm({ ...profileForm, state: e.target.value })}
-                        maxLength={2}
-                        placeholder="PR"
-                      />
+                        onValueChange={(value) => setProfileForm({ ...profileForm, state: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="UF" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BRAZILIAN_STATES.map(uf => (
+                            <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                   <Button type="submit" disabled={updateProfile.isPending} className="rounded-full">
