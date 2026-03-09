@@ -216,7 +216,8 @@ Deno.serve(async (req) => {
   const shipmentsData = ((yampiOrder.shipments as Record<string, unknown>)?.data as unknown[]) || [];
   const firstShipment = (shipmentsData[0] as Record<string, unknown>) || {};
   const shippingOption = (yampiOrder.shipping_option as Record<string, unknown>) || {};
-  const shippingMethodName = (firstShipment.service_name as string) ||
+  const shippingMethodName = (yampiOrder.shipment_service as string) ||
+    (firstShipment.service_name as string) ||
     (firstShipment.name as string) ||
     (yampiOrder.shipping_option_name as string) ||
     (shippingOption.name as string) ||
