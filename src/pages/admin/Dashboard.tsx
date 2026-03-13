@@ -150,8 +150,8 @@ export default function Dashboard() {
     queryKey: ['dashboard-kpis', period],
     queryFn: async () => {
       const [currentOrders, prevOrders, currentCustomers, prevCustomers] = await Promise.all([
-        supabase.from('orders').select('id, total_amount, status').gte('created_at', periodStart.toISOString()),
-        supabase.from('orders').select('id, total_amount, status').gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
+        supabase.from('orders').select('id, total_amount, status').not('payment_status', 'is', null).gte('created_at', periodStart.toISOString()),
+        supabase.from('orders').select('id, total_amount, status').not('payment_status', 'is', null).gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
         supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', periodStart.toISOString()),
         supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', prevPeriodStart.toISOString()).lt('created_at', periodStart.toISOString()),
       ]);
