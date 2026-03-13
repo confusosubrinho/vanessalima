@@ -156,6 +156,7 @@ export default function Orders() {
         const { data, error, count } = await supabase
           .from('orders')
           .select('*', { count: 'exact' })
+          .not('payment_status', 'is', null)
           .order('created_at', { ascending: false })
           .range(from, to);
         if (error) throw error;
