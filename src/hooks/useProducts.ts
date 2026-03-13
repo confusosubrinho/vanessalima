@@ -204,7 +204,9 @@ export function useProduct(slug: string) {
  
   export function useStoreSettings() {
     return useQuery({
-      queryKey: ['store-settings'],
+      // Keep "store-settings" prefix for broad invalidations,
+      // but avoid cache collision with admin private query ['store-settings'].
+      queryKey: ['store-settings', 'public'],
       staleTime: 1000 * 60 * 10,
       refetchOnMount: false,
       queryFn: async () => {
